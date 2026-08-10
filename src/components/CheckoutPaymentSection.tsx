@@ -8,11 +8,24 @@ import { useApp } from '../context/AppContext';
 import { CreditCard, Smartphone, ShieldCheck, ArrowLeft, Check, Lock } from 'lucide-react';
 import { getMinBirthdayBookingDateStr } from '../utils/dateUtils';
 import { PhoneInput } from './PhoneInput';
+import { PrePaymentPopup } from './PrePaymentPopup';
+import { migratePrePaymentPopup } from '../types';
+import { validateBookingForm } from '../utils/validation';
 
 export const CheckoutPaymentSection: React.FC = () => {
   const { 
-    pendingBooking, setPendingBooking, setCustomerTab, addBooking, addQueueItem, setLastBookingCreated, todayDateStr, workshops, currentUser 
+    pendingBooking, setPendingBooking, setCustomerTab, addBooking, setLastBookingCreated, workshops, currentUser,
+    appSettings
   } = useApp();
+
+  // The guidelines pop-up is configured in Settings -> Booking Pop-up. Reading
+  // it live means an admin edit shows up here without a rebuild or a reload.
+  const popupConfig = migratePrePaymentPopup(
+    appSettings.find(s => s.id === 'prePaymentInstructions')?.value
+  );
+  const [showPopup, setShowPopup] = useState(false);
+  // Capacity/session message from the shared validation layer.
+  const [bookingError, setBookingError] = useState<string | null>(null);
 
   const [paymentMethod, setPaymentMethod] = useState<'card' | 'applepay' | 'stcpay'>('card');
   const [cardNumber, setCardNumber] = useState('');
@@ -39,9 +52,26 @@ export const CheckoutPaymentSection: React.FC = () => {
     );
   }
 
-  const handlePay = (e: React.FormEvent) => {
+  const handlePay = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isProcessing) return;
+
+    // Capacity is re-read from the database here, at submit time. The number
+    // shown when the page loaded may be stale — someone else can take the last
+    // seat while this customer is filling in their card details.
+    const bookingErrors = await validateBookingForm({
+      sessionId: pendingBooking.sessionId,
+      participants: pendingBooking.participants
+    });
+    // A birthday package has no workshop session; its own rules apply below.
+    const isBirthday = pendingBooking.workshopId === 'birthday-party-event' ||
+      pendingBooking.workshopTitle.toLowerCase().includes('birthday');
+    const capacityError = Object.values(bookingErrors)[0];
+    if (!isBirthday && capacityError) {
+      setBookingError(capacityError);
+      return;
+    }
+    setBookingError(null);
 
     // Enforce 4-day advance rule for birthday packages before payment completion
     if (
@@ -56,6 +86,17 @@ export const CheckoutPaymentSection: React.FC = () => {
       }
     }
 
+    // The studio guidelines are shown before the card is charged.
+    if (popupConfig.enabled) {
+      setShowPopup(true);
+      return;
+    }
+
+    completePayment();
+  };
+
+  const completePayment = () => {
+    if (isProcessing) return;
     setIsProcessing(true);
 
     const name = pendingBooking.customerName || currentUser?.name || 'Guest Customer';
@@ -69,6 +110,8 @@ export const CheckoutPaymentSection: React.FC = () => {
         customerEmail: email,
         customerPhone: phone,
         workshopId: pendingBooking.workshopId,
+        // Keep the booked session on the booking so the tutor resolves from it.
+        sessionId: pendingBooking.sessionId,
         workshopTitle: pendingBooking.workshopTitle,
         date: pendingBooking.date,
         time: pendingBooking.time,
@@ -76,19 +119,14 @@ export const CheckoutPaymentSection: React.FC = () => {
         totalPrice: pendingBooking.totalPrice,
         source: 'Website',
         status: 'Pending',
-        paymentStatus: 'Paid'
+        paymentStatus: 'Paid',
+        // The full birthday submission travels onto the one shared booking record.
+        birthdayDetails: pendingBooking.birthdayDetails
       });
 
-      // If the booking is for TODAY, also register on Live Queue for admin dashboard visibility!
-      if (pendingBooking.date === todayDateStr) {
-        addQueueItem({
-          customerName: name,
-          customerPhone: phone,
-          workshopTitle: pendingBooking.workshopTitle,
-          partySize: pendingBooking.participants,
-          notes: `Online Booking #${newBooking.id}`
-        });
-      }
+      // Bookings for today are placed on the Live Queue by the shared booking→queue
+      // sync, which resolves the tutor from the booked session. Adding one here too
+      // produced a second, instructor-less entry for the same booking.
 
       setLastBookingCreated(newBooking);
       setPendingBooking(null);
@@ -99,6 +137,17 @@ export const CheckoutPaymentSection: React.FC = () => {
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-10 animate-in fade-in duration-300 text-left">
+
+      {showPopup && (
+        <PrePaymentPopup
+          config={popupConfig}
+          onCancel={() => setShowPopup(false)}
+          onConfirm={() => {
+            setShowPopup(false);
+            completePayment();
+          }}
+        />
+      )}
       
       {/* Back button */}
       <button
@@ -278,9 +327,13 @@ export const CheckoutPaymentSection: React.FC = () => {
               </div>
             )}
 
+            {bookingError && (
+              <p className="text-xs text-red-500 font-bold text-center">{bookingError}</p>
+            )}
+
             <button
               type="submit"
-              disabled={isProcessing}
+              disabled={isProcessing || !!bookingError}
               className="w-full cursor-pointer bg-brand-terracotta text-brand-cream font-bold py-4 rounded-2xl shadow-md hover:bg-brand-terracotta-hover transition-all flex items-center justify-center gap-2 text-base mt-6 disabled:opacity-50"
             >
               <Lock className="h-4 w-4" />

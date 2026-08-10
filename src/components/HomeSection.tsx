@@ -5,13 +5,16 @@
 
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Calendar, Clock, MapPin, Sparkles, ChevronRight, Compass, Paintbrush, MousePointerClick, CalendarRange, Gift, Cake, CheckCircle2, ChevronDown, ChevronUp, Phone, Mail, UserCheck, Star } from 'lucide-react';
+import { formatDate } from '../utils/calendarConfig';
+import { Calendar, Clock, MapPin, Sparkles, ChevronRight, Compass, Paintbrush, MousePointerClick, CalendarRange, Gift, Cake, Coffee, CheckCircle2, ChevronDown, ChevronUp, Phone, Mail, UserCheck, Star } from 'lucide-react';
 
 export const HomeSection: React.FC = () => {
-  const { workshops, setCustomerTab, setSelectedWorkshopId, events, setSelectedBirthdayPackage } = useApp();
+  const { workshops, setCustomerTab, setSelectedWorkshopId, events, setSelectedBirthdayPackage, publishedBirthdayPackages } = useApp();
   const [showOwnerContact, setShowOwnerContact] = useState(false);
-  const [openOption1, setOpenOption1] = useState(false);
-  const [openOption2, setOpenOption2] = useState(false);
+  // Which package cards are expanded, keyed by package id
+  const [openPackages, setOpenPackages] = useState<Record<string, boolean>>({});
+  const togglePackage = (id: string) =>
+    setOpenPackages(prev => ({ ...prev, [id]: !prev[id] }));
 
   // Get first 3 workshops as featured
   const featuredWorkshops = workshops.slice(0, 3);
@@ -22,7 +25,7 @@ export const HomeSection: React.FC = () => {
     try {
       const d = new Date(dateStr);
       if (isNaN(d.getTime())) return dateStr;
-      return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+      return formatDate(d, { weekday: 'long', month: 'long', day: 'numeric' });
     } catch {
       return dateStr;
     }
@@ -251,272 +254,236 @@ export const HomeSection: React.FC = () => {
           </p>
         </div>
 
-        {/* Options Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          
-          {/* OPTION 1 */}
-          <div className="bg-brand-cream border-2 border-brand-clay/80 rounded-3xl p-6 md:p-8 shadow-sm flex flex-col text-left relative overflow-hidden transition-all duration-300">
-            <div className="absolute -top-12 -right-12 w-32 h-32 bg-brand-terracotta/5 rounded-full blur-2xl pointer-events-none"></div>
-            
-            {/* Header / Clickable Accordion Toggle */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-brand-clay/60">
-              <button
-                type="button"
-                onClick={() => setOpenOption1(!openOption1)}
-                className="flex-1 flex items-center justify-between text-left cursor-pointer group"
-              >
-                <div>
-                  <span className="text-[11px] font-extrabold uppercase tracking-widest text-brand-terracotta block">Package 01</span>
-                  <h3 className="font-display text-2xl font-bold text-brand-charcoal group-hover:text-brand-terracotta transition-colors flex items-center gap-2">
-                    <span>OPTION 1 — Canvas & Create</span>
-                    {openOption1 ? <ChevronUp className="h-5 w-5 text-brand-terracotta shrink-0" /> : <ChevronDown className="h-5 w-5 text-brand-charcoal/40 group-hover:text-brand-terracotta shrink-0" />}
-                  </h3>
-                </div>
-                <div className="bg-brand-sand/80 border border-brand-clay px-4 py-2 rounded-2xl text-right shrink-0">
-                  <span className="text-[10px] uppercase font-bold text-brand-charcoal/50 block">Pricing</span>
-                  <span className="text-xl font-black text-brand-terracotta">165 SAR <span className="text-xs font-normal text-brand-charcoal/70">/ child</span></span>
-                </div>
-              </button>
-            </div>
+        {/* Options Grid — rendered from the shared birthday package records.
+            Everything shown here is edited in Staff Console → Birthday Event. */}
+        {publishedBirthdayPackages.length === 0 ? (
+          <p className="text-sm text-brand-charcoal/60 italic">
+            Birthday packages are being updated. Please check back soon.
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {publishedBirthdayPackages.map((pkg, index) => {
+              const isOpen = !!openPackages[pkg.id];
+              const accent = index % 2 === 0 ? 'terracotta' : 'sage';
+              const accentText = accent === 'terracotta' ? 'text-brand-terracotta' : 'text-brand-sage';
+              const accentBg = accent === 'terracotta' ? 'bg-brand-terracotta' : 'bg-brand-sage';
+              const accentHover = accent === 'terracotta'
+                ? 'bg-brand-terracotta hover:bg-brand-terracotta-hover'
+                : 'bg-brand-sage hover:bg-brand-sage/90';
 
-            {/* Action Row with Toggle & Book Now Button */}
-            <div className="pt-4 flex items-center justify-between gap-3">
-              <button
-                type="button"
-                onClick={() => setOpenOption1(!openOption1)}
-                className="text-xs font-bold text-brand-charcoal/60 hover:text-brand-charcoal cursor-pointer flex items-center gap-1"
-              >
-                <span>{openOption1 ? 'Hide Package Details' : 'View Package Details'}</span>
-                {openOption1 ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-              </button>
+              return (
+                <div
+                  key={pkg.id}
+                  className="bg-brand-cream border-2 border-brand-clay/80 rounded-3xl p-6 md:p-8 shadow-sm flex flex-col text-left relative overflow-hidden transition-all duration-300"
+                >
+                  <div className={`absolute -top-12 -right-12 w-32 h-32 ${accentBg}/5 rounded-full blur-2xl pointer-events-none`}></div>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedBirthdayPackage('Option 1 — Canvas & Create');
-                  setCustomerTab('birthday-booking');
-                }}
-                className="cursor-pointer bg-brand-terracotta hover:bg-brand-terracotta-hover text-brand-cream text-xs font-bold px-5 py-2.5 rounded-xl shadow-xs transition-all duration-200 active:scale-95 flex items-center gap-1.5"
-              >
-                <span>Book Now</span>
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
-
-            {/* Collapsible Dropdown Content */}
-            {openOption1 && (
-              <div className="space-y-6 pt-6 mt-4 border-t border-brand-clay/40 animate-in fade-in duration-300">
-                {/* Includes */}
-                <div className="space-y-2.5">
-                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-brand-charcoal/50 flex items-center gap-1.5">
-                    <CheckCircle2 className="h-4 w-4 text-brand-sage" />
-                    <span>Includes:</span>
-                  </h4>
-                  <ul className="space-y-2 text-sm text-brand-charcoal/85 pl-1">
-                    <li className="flex items-center gap-2">
-                      <span className="h-1.5 w-1.5 rounded-full bg-brand-terracotta"></span>
-                      <span>Studio decorations (balloons & setup)</span>
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <span className="h-1.5 w-1.5 rounded-full bg-brand-terracotta"></span>
-                      <span>Complimentary beverages</span>
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <span className="h-1.5 w-1.5 rounded-full bg-brand-terracotta"></span>
-                      <span>Table Reservation</span>
-                    </li>
-                  </ul>
-                </div>
-
-                {/* Your pick from activities */}
-                <div className="space-y-2.5 bg-brand-sand/30 p-4 rounded-2xl border border-brand-clay/40">
-                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-brand-charcoal/70 flex items-center gap-1.5">
-                    <Paintbrush className="h-4 w-4 text-brand-terracotta" />
-                    <span>Your pick from one of the activities:</span>
-                  </h4>
-                  <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-medium text-brand-charcoal/80 pt-1">
-                    <li className="bg-white/80 p-2 rounded-xl border border-brand-clay/30 flex items-center gap-2">
-                      <span className="text-brand-terracotta font-bold">•</span> Canvas Painting (Size 85)
-                    </li>
-                    <li className="bg-white/80 p-2 rounded-xl border border-brand-clay/30 flex items-center gap-2">
-                      <span className="text-brand-terracotta font-bold">•</span> Pre-made Pottery Painting
-                    </li>
-                    <li className="bg-white/80 p-2 rounded-xl border border-brand-clay/30 flex items-center gap-2">
-                      <span className="text-brand-terracotta font-bold">•</span> 3D Figures Painting
-                    </li>
-                    <li className="bg-white/80 p-2 rounded-xl border border-brand-clay/30 flex items-center gap-2">
-                      <span className="text-brand-terracotta font-bold">•</span> Tote Bag Painting
-                    </li>
-                  </ul>
-                </div>
-
-                {/* Customized Birthday Cake */}
-                <div className="space-y-2 pt-2 border-t border-brand-clay/40">
-                  <div className="flex items-start gap-2">
-                    <Cake className="h-5 w-5 text-brand-terracotta shrink-0 mt-0.5" />
-                    <div>
-                      <h4 className="text-sm font-bold text-brand-charcoal">Customized Birthday Cake</h4>
-                      <p className="text-xs text-brand-charcoal/60 italic">(Send us your cake design and we will do it!)</p>
+                  {/* Package image */}
+                  {pkg.image && (
+                    <div className="h-40 w-full rounded-2xl overflow-hidden border border-brand-clay/50 mb-4">
+                      <img src={pkg.image} alt={pkg.name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
                     </div>
+                  )}
+
+                  {/* Header / Clickable Accordion Toggle */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-brand-clay/60">
+                    <button
+                      type="button"
+                      onClick={() => togglePackage(pkg.id)}
+                      className="flex-1 flex items-center justify-between text-left cursor-pointer group"
+                    >
+                      <div>
+                        <span className={`text-[11px] font-extrabold uppercase tracking-widest ${accentText} block`}>
+                          Package {String(index + 1).padStart(2, '0')}
+                        </span>
+                        <h3 className="font-display text-2xl font-bold text-brand-charcoal transition-colors flex items-center gap-2">
+                          <span>{pkg.name}</span>
+                          {isOpen
+                            ? <ChevronUp className={`h-5 w-5 ${accentText} shrink-0`} />
+                            : <ChevronDown className="h-5 w-5 text-brand-charcoal/40 shrink-0" />}
+                        </h3>
+                        {pkg.shortDescription && (
+                          <p className="text-xs text-brand-charcoal/70 mt-1 max-w-md">{pkg.shortDescription}</p>
+                        )}
+                      </div>
+                      <div className="bg-brand-sand/80 border border-brand-clay px-4 py-2 rounded-2xl text-right shrink-0">
+                        <span className="text-[10px] uppercase font-bold text-brand-charcoal/50 block">Pricing</span>
+                        <span className={`text-xl font-black ${accentText}`}>
+                          {pkg.price} SAR{' '}
+                          <span className="text-xs font-normal text-brand-charcoal/70">
+                            {pkg.pricingLabel || pkg.pricingType}
+                          </span>
+                        </span>
+                      </div>
+                    </button>
                   </div>
-                  <div className="grid grid-cols-3 gap-2 text-center pt-2">
-                    <div className="bg-brand-sand/40 p-2.5 rounded-xl border border-brand-clay/40">
-                      <span className="text-[10px] font-bold text-brand-charcoal/60 block">Small (15cm)</span>
-                      <span className="text-sm font-extrabold text-brand-charcoal">350 SR</span>
-                    </div>
-                    <div className="bg-brand-sand/40 p-2.5 rounded-xl border border-brand-clay/40">
-                      <span className="text-[10px] font-bold text-brand-charcoal/60 block">Medium (25cm)</span>
-                      <span className="text-sm font-extrabold text-brand-charcoal">650 SR</span>
-                    </div>
-                    <div className="bg-brand-sand/40 p-2.5 rounded-xl border border-brand-clay/40">
-                      <span className="text-[10px] font-bold text-brand-charcoal/60 block">Large (35cm)</span>
-                      <span className="text-sm font-extrabold text-brand-charcoal">800 SR</span>
-                    </div>
-                  </div>
-                </div>
 
-                {/* Trainer note */}
-                <div className="pt-2 text-xs font-semibold text-brand-sage flex items-center gap-1.5">
-                  <Sparkles className="h-4 w-4" />
-                  <span>Includes Professional Trainer/Artist upon request</span>
+                  {/* Quick facts */}
+                  <div className="pt-3 flex flex-wrap gap-2 text-[11px] font-bold text-brand-charcoal/70">
+                    {pkg.duration && (
+                      <span className="bg-white/70 border border-brand-clay/40 px-2.5 py-1 rounded-lg flex items-center gap-1">
+                        <Clock className="h-3 w-3 text-brand-charcoal/50" />{pkg.duration}
+                      </span>
+                    )}
+                    <span className="bg-white/70 border border-brand-clay/40 px-2.5 py-1 rounded-lg">
+                      {pkg.minGuests}–{pkg.maxGuests} guests
+                    </span>
+                    {pkg.ageInformation && (
+                      <span className="bg-white/70 border border-brand-clay/40 px-2.5 py-1 rounded-lg">{pkg.ageInformation}</span>
+                    )}
+                  </div>
+
+                  {/* Action Row with Toggle & Book Now Button */}
+                  <div className="pt-4 flex items-center justify-between gap-3">
+                    <button
+                      type="button"
+                      onClick={() => togglePackage(pkg.id)}
+                      className="text-xs font-bold text-brand-charcoal/60 hover:text-brand-charcoal cursor-pointer flex items-center gap-1"
+                    >
+                      <span>{isOpen ? 'Hide Package Details' : 'View Package Details'}</span>
+                      {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedBirthdayPackage(pkg.id);
+                        setCustomerTab('birthday-booking');
+                      }}
+                      className={`cursor-pointer ${accentHover} text-brand-cream text-xs font-bold px-5 py-2.5 rounded-xl shadow-xs transition-all duration-200 active:scale-95 flex items-center gap-1.5`}
+                    >
+                      <span>Book Now</span>
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  {/* Collapsible Dropdown Content — every value comes from the
+                      shared package record edited in the Staff Console. */}
+                  {isOpen && (
+                    <div className="space-y-6 pt-6 mt-4 border-t border-brand-clay/40 animate-in fade-in duration-300">
+                      {pkg.fullDescription && (
+                        <p className="text-sm text-brand-charcoal/85 leading-relaxed">{pkg.fullDescription}</p>
+                      )}
+
+                      {/* Includes */}
+                      {pkg.includedItems.length > 0 && (
+                        <div className="space-y-2.5">
+                          <h4 className="text-xs font-extrabold uppercase tracking-wider text-brand-charcoal/50 flex items-center gap-1.5">
+                            <CheckCircle2 className={`h-4 w-4 ${accentText}`} />
+                            <span>Includes:</span>
+                          </h4>
+                          <ul className="space-y-2 text-sm text-brand-charcoal/85 pl-1">
+                            {pkg.includedItems.map(entry => (
+                              <li key={entry} className="flex items-center gap-2">
+                                <span className={`h-1.5 w-1.5 rounded-full ${accentBg}`}></span>
+                                <span>{entry}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Your pick from one of the activities */}
+                      {pkg.activityChoices.length > 0 && (
+                        <div className="space-y-2.5 bg-brand-sand/30 p-4 rounded-2xl border border-brand-clay/40">
+                          <h4 className="text-xs font-extrabold uppercase tracking-wider text-brand-charcoal/70 flex items-center gap-1.5">
+                            <Paintbrush className={`h-4 w-4 ${accentText}`} />
+                            <span>Your choice of one activity:</span>
+                          </h4>
+                          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-medium text-brand-charcoal/80 pt-1">
+                            {pkg.activityChoices.map(activity => (
+                              <li key={activity} className="bg-white/80 p-2.5 rounded-xl border border-brand-clay/30 flex items-center gap-2">
+                                <span className={`${accentText} font-bold`}>•</span> {activity}
+                              </li>
+                            ))}
+                          </ul>
+
+                          {pkg.additionalInfo.length > 0 && (
+                            <div className="text-[11px] text-brand-charcoal/70 space-y-1 pt-1 border-t border-brand-clay/30">
+                              {pkg.additionalInfo.map(note => (
+                                <p key={note} className="flex items-center gap-1.5 font-semibold text-brand-charcoal/80">
+                                  <span className={accentText}>•</span> {note}
+                                </p>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Customized Birthday Cake */}
+                      {(pkg.cakeDescription || pkg.cakeSizes.length > 0) && (
+                        <div className="space-y-2 pt-2 border-t border-brand-clay/40">
+                          <div className="flex items-start gap-2">
+                            <Cake className={`h-5 w-5 ${accentText} shrink-0 mt-0.5`} />
+                            <div>
+                              <h4 className="text-sm font-bold text-brand-charcoal">Customized Birthday Cake</h4>
+                              {pkg.cakeDescription && (
+                                <p className="text-xs text-brand-charcoal/60 italic">({pkg.cakeDescription})</p>
+                              )}
+                            </div>
+                          </div>
+
+                          {pkg.cakeSizes.length > 0 && (
+                            <div className="grid grid-cols-3 gap-2 text-center pt-2">
+                              {pkg.cakeSizes.map(size => (
+                                <div key={size.id} className="bg-brand-sand/40 p-2.5 rounded-xl border border-brand-clay/40">
+                                  <span className="text-[10px] font-bold text-brand-charcoal/60 block">{size.label}</span>
+                                  <span className="text-sm font-extrabold text-brand-charcoal">{size.price} SAR</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Trainer / delivery information */}
+                      {(pkg.trainerInfo || pkg.deliveryInfo) && (
+                        <div className="pt-2 space-y-1">
+                          {pkg.trainerInfo && (
+                            <p className={`text-xs font-semibold ${accentText} flex items-center gap-1.5`}>
+                              <Sparkles className="h-4 w-4" />
+                              <span>{pkg.trainerInfo}</span>
+                            </p>
+                          )}
+                          {pkg.deliveryInfo && (
+                            <p className="text-xs font-semibold text-brand-charcoal/70 flex items-center gap-1.5">
+                              <Compass className="h-4 w-4" />
+                              <span>{pkg.deliveryInfo}</span>
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {(pkg.availableDays?.length > 0 || pkg.availableTimes?.length > 0) && (
+                        <div className="space-y-2 pt-2 border-t border-brand-clay/40 text-xs text-brand-charcoal/80">
+                          <h4 className="text-xs font-extrabold uppercase tracking-wider text-brand-charcoal/50 flex items-center gap-1.5">
+                            <CalendarRange className={`h-4 w-4 ${accentText}`} />
+                            <span>Available:</span>
+                          </h4>
+                          {pkg.availableDays?.length > 0 && <p className="font-semibold">{pkg.availableDays.join(', ')}</p>}
+                          {pkg.availableTimes?.length > 0 && <p className="font-semibold">{pkg.availableTimes.join(' · ')}</p>}
+                        </div>
+                      )}
+
+                      {pkg.customerNotes && (
+                        <p className="text-xs text-brand-charcoal/80 leading-relaxed pt-2 border-t border-brand-clay/40">
+                          {pkg.customerNotes}
+                        </p>
+                      )}
+
+                      {pkg.terms && (
+                        <div className="pt-2 border-t border-brand-clay/40">
+                          <h4 className="text-xs font-extrabold uppercase tracking-wider text-brand-charcoal/50 mb-1">Terms:</h4>
+                          <p className="text-xs text-brand-charcoal/70 leading-relaxed">{pkg.terms}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
+              );
+            })}
           </div>
-
-          {/* OPTION 2 */}
-          <div className="bg-brand-cream border-2 border-brand-clay/80 rounded-3xl p-6 md:p-8 shadow-sm flex flex-col text-left relative overflow-hidden transition-all duration-300">
-            <div className="absolute -top-12 -right-12 w-32 h-32 bg-brand-sage/10 rounded-full blur-2xl pointer-events-none"></div>
-            
-            {/* Header / Clickable Accordion Toggle */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-brand-clay/60">
-              <button
-                type="button"
-                onClick={() => setOpenOption2(!openOption2)}
-                className="flex-1 flex items-center justify-between text-left cursor-pointer group"
-              >
-                <div>
-                  <span className="text-[11px] font-extrabold uppercase tracking-widest text-brand-sage block">Package 02</span>
-                  <h3 className="font-display text-2xl font-bold text-brand-charcoal group-hover:text-brand-sage transition-colors flex items-center gap-2">
-                    <span>OPTION 2 — Pottery Party</span>
-                    {openOption2 ? <ChevronUp className="h-5 w-5 text-brand-sage shrink-0" /> : <ChevronDown className="h-5 w-5 text-brand-charcoal/40 group-hover:text-brand-sage shrink-0" />}
-                  </h3>
-                </div>
-                <div className="bg-brand-sand/80 border border-brand-clay px-4 py-2 rounded-2xl text-right shrink-0">
-                  <span className="text-[10px] uppercase font-bold text-brand-charcoal/50 block">Pricing</span>
-                  <span className="text-xl font-black text-brand-sage">200 SAR <span className="text-xs font-normal text-brand-charcoal/70">/ child</span></span>
-                </div>
-              </button>
-            </div>
-
-            {/* Action Row with Toggle & Book Now Button */}
-            <div className="pt-4 flex items-center justify-between gap-3">
-              <button
-                type="button"
-                onClick={() => setOpenOption2(!openOption2)}
-                className="text-xs font-bold text-brand-charcoal/60 hover:text-brand-charcoal cursor-pointer flex items-center gap-1"
-              >
-                <span>{openOption2 ? 'Hide Package Details' : 'View Package Details'}</span>
-                {openOption2 ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedBirthdayPackage('Option 2 — Pottery Party');
-                  setCustomerTab('birthday-booking');
-                }}
-                className="cursor-pointer bg-brand-sage hover:bg-brand-sage/90 text-brand-cream text-xs font-bold px-5 py-2.5 rounded-xl shadow-xs transition-all duration-200 active:scale-95 flex items-center gap-1.5"
-              >
-                <span>Book Now</span>
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
-
-            {/* Collapsible Dropdown Content */}
-            {openOption2 && (
-              <div className="space-y-6 pt-6 mt-4 border-t border-brand-clay/40 animate-in fade-in duration-300">
-                {/* Includes */}
-                <div className="space-y-2.5">
-                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-brand-charcoal/50 flex items-center gap-1.5">
-                    <CheckCircle2 className="h-4 w-4 text-brand-sage" />
-                    <span>Includes:</span>
-                  </h4>
-                  <ul className="space-y-2 text-sm text-brand-charcoal/85 pl-1">
-                    <li className="flex items-center gap-2">
-                      <span className="h-1.5 w-1.5 rounded-full bg-brand-sage"></span>
-                      <span>Studio decorations (balloons & setup)</span>
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <span className="h-1.5 w-1.5 rounded-full bg-brand-sage"></span>
-                      <span>Complimentary beverages</span>
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <span className="h-1.5 w-1.5 rounded-full bg-brand-sage"></span>
-                      <span>Table Reservation</span>
-                    </li>
-                  </ul>
-                </div>
-
-                {/* Your pick from activities */}
-                <div className="space-y-2.5 bg-brand-sand/30 p-4 rounded-2xl border border-brand-clay/40">
-                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-brand-charcoal/70 flex items-center gap-1.5">
-                    <Compass className="h-4 w-4 text-brand-sage" />
-                    <span>Your pick from one of the activities:</span>
-                  </h4>
-                  <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-medium text-brand-charcoal/80 pt-1">
-                    <li className="bg-white/80 p-2.5 rounded-xl border border-brand-clay/30 flex items-center gap-2">
-                      <span className="text-brand-sage font-bold">•</span> Hand-made Pottery Making
-                    </li>
-                    <li className="bg-white/80 p-2.5 rounded-xl border border-brand-clay/30 flex items-center gap-2">
-                      <span className="text-brand-sage font-bold">•</span> Wheel Throwing
-                    </li>
-                  </ul>
-                  <div className="text-[11px] text-brand-charcoal/70 space-y-1 pt-1 border-t border-brand-clay/30">
-                    <p className="flex items-center gap-1.5 font-semibold text-brand-charcoal/80">
-                      <span className="text-brand-sage">•</span> Both activities include pottery coloring and firing
-                    </p>
-                    <p className="flex items-center gap-1.5 font-semibold text-brand-charcoal/80">
-                      <span className="text-brand-sage">•</span> Pottery to be delivered or picked up after firing
-                    </p>
-                  </div>
-                </div>
-
-                {/* Customized Birthday Cake */}
-                <div className="space-y-2 pt-2 border-t border-brand-clay/40">
-                  <div className="flex items-start gap-2">
-                    <Cake className="h-5 w-5 text-brand-sage shrink-0 mt-0.5" />
-                    <div>
-                      <h4 className="text-sm font-bold text-brand-charcoal">Customized Birthday Cake</h4>
-                      <p className="text-xs text-brand-charcoal/60 italic">(Send us your cake design and we will do it!)</p>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 text-center pt-2">
-                    <div className="bg-brand-sand/40 p-2.5 rounded-xl border border-brand-clay/40">
-                      <span className="text-[10px] font-bold text-brand-charcoal/60 block">Small (15cm)</span>
-                      <span className="text-sm font-extrabold text-brand-charcoal">350 SR</span>
-                    </div>
-                    <div className="bg-brand-sand/40 p-2.5 rounded-xl border border-brand-clay/40">
-                      <span className="text-[10px] font-bold text-brand-charcoal/60 block">Medium (25cm)</span>
-                      <span className="text-sm font-extrabold text-brand-charcoal">650 SR</span>
-                    </div>
-                    <div className="bg-brand-sand/40 p-2.5 rounded-xl border border-brand-clay/40">
-                      <span className="text-[10px] font-bold text-brand-charcoal/60 block">Large (35cm)</span>
-                      <span className="text-sm font-extrabold text-brand-charcoal">800 SR</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Trainer note */}
-                <div className="pt-2 text-xs font-semibold text-brand-sage flex items-center gap-1.5">
-                  <Sparkles className="h-4 w-4" />
-                  <span>Includes Professional Trainer/Artist</span>
-                </div>
-              </div>
-            )}
-          </div>
-
-        </div>
+        )}
 
         {/* ITEM 3: CREATE YOUR OWN EVENT BUTTON & CONTACT REVEAL */}
         <div className="pt-4 text-center space-y-4">

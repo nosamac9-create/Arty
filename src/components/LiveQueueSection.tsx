@@ -14,6 +14,21 @@ import { motion, AnimatePresence } from 'motion/react';
 import { QueueItem } from '../types';
 import { validateSaudiPhone, normaliseSaudiPhone } from '../utils/phoneUtils';
 import { PhoneInput } from './PhoneInput';
+import {
+  resolveQueueInstructor, resolveQueueSession, getTodaysAvailableSessions,
+  getSessionSeatUsage, computeQueueSessionPlan, validateHoursAndGuests, isSelfGuided,
+  QueueRecordSources, AvailableSessionOption, CapacitySnapshot
+} from '../utils/queueUtils';
+import { validateCustomerForm, validateBookingForm, canonicalPhone, phoneMatchKey } from '../utils/validation';
+import { checkStaffMemberAvailability } from '../utils/staffAvailabilityUtils';
+import { AssignmentSources } from '../utils/staffAssignments';
+import { db } from '../db';
+import {
+  searchCustomers, summarizeCustomerActivity, normalizeCustomerPhone, toDisplayPhone,
+  customerPhoneKey, CustomerSearchResult
+} from '../utils/customerIdentity';
+import { hasWebsiteAccount } from '../utils/accountUtils';
+import { CustomerAccount } from '../types';
 
 // ==========================================
 // ======== MODULAR QUEUE CARD COMPONENTS ===
@@ -22,11 +37,12 @@ import { PhoneInput } from './PhoneInput';
 const WaitingCard: React.FC<{
   item: QueueItem;
   isExpanded: boolean;
+  instructorName: string;
   onToggle: () => void;
   onEdit: (item: QueueItem) => void;
   onCancel: (item: QueueItem) => void;
   updateQueueStatus: (id: string, status: any) => void;
-}> = ({ item, isExpanded, onToggle, onEdit, onCancel, updateQueueStatus }) => {
+}> = ({ item, isExpanded, instructorName, onToggle, onEdit, onCancel, updateQueueStatus }) => {
   const handleCardClick = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('button')) return;
     onToggle();
@@ -116,9 +132,9 @@ const WaitingCard: React.FC<{
                 <span className="font-bold flex items-center gap-1 bg-brand-sand/50 px-2 py-0.5 rounded">
                   👥 {item.participants} Guests
                 </span>
-                {item.type === 'With Instructor' ? (
+                {!isSelfGuided(item) ? (
                   <span className="font-bold flex items-center gap-1 bg-brand-sage/20 text-brand-sage-hover px-2 py-0.5 rounded">
-                    🎓 {item.staffName}
+                    🎓 {instructorName}
                   </span>
                 ) : (
                   <span className="font-bold flex items-center gap-1 bg-purple-50 text-purple-700 px-2 py-0.5 rounded">
@@ -126,6 +142,12 @@ const WaitingCard: React.FC<{
                   </span>
                 )}
               </div>
+
+              {/* The operational detail box (duration, estimated end, seats/tables,
+                  session time and capacity) is intentionally not rendered here to
+                  keep the collapsed card clean. The values are still saved on the
+                  queue record and drive capacity, timers, completion and wait-time
+                  logic, and remain visible in the detailed booking views. */}
 
               {/* Check-in time and elapsed wait time */}
               <div className="bg-brand-sand/10 p-2 rounded-xl border border-brand-clay/20 text-[11px] space-y-1 text-brand-charcoal/70">
@@ -167,10 +189,11 @@ const WaitingCard: React.FC<{
 const CalledCard: React.FC<{
   item: QueueItem;
   isExpanded: boolean;
+  instructorName: string;
   onToggle: () => void;
   onCancel: (item: QueueItem) => void;
   updateQueueStatus: (id: string, status: any) => void;
-}> = ({ item, isExpanded, onToggle, onCancel, updateQueueStatus }) => {
+}> = ({ item, isExpanded, instructorName, onToggle, onCancel, updateQueueStatus }) => {
   const handleCardClick = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('button')) return;
     onToggle();
@@ -251,9 +274,9 @@ const CalledCard: React.FC<{
                 <span className="font-bold flex items-center gap-1 bg-brand-sand/50 px-2 py-0.5 rounded">
                   👥 {item.participants} Guests
                 </span>
-                {item.type === 'With Instructor' && (
+                {!isSelfGuided(item) && (
                   <span className="font-bold flex items-center gap-1 bg-brand-sage/20 text-brand-sage-hover px-2 py-0.5 rounded">
-                    🎓 {item.staffName}
+                    🎓 {instructorName}
                   </span>
                 )}
               </div>
@@ -298,10 +321,11 @@ const CalledCard: React.FC<{
 const InProgressCard: React.FC<{
   item: QueueItem;
   isExpanded: boolean;
+  instructorName: string;
   onToggle: () => void;
   updateQueueStatus: (id: string, status: any) => void;
   now: Date;
-}> = ({ item, isExpanded, onToggle, updateQueueStatus, now }) => {
+}> = ({ item, isExpanded, instructorName, onToggle, updateQueueStatus, now }) => {
   const handleCardClick = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('button')) return;
     onToggle();
@@ -432,9 +456,9 @@ const InProgressCard: React.FC<{
                 <span className="font-bold flex items-center gap-1 bg-brand-sand/50 px-2 py-0.5 rounded">
                   👥 {item.participants} Guests
                 </span>
-                {item.type === 'With Instructor' ? (
+                {!isSelfGuided(item) ? (
                   <span className="font-bold flex items-center gap-1 bg-brand-sage/20 text-brand-sage-hover px-2 py-0.5 rounded">
-                    🎓 {item.staffName}
+                    🎓 {instructorName}
                   </span>
                 ) : (
                   <span className="font-bold flex items-center gap-1 bg-purple-50 text-purple-700 px-2 py-0.5 rounded">
@@ -500,8 +524,10 @@ const InProgressCard: React.FC<{
 const CompletedCard: React.FC<{
   item: QueueItem;
   isExpanded: boolean;
+  instructorName: string;
   onToggle: () => void;
-}> = ({ item, isExpanded, onToggle }) => {
+  onReturnToWaiting: (item: QueueItem) => void;
+}> = ({ item, isExpanded, instructorName, onToggle, onReturnToWaiting }) => {
   const handleCardClick = () => {
     onToggle();
   };
@@ -584,16 +610,63 @@ const CompletedCard: React.FC<{
                   🕒 {timeSpentStr} spent
                 </span>
               </div>
+
+              <div className="flex items-center justify-between text-[11px] font-bold text-brand-charcoal/60">
+                <span>{isSelfGuided(item) ? 'Self-Guided' : `🎓 ${instructorName}`}</span>
+                {item.hours !== undefined && <span>{item.hours} hrs booked</span>}
+              </div>
+
+              {item.extendedByQueueId && (
+                <p className="text-[10px] font-bold text-brand-terracotta">
+                  Extended into queue entry No. {item.extendedByQueueId.replace('Q-', '')} — this completed session is kept as history.
+                </p>
+              )}
+              {item.returnedFromQueueId && (
+                <p className="text-[10px] font-bold text-brand-charcoal/50">
+                  Continuation of completed entry No. {item.returnedFromQueueId.replace('Q-', '')}.
+                </p>
+              )}
             </div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Only self-guided sessions can be given more time. Instructor-led sessions
+          stay completed and are never restarted. */}
+      {isSelfGuided(item) && (
+        <div className="pt-2 border-t border-brand-clay/30">
+          <button
+            onClick={() => onReturnToWaiting(item)}
+            className="cursor-pointer w-full py-2 border border-brand-terracotta/50 text-brand-terracotta hover:bg-brand-terracotta/5 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span>Add More Time / Return to Waiting</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 };
 
 export const LiveQueueSection: React.FC = () => {
-  const { queue, updateQueueStatus, updateQueueItem, addQueueItem, todayDateStr, formattedTodayDate, appSettings } = useApp();
+  const {
+    queue, updateQueueStatus, updateQueueItem, addQueueItem, returnQueueItemToWaiting,
+    todayDateStr, formattedTodayDate, appSettings,
+    staff, workshops, workshopSessions, bookings, events,
+    customers, pieces, resolveCustomer, updateCustomer
+  } = useApp();
+
+  // One shared view of the real records the queue depends on.
+  const recordSources: QueueRecordSources = useMemo(
+    () => ({ staff, workshops, workshopSessions, bookings, queue }),
+    [staff, workshops, workshopSessions, bookings, queue]
+  );
+
+  // Same assignment sources the staff console uses, for schedule conflict checks.
+  const assignmentSources: AssignmentSources = useMemo(
+    () => ({ staff, workshopSessions, workshops, events, queue }),
+    [staff, workshopSessions, workshops, events, queue]
+  );
 
   const capacityConfig = appSettings?.find(s => s.id === 'capacitySettings')?.value;
   const totalSeats = Number(capacityConfig?.totalSeats) || 32;
@@ -648,14 +721,31 @@ export const LiveQueueSection: React.FC = () => {
   const [newPhone, setNewPhone] = useState('+966 5');
   const [newGuests, setNewGuests] = useState(1);
   const [newHours, setNewHours] = useState(1); // Without Instructor
-  const [newWorkshopType, setNewWorkshopType] = useState<'Painting' | 'Wheel' | 'Pottery' | 'Handbuilding' | 'Other'>('Painting'); // With Instructor
+  const [newSessionId, setNewSessionId] = useState(''); // With Instructor — real session
+  // Returning-customer lookup, against the one shared customers table.
+  const [linkedCustomer, setLinkedCustomer] = useState<CustomerAccount | null>(null);
+  /** Set when a walk-in would rename the account that already owns this number. */
+  const [nameConflict, setNameConflict] = useState<
+    { existing: CustomerAccount; enteredName: string } | null
+  >(null);
+  const [customerQuery, setCustomerQuery] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Edit item modal states (for Waiting items)
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<QueueItem | null>(null);
   const [editGuests, setEditGuests] = useState(1);
-  const [editStaffName, setEditStaffName] = useState('Unassigned');
+  const [editHours, setEditHours] = useState(1);
+  // Instructor being assigned while editing a With Instructor entry.
+  const [editStaffId, setEditStaffId] = useState('');
+  const [editErrors, setEditErrors] = useState<Record<string, string>>({});
+
+  // Return-to-waiting modal (completed self-guided guests)
+  const [returnModalOpen, setReturnModalOpen] = useState(false);
+  const [returningItem, setReturningItem] = useState<QueueItem | null>(null);
+  const [returnHours, setReturnHours] = useState(1);
+  const [returnGuests, setReturnGuests] = useState(1);
+  const [returnErrors, setReturnErrors] = useState<Record<string, string>>({});
 
   // Cancel confirmation dialog states
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
@@ -669,14 +759,77 @@ export const LiveQueueSection: React.FC = () => {
     return Math.round(todayWaiting.reduce((sum, curr) => sum + curr.elapsedMinutes, 0) / todayWaiting.length);
   }, [todayQueue]);
 
+  // Live capacity snapshot shared by every derived calculation.
+  const capacitySnapshot: CapacitySnapshot = useMemo(() => ({
+    totalSeats,
+    totalTables,
+    defaultSeatsPerTable,
+    oneGroupPerTable: capacityConfig?.oneGroupPerTable,
+    occupiedSeats,
+    occupiedTables
+  }), [totalSeats, totalTables, defaultSeatsPerTable, capacityConfig, occupiedSeats, occupiedTables]);
+
+  // Today's real, still-bookable sessions for a With Instructor walk-in.
+  const availableSessions: AvailableSessionOption[] = useMemo(() => {
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+    return getTodaysAvailableSessions(recordSources, todayDateStr, nowMinutes);
+  }, [recordSources, todayDateStr, now]);
+
+  const selectedSession = useMemo(
+    () => availableSessions.find(s => s.sessionId === newSessionId) || null,
+    [availableSessions, newSessionId]
+  );
+
+  // Instructor per queue entry, always resolved from the current staff record.
+  const instructorFor = (item: QueueItem) => resolveQueueInstructor(item, recordSources).name;
+
+  /**
+   * Matching customers for what staff have typed so far — the same search the
+   * Pottery Logging Console uses, over every customer regardless of how they
+   * first reached the studio.
+   */
+  const customerMatches: CustomerSearchResult[] = useMemo(() => {
+    if (linkedCustomer) return [];
+    const query = customerQuery.trim() || newName.trim() || newPhone.trim();
+    if (query.length < 2) return [];
+    if (query === '+966 5' || query === '+966') return [];
+    return searchCustomers(customers, query, 5);
+  }, [customers, customerQuery, newName, newPhone, linkedCustomer]);
+
+  /** Populates the form from an existing customer and links the visit to them. */
+  const handleSelectExistingCustomer = (customer: CustomerAccount) => {
+    setLinkedCustomer(customer);
+    setNewName(customer.name || '');
+    setNewPhone(customer.displayPhone || customer.phone || '');
+    setCustomerQuery('');
+    setErrors(prev => ({ ...prev, name: '', phone: '' }));
+  };
+
+  const handleClearLinkedCustomer = () => {
+    setLinkedCustomer(null);
+  };
+
   // Validation & Walk-in Submission
-  const validateForm = () => {
-    const newErrors: Record<string, string> = {};
-    if (!newName.trim()) {
-      newErrors.name = 'Guest name is required';
-    }
-    if (!validateSaudiPhone(newPhone)) {
-      newErrors.phone = 'Enter a valid Saudi mobile number, such as 0501234567 or +966501234567';
+  const validateForm = async () => {
+    // Name and phone come from the shared customer rules. A walk-in that
+    // matches an existing customer is a returning guest, not a duplicate —
+    // resolveCustomer reuses that record — so the duplicate check is skipped.
+    const newErrors: Record<string, string> = await validateCustomerForm(
+      { name: newName, phone: newPhone },
+      { requireEmail: false, allowExistingCustomer: true }
+    );
+
+    if (walkInType === 'With Instructor') {
+      // Capacity is re-read from the database at submit time, not taken from
+      // the snapshot the modal opened with.
+      const bookingErrors = await validateBookingForm({
+        sessionId: newSessionId,
+        participants: newGuests
+      });
+      if (bookingErrors.sessionId) newErrors.session = bookingErrors.sessionId;
+      else if (bookingErrors.participants) newErrors.session = bookingErrors.participants;
+    } else {
+      Object.assign(newErrors, validateHoursAndGuests(newHours, newGuests));
     }
 
     setErrors(newErrors);
@@ -685,28 +838,68 @@ export const LiveQueueSection: React.FC = () => {
 
   const handleAddWalkIn = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validateForm()) return;
+    if (!(await validateForm())) return;
 
+    const enteredName = newName.trim();
+    const phoneKey = phoneMatchKey(newPhone);
+
+    // The account this number already belongs to, if any.
+    const existing = linkedCustomer
+      || customers.find(c => customerPhoneKey(c) === phoneKey);
+
+    // Saving would rename that account. Ask first rather than overwriting.
+    if (existing && existing.name && existing.name.trim().toLowerCase() !== enteredName.toLowerCase()) {
+      setNameConflict({ existing, enteredName });
+      return;
+    }
+
+    await submitWalkIn(enteredName, existing);
+  };
+
+  /**
+   * Writes the walk-in. `nameToUse` is what the shared customer record ends up
+   * with, so the caller decides whether an existing account keeps its name.
+   */
+  const submitWalkIn = async (nameToUse: string, existing?: CustomerAccount) => {
     const isWithInstructor = walkInType === 'With Instructor';
-    const activity = isWithInstructor
-      ? `Walk-in (With Instructor: ${newWorkshopType})`
+    const activity = isWithInstructor && selectedSession
+      ? `${selectedSession.workshopTitle} (${selectedSession.startTime})`
       : `Walk-in (No Instructor - ${newHours} hrs)`;
 
-    const normPhone = normaliseSaudiPhone(newPhone);
+    // Stored in the one canonical format so the match key always agrees.
+    const normPhone = canonicalPhone(newPhone);
+
+    // One shared customer record: an existing number always links to its own
+    // account, never to a second record. resolveCustomer matches on the
+    // normalized phone, so passing the chosen name is what decides whether the
+    // stored name changes.
+    const { customer } = await resolveCustomer({ name: nameToUse, phone: normPhone });
+
+    // "Update to new name" was chosen for an account that already existed.
+    if (existing && nameToUse !== existing.name) {
+      await updateCustomer(customer.id, { name: nameToUse });
+    }
 
     await addQueueItem({
-      name: newName.trim(),
+      customerId: customer.id,
+      name: nameToUse,
       phone: normPhone,
       activity,
       participants: newGuests,
-      staffAvatar: isWithInstructor 
-        ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&h=150&q=80'
-        : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&h=150&q=80',
-      staffName: isWithInstructor ? 'Aisha Al-Jahdali' : 'Self-guided',
+      staffAvatar: '',
+      // Real staff record for instructor-led entries; no default tutor.
+      staffName: isWithInstructor ? (selectedSession?.instructorName || 'Unassigned') : 'Self-guided',
+      staffId: isWithInstructor ? selectedSession?.instructorStaffId : undefined,
       source: 'Walk-in',
       type: walkInType,
       hours: isWithInstructor ? undefined : newHours,
-      workshopType: isWithInstructor ? newWorkshopType : undefined
+      // Real workshop/session links saved with the entry.
+      workshopId: isWithInstructor ? selectedSession?.workshopId : undefined,
+      sessionId: isWithInstructor ? selectedSession?.sessionId : undefined,
+      sessionStartTime: isWithInstructor ? selectedSession?.startTime : undefined,
+      sessionEndTime: isWithInstructor ? selectedSession?.endTime : undefined,
+      sessionDuration: isWithInstructor ? selectedSession?.duration : undefined,
+      sessionCapacity: isWithInstructor ? selectedSession?.capacity : undefined
     });
 
     // Reset Form
@@ -714,8 +907,11 @@ export const LiveQueueSection: React.FC = () => {
     setNewPhone('+966 5');
     setNewGuests(1);
     setNewHours(1);
-    setNewWorkshopType('Painting');
+    setNewSessionId('');
+    setLinkedCustomer(null);
+    setCustomerQuery('');
     setErrors({});
+    setNameConflict(null);
     setAddModalOpen(false);
     setActiveFilterTab('Waiting'); // Focus on Waiting tab for instant visual feedback
   };
@@ -724,29 +920,173 @@ export const LiveQueueSection: React.FC = () => {
   const handleOpenEdit = (item: QueueItem) => {
     setEditingItem(item);
     setEditGuests(item.participants);
-    setEditStaffName(item.staffName);
+    setEditHours(item.hours ?? 1);
+    // Resolve the current instructor from the shared records — no default.
+    setEditStaffId(resolveQueueInstructor(item, recordSources).staffId || '');
+    setEditErrors({});
     setEditModalOpen(true);
   };
 
+  /** The session an entry being edited belongs to, from the shared records. */
+  const editingSession = useMemo(
+    () => (editingItem ? resolveQueueSession(editingItem, recordSources) : undefined),
+    [editingItem, recordSources]
+  );
+
+  /** Seats this session still has, excluding the entry being edited. */
+  const editingCapacity = useMemo(() => {
+    if (!editingSession || !editingItem) return null;
+    const usage = getSessionSeatUsage(editingSession, {
+      workshops,
+      bookings,
+      queue: queue.filter(q => q.id !== editingItem.id)
+    });
+    return usage;
+  }, [editingSession, editingItem, workshops, bookings, queue]);
+
+  /**
+   * Staff who can take this session: active, and free for its date and time.
+   * The instructor currently assigned stays selectable.
+   */
+  const availableInstructors = useMemo(() => {
+    if (!editingItem || isSelfGuided(editingItem)) return [];
+
+    const date = editingItem.date;
+    const startTime = editingItem.sessionStartTime || editingSession?.startTime || editingItem.checkInTime;
+    const endTime = editingItem.sessionEndTime || editingSession?.endTime;
+    const duration = editingItem.sessionDuration || editingSession?.duration;
+
+    return staff
+      .filter(member => member.status === 'Active' || member.id === editingItem.staffId)
+      .map(member => {
+        const avail = checkStaffMemberAvailability({
+          staff: member,
+          date,
+          startTime,
+          endTime,
+          duration,
+          sources: assignmentSources,
+          exclude: {
+            sessionIds: editingItem.sessionId ? [String(editingItem.sessionId)] : []
+          }
+        });
+        return { member, avail };
+      })
+      // Only currently available staff (plus whoever is already assigned).
+      .filter(({ member, avail }) => avail.isAvailable || member.id === editingItem.staffId);
+  }, [editingItem, editingSession, staff, assignmentSources]);
+
   const handleSaveEdit = async () => {
     if (!editingItem) return;
-    
-    // Update the queue item fields
-    const updates: Partial<QueueItem> = {
-      participants: editGuests,
-      staffName: editStaffName
-    };
-    
-    // If with instructor, also update activity string to reflect staffName
-    if (editingItem.type === 'With Instructor') {
-      const parts = editingItem.activity.split(':');
-      const wsType = parts[1] ? parts[1].replace(')', '').trim() : (editingItem.workshopType || 'Other');
-      updates.activity = `Walk-in (With Instructor: ${wsType})`;
+
+    const selfGuided = isSelfGuided(editingItem);
+
+    const validationErrors = selfGuided
+      ? validateHoursAndGuests(editHours, editGuests)
+      : validateHoursAndGuests(1, editGuests); // instructor-led entries keep session hours
+    if (!selfGuided) delete validationErrors.hours;
+
+    // Guests may not exceed what the session still has free.
+    if (!selfGuided && editingCapacity) {
+      const guests = Number(editGuests);
+      if (Number.isFinite(guests) && guests > editingCapacity.remainingCapacity) {
+        validationErrors.guests =
+          `Only ${editingCapacity.remainingCapacity} seat(s) remain in this session ` +
+          `(capacity ${editingCapacity.capacity}, ${editingCapacity.seatsTaken} already taken).`;
+      }
+    }
+
+    if (!selfGuided && !editStaffId) {
+      validationErrors.instructor = 'Select an instructor for this session.';
+    }
+
+    if (Object.keys(validationErrors).length > 0) {
+      setEditErrors(validationErrors);
+      return;
+    }
+
+    const updates: Partial<QueueItem> = { participants: Number(editGuests) };
+
+    if (selfGuided) {
+      // Hours drive duration, estimated end time and the capacity figures, all of
+      // which are recomputed from the saved record.
+      updates.hours = Number(editHours);
+      updates.activity = `Walk-in (No Instructor - ${Number(editHours)} hrs)`;
+    } else if (editStaffId && editStaffId !== editingItem.staffId) {
+      const member = staff.find(m => m.id === editStaffId);
+      if (!member) {
+        setEditErrors({ instructor: 'That staff member no longer exists.' });
+        return;
+      }
+      // Store the stable id; the name is denormalized for display only.
+      updates.staffId = member.id;
+      updates.staffName = member.name;
     }
 
     await updateQueueItem(editingItem.id, updates);
+
+    // Keep the linked booking and workshop session pointing at the same tutor,
+    // so the staff calendar and customer view agree. Workshop and session links
+    // are left untouched.
+    if (!selfGuided && editStaffId && editStaffId !== editingItem.staffId) {
+      const member = staff.find(m => m.id === editStaffId);
+      if (member) {
+        if (editingItem.sessionId) {
+          await db.workshopSessions.update(String(editingItem.sessionId), {
+            staffId: member.id,
+            instructor: member.name
+          });
+        }
+        if (editingItem.bookingId) {
+          const booking = await db.bookings.get(String(editingItem.bookingId));
+          if (booking) {
+            await db.bookings.update(booking.id, {
+              timeline: [...(booking.timeline || []), {
+                time: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+                action: `Instructor reassigned to ${member.name} via Live Queue`
+              }]
+            });
+          }
+        }
+      }
+    }
+
     setEditModalOpen(false);
     setEditingItem(null);
+    setEditErrors({});
+  };
+
+  // Handle returning a completed self-guided guest to Waiting for more time
+  const handleOpenReturn = (item: QueueItem) => {
+    setReturningItem(item);
+    setReturnHours(1);
+    setReturnGuests(item.participants || 1);
+    setReturnErrors({});
+    setReturnModalOpen(true);
+  };
+
+  const handleConfirmReturn = async () => {
+    if (!returningItem) return;
+
+    const validationErrors = validateHoursAndGuests(returnHours, returnGuests);
+    if (Object.keys(validationErrors).length > 0) {
+      setReturnErrors(validationErrors);
+      return;
+    }
+
+    const result = await returnQueueItemToWaiting(returningItem.id, {
+      hours: Number(returnHours),
+      participants: Number(returnGuests)
+    });
+
+    if (!result.success) {
+      setReturnErrors({ form: result.message || 'Could not return this guest to Waiting.' });
+      return;
+    }
+
+    setReturnModalOpen(false);
+    setReturningItem(null);
+    setActiveFilterTab('Waiting');
   };
 
   // Handle Cancellation flow
@@ -908,6 +1248,7 @@ export const LiveQueueSection: React.FC = () => {
                   key={item.id}
                   item={item}
                   isExpanded={!!expandedCards[item.id]}
+                  instructorName={instructorFor(item)}
                   onToggle={() => toggleExpand(item.id)}
                   onEdit={handleOpenEdit}
                   onCancel={handleRequestCancel}
@@ -939,6 +1280,7 @@ export const LiveQueueSection: React.FC = () => {
                   key={item.id}
                   item={item}
                   isExpanded={!!expandedCards[item.id]}
+                  instructorName={instructorFor(item)}
                   onToggle={() => toggleExpand(item.id)}
                   onCancel={handleRequestCancel}
                   updateQueueStatus={updateQueueStatus}
@@ -969,6 +1311,7 @@ export const LiveQueueSection: React.FC = () => {
                   key={item.id}
                   item={item}
                   isExpanded={!!expandedCards[item.id]}
+                  instructorName={instructorFor(item)}
                   onToggle={() => toggleExpand(item.id)}
                   updateQueueStatus={updateQueueStatus}
                   now={now}
@@ -999,7 +1342,9 @@ export const LiveQueueSection: React.FC = () => {
                   key={item.id}
                   item={item}
                   isExpanded={!!expandedCards[item.id]}
+                  instructorName={instructorFor(item)}
                   onToggle={() => toggleExpand(item.id)}
+                  onReturnToWaiting={handleOpenReturn}
                 />
               ))
             )}
@@ -1011,6 +1356,60 @@ export const LiveQueueSection: React.FC = () => {
       {/* ========================================================== */}
       {/* ================ WALK-IN CHECK-IN MODAL ================= */}
       {/* ========================================================== */}
+      {/* Existing account, different name — ask before renaming it */}
+      {nameConflict && (
+        <div className="fixed inset-0 bg-brand-charcoal/60 backdrop-blur-xs z-[60] flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white border border-brand-clay rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl text-left">
+            <h3 className="text-base font-bold text-brand-charcoal">This number already has an account</h3>
+
+            <div className="space-y-2 text-xs text-brand-charcoal/80">
+              <p>
+                This number already has an account under{' '}
+                <span className="font-bold text-brand-charcoal">"{nameConflict.existing.name}"</span>.
+              </p>
+              <p>
+                You entered <span className="font-bold text-brand-charcoal">"{nameConflict.enteredName}"</span>.
+              </p>
+              <p className="text-brand-charcoal/60">
+                The visit is linked to the existing account either way — choose which name it should keep.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-2 pt-1">
+              <button
+                type="button"
+                onClick={async () => {
+                  const existing = nameConflict.existing;
+                  setNameConflict(null);
+                  await submitWalkIn(existing.name, existing);
+                }}
+                className="w-full py-2.5 rounded-xl bg-brand-terracotta text-brand-cream text-xs font-bold cursor-pointer hover:bg-brand-terracotta-hover transition-colors"
+              >
+                Keep existing name ("{nameConflict.existing.name}")
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const { existing, enteredName } = nameConflict;
+                  setNameConflict(null);
+                  await submitWalkIn(enteredName, existing);
+                }}
+                className="w-full py-2.5 rounded-xl bg-brand-sand text-brand-charcoal border border-brand-clay text-xs font-bold cursor-pointer hover:bg-brand-clay/30 transition-colors"
+              >
+                Update to new name ("{nameConflict.enteredName}")
+              </button>
+              <button
+                type="button"
+                onClick={() => setNameConflict(null)}
+                className="w-full py-2 rounded-xl text-xs font-bold text-brand-charcoal/60 cursor-pointer hover:bg-brand-sand/40 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {addModalOpen && (
         <div className="fixed inset-0 bg-brand-charcoal/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-brand-cream border border-brand-clay rounded-3xl p-6 shadow-2xl max-w-md w-full text-left space-y-5 animate-in zoom-in-95 duration-200">
@@ -1067,7 +1466,12 @@ export const LiveQueueSection: React.FC = () => {
                   type="text"
                   placeholder="Sara Al-Fahad"
                   value={newName}
-                  onChange={e => { setNewName(e.target.value); if(errors.name) setErrors(prev => ({...prev, name: ''})); }}
+                  onChange={e => {
+                    setNewName(e.target.value);
+                    setCustomerQuery(e.target.value);
+                    if (linkedCustomer) setLinkedCustomer(null);
+                    if(errors.name) setErrors(prev => ({...prev, name: ''}));
+                  }}
                   className={`w-full bg-white border rounded-xl py-3 px-3.5 text-xs font-semibold text-brand-charcoal focus:ring-1 focus:ring-brand-terracotta focus:outline-none ${
                     errors.name ? 'border-red-500 bg-red-50/20' : 'border-brand-clay'
                   }`}
@@ -1079,9 +1483,75 @@ export const LiveQueueSection: React.FC = () => {
                 label="Phone Number"
                 required
                 value={newPhone}
-                onChange={val => { setNewPhone(val); if(errors.phone) setErrors(prev => ({...prev, phone: ''})); }}
+                onChange={val => {
+                  setNewPhone(val);
+                  setCustomerQuery(val);
+                  if (linkedCustomer) setLinkedCustomer(null);
+                  if(errors.phone) setErrors(prev => ({...prev, phone: ''}));
+                }}
                 error={errors.phone}
               />
+
+              {/* Returning-customer lookup over the shared customers table.
+                  Matching is by normalized phone, so any format finds them. */}
+              {linkedCustomer ? (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+                      Existing customer linked
+                    </p>
+                    <p className="text-xs font-bold text-brand-charcoal truncate">{linkedCustomer.name}</p>
+                    <p className="text-[11px] font-mono text-brand-charcoal/60">
+                      {linkedCustomer.displayPhone || linkedCustomer.phone}
+                      {linkedCustomer.email ? ` · ${linkedCustomer.email}` : ''}
+                    </p>
+                    {(() => {
+                      const summary = summarizeCustomerActivity(linkedCustomer, { bookings, queue, pieces });
+                      return (
+                        <p className="text-[10px] font-semibold text-brand-charcoal/55 mt-0.5">
+                          {summary.visits} previous visit{summary.visits === 1 ? '' : 's'} ·{' '}
+                          {summary.bookings} booking{summary.bookings === 1 ? '' : 's'} ·{' '}
+                          {hasWebsiteAccount(linkedCustomer) ? 'Registered account' : 'No website account'} ·{' '}
+                          <span className="font-mono">{linkedCustomer.id}</span>
+                        </p>
+                      );
+                    })()}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleClearLinkedCustomer}
+                    className="text-[10px] font-bold text-brand-charcoal/50 hover:text-red-600 shrink-0 cursor-pointer"
+                  >
+                    Unlink
+                  </button>
+                </div>
+              ) : customerMatches.length > 0 && (
+                <div className="bg-brand-sand/25 border border-brand-clay/50 rounded-xl p-2 space-y-1">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-brand-charcoal/50 px-1">
+                    Matching customers
+                  </p>
+                  {customerMatches.map(({ customer }) => {
+                    const summary = summarizeCustomerActivity(customer, { bookings, queue, pieces });
+                    return (
+                      <button
+                        key={customer.id}
+                        type="button"
+                        onClick={() => handleSelectExistingCustomer(customer)}
+                        className="w-full text-left p-2 rounded-lg bg-white hover:bg-brand-sand/40 border border-brand-clay/40 cursor-pointer"
+                      >
+                        <p className="text-xs font-bold text-brand-charcoal">{customer.name}</p>
+                        <p className="text-[11px] font-mono text-brand-charcoal/60">
+                          {customer.displayPhone || customer.phone}
+                        </p>
+                        <p className="text-[10px] font-semibold text-brand-charcoal/50">
+                          {summary.visits} previous visit{summary.visits === 1 ? '' : 's'} ·{' '}
+                          {hasWebsiteAccount(customer) ? 'Registered account' : 'Walk-in / guest'}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
 
               {/* Guest Count Numeric Stepper (Tablet friendly) */}
               <div className="flex items-center justify-between border border-brand-clay bg-white rounded-xl p-3">
@@ -1135,23 +1605,59 @@ export const LiveQueueSection: React.FC = () => {
                 </div>
               )}
 
-              {/* OPTION B: WITH INSTRUCTOR SPECIFIC FIELDS */}
+              {/* OPTION B: WITH INSTRUCTOR — pick one of today's real sessions */}
               {walkInType === 'With Instructor' && (
                 <div className="space-y-1 animate-in fade-in duration-200">
                   <label className="text-xs font-bold text-brand-charcoal/80">
-                    Workshop Type <span className="text-red-500">*</span>
+                    Today's Workshop Session <span className="text-red-500">*</span>
                   </label>
                   <select
-                    value={newWorkshopType}
-                    onChange={e => setNewWorkshopType(e.target.value as any)}
-                    className="w-full bg-white border border-brand-clay rounded-xl py-3 px-3.5 text-xs font-bold text-brand-charcoal focus:ring-1 focus:ring-brand-terracotta focus:outline-none"
+                    value={newSessionId}
+                    onChange={e => {
+                      setNewSessionId(e.target.value);
+                      if (errors.session) setErrors(prev => ({ ...prev, session: '' }));
+                    }}
+                    disabled={availableSessions.length === 0}
+                    className={`w-full bg-white border rounded-xl py-3 px-3.5 text-xs font-bold text-brand-charcoal focus:ring-1 focus:ring-brand-terracotta focus:outline-none disabled:opacity-60 ${
+                      errors.session ? 'border-red-500 bg-red-50/20' : 'border-brand-clay'
+                    }`}
                   >
-                    <option value="Painting">Painting</option>
-                    <option value="Wheel">Wheel Throwing</option>
-                    <option value="Pottery">Pottery</option>
-                    <option value="Handbuilding">Handbuilding</option>
-                    <option value="Other">Other</option>
+                    <option value="">
+                      {availableSessions.length === 0
+                        ? 'No available sessions left today'
+                        : 'Select a session...'}
+                    </option>
+                    {availableSessions.map(s => (
+                      <option key={s.sessionId} value={s.sessionId}>{s.label}</option>
+                    ))}
                   </select>
+                  {errors.session && <p className="text-[11px] text-red-500 font-bold">{errors.session}</p>}
+
+                  {selectedSession && (
+                    <div className="mt-2 bg-brand-sand/20 border border-brand-clay/40 rounded-xl p-2.5 text-[11px] font-bold text-brand-charcoal/80 space-y-1">
+                      <div className="flex justify-between"><span>Workshop:</span><span>{selectedSession.workshopTitle}</span></div>
+                      <div className="flex justify-between">
+                        <span>Time:</span>
+                        <span className="font-mono">{selectedSession.startTime} – {selectedSession.endTime}</span>
+                      </div>
+                      <div className="flex justify-between"><span>Instructor:</span><span>{selectedSession.instructorName}</span></div>
+                      <div className="flex justify-between">
+                        <span>Seats Left:</span>
+                        <span>{selectedSession.remainingCapacity} of {selectedSession.capacity}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* The derived summary (duration, estimated end, seats/tables, wait) is
+                  intentionally not shown here. computeQueueSessionPlan still runs for
+                  queue timing, capacity, auto-completion, wait estimates and seat and
+                  table allocation — only the box was removed. Validation messages stay. */}
+              {walkInType === 'Without Instructor' && (errors.hours || errors.guests) && (
+                <div className="space-y-1">
+                  {errors.hours && <p className="text-[11px] text-red-500 font-bold">{errors.hours}</p>}
+                  {errors.guests && <p className="text-[11px] text-red-500 font-bold">{errors.guests}</p>}
                 </div>
               )}
 
@@ -1194,7 +1700,7 @@ export const LiveQueueSection: React.FC = () => {
             </div>
 
             <div className="space-y-4">
-              
+
               {/* Stepper for Guests */}
               <div className="flex items-center justify-between border border-brand-clay bg-white rounded-xl p-3">
                 <span className="text-xs font-bold text-brand-charcoal/80">Guests Count</span>
@@ -1205,7 +1711,16 @@ export const LiveQueueSection: React.FC = () => {
                   >
                     -
                   </button>
-                  <span className="text-sm font-bold text-brand-charcoal w-6 text-center">{editGuests}</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={editGuests}
+                    onChange={e => {
+                      setEditGuests(Number(e.target.value));
+                      if (editErrors.guests) setEditErrors(prev => ({ ...prev, guests: '' }));
+                    }}
+                    className="text-sm font-bold text-brand-charcoal w-14 text-center bg-brand-cream/50 border border-brand-clay rounded-lg py-1"
+                  />
                   <button
                     onClick={() => setEditGuests(prev => prev + 1)}
                     className="h-8 w-8 rounded-lg bg-brand-sand hover:bg-brand-clay flex items-center justify-center font-bold text-brand-charcoal"
@@ -1214,24 +1729,84 @@ export const LiveQueueSection: React.FC = () => {
                   </button>
                 </div>
               </div>
+              {editErrors.guests && <p className="text-[11px] text-red-500 font-bold">{editErrors.guests}</p>}
 
-              {/* Dropdown for Instructor */}
-              {editingItem.type === 'With Instructor' && (
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-brand-charcoal/80">Assigned Instructor</label>
-                  <select
-                    value={editStaffName}
-                    onChange={e => setEditStaffName(e.target.value)}
-                    className="w-full bg-white border border-brand-clay rounded-xl py-2.5 px-3.5 text-xs font-bold text-brand-charcoal"
-                  >
-                    <option value="Aisha Al-Jahdali">Aisha Al-Jahdali</option>
-                    <option value="Ali bin Khalid">Ali bin Khalid</option>
-                    <option value="Faisal Al-Otaibi">Faisal Al-Otaibi</option>
-                    <option value="Lina">Lina</option>
-                    <option value="Sami">Sami</option>
-                    <option value="Unassigned">Unassigned</option>
-                  </select>
-                </div>
+              {/* Hours — self-guided entries only */}
+              {isSelfGuided(editingItem) && (
+                <>
+                  <div className="flex items-center justify-between border border-brand-clay bg-white rounded-xl p-3">
+                    <span className="text-xs font-bold text-brand-charcoal/80">Number of Hours</span>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => setEditHours(prev => Math.max(1, prev - 1))}
+                        className="h-8 w-8 rounded-lg bg-brand-sand hover:bg-brand-clay flex items-center justify-center font-bold text-brand-charcoal"
+                      >
+                        -
+                      </button>
+                      <input
+                        type="number"
+                        min={1}
+                        step="0.5"
+                        value={editHours}
+                        onChange={e => {
+                          setEditHours(Number(e.target.value));
+                          if (editErrors.hours) setEditErrors(prev => ({ ...prev, hours: '' }));
+                        }}
+                        className="text-sm font-bold text-brand-charcoal w-14 text-center bg-brand-cream/50 border border-brand-clay rounded-lg py-1"
+                      />
+                      <button
+                        onClick={() => setEditHours(prev => prev + 1)}
+                        className="h-8 w-8 rounded-lg bg-brand-sand hover:bg-brand-clay flex items-center justify-center font-bold text-brand-charcoal"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                  {editErrors.hours && <p className="text-[11px] text-red-500 font-bold">{editErrors.hours}</p>}
+
+                  {/* The derived summary box is intentionally not shown here.
+                      computeQueueSessionPlan still runs where the figures are used —
+                      queue timing, capacity, auto-completion, wait estimates and
+                      seat/table allocation — and the saved hours/guests are unchanged. */}
+                </>
+              )}
+
+              {/* Instructor-led entries: reassign the tutor and see live capacity */}
+              {!isSelfGuided(editingItem) && (
+                <>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-brand-charcoal/80">Assigned Instructor</label>
+                    {/* Only staff who are free for this session's date and time. */}
+                    <select
+                      value={editStaffId}
+                      onChange={e => {
+                        setEditStaffId(e.target.value);
+                        if (editErrors.instructor) setEditErrors(prev => ({ ...prev, instructor: '' }));
+                      }}
+                      className="w-full bg-white border border-brand-clay rounded-xl py-2.5 px-3.5 text-xs font-bold text-brand-charcoal cursor-pointer"
+                    >
+                      <option value="">Select instructor...</option>
+                      {availableInstructors.map(({ member, avail }) => (
+                        <option key={member.id} value={member.id}>
+                          {member.name}
+                          {member.id === editingItem.staffId && !avail.isAvailable ? ' (currently assigned)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                    {availableInstructors.length === 0 && (
+                      <p className="text-[11px] font-bold text-amber-700">
+                        No staff are free for this session's time.
+                      </p>
+                    )}
+                    {editErrors.instructor && (
+                      <p className="text-[11px] text-red-500 font-bold">{editErrors.instructor}</p>
+                    )}
+                  </div>
+
+                  {/* The session/capacity summary box is intentionally not shown.
+                      editingCapacity is still computed and still enforces the guest
+                      limit on save, and the session and booking links are unchanged. */}
+                </>
               )}
 
               {/* CTAs */}
@@ -1250,6 +1825,132 @@ export const LiveQueueSection: React.FC = () => {
                 </button>
               </div>
 
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================== */}
+      {/* ============ ADD MORE TIME / RETURN TO WAITING =========== */}
+      {/* ========================================================== */}
+      {returnModalOpen && returningItem && (
+        <div className="fixed inset-0 bg-brand-charcoal/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-brand-cream border border-brand-clay rounded-3xl p-6 shadow-2xl max-w-sm w-full text-left space-y-5 animate-in zoom-in-95 duration-200">
+
+            <div className="flex justify-between items-center border-b border-brand-clay/60 pb-3">
+              <div>
+                <h3 className="font-display text-sm font-bold text-brand-charcoal">Add More Time</h3>
+                <p className="text-[11px] font-bold text-brand-charcoal/50">
+                  {returningItem.name} · completed entry No. {returningItem.id.replace('Q-', '')}
+                </p>
+              </div>
+              <button onClick={() => setReturnModalOpen(false)} className="text-brand-charcoal hover:bg-brand-sand p-1 rounded-lg">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <p className="text-[11px] font-semibold text-brand-charcoal/60 bg-white border border-brand-clay/50 rounded-xl p-2.5">
+              The completed session stays in Completed Today as history. A new Waiting entry is created for the extra time.
+            </p>
+
+            <div className="space-y-4">
+              <div className="flex items-center justify-between border border-brand-clay bg-white rounded-xl p-3">
+                <span className="text-xs font-bold text-brand-charcoal/80">Additional Hours</span>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setReturnHours(prev => Math.max(1, prev - 1))}
+                    className="h-8 w-8 rounded-lg bg-brand-sand hover:bg-brand-clay flex items-center justify-center font-bold text-brand-charcoal"
+                  >
+                    -
+                  </button>
+                  <input
+                    type="number"
+                    min={1}
+                    step="0.5"
+                    value={returnHours}
+                    onChange={e => {
+                      setReturnHours(Number(e.target.value));
+                      if (returnErrors.hours) setReturnErrors(prev => ({ ...prev, hours: '' }));
+                    }}
+                    className="text-sm font-bold text-brand-charcoal w-14 text-center bg-brand-cream/50 border border-brand-clay rounded-lg py-1"
+                  />
+                  <button
+                    onClick={() => setReturnHours(prev => prev + 1)}
+                    className="h-8 w-8 rounded-lg bg-brand-sand hover:bg-brand-clay flex items-center justify-center font-bold text-brand-charcoal"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+              {returnErrors.hours && <p className="text-[11px] text-red-500 font-bold">{returnErrors.hours}</p>}
+
+              <div className="flex items-center justify-between border border-brand-clay bg-white rounded-xl p-3">
+                <span className="text-xs font-bold text-brand-charcoal/80">Guests</span>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setReturnGuests(prev => Math.max(1, prev - 1))}
+                    className="h-8 w-8 rounded-lg bg-brand-sand hover:bg-brand-clay flex items-center justify-center font-bold text-brand-charcoal"
+                  >
+                    -
+                  </button>
+                  <input
+                    type="number"
+                    min={1}
+                    value={returnGuests}
+                    onChange={e => {
+                      setReturnGuests(Number(e.target.value));
+                      if (returnErrors.guests) setReturnErrors(prev => ({ ...prev, guests: '' }));
+                    }}
+                    className="text-sm font-bold text-brand-charcoal w-14 text-center bg-brand-cream/50 border border-brand-clay rounded-lg py-1"
+                  />
+                  <button
+                    onClick={() => setReturnGuests(prev => prev + 1)}
+                    className="h-8 w-8 rounded-lg bg-brand-sand hover:bg-brand-clay flex items-center justify-center font-bold text-brand-charcoal"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+              {returnErrors.guests && <p className="text-[11px] text-red-500 font-bold">{returnErrors.guests}</p>}
+
+              {(() => {
+                const preview = computeQueueSessionPlan({
+                  hours: returnHours,
+                  guests: returnGuests,
+                  startTime: now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+                  capacity: capacitySnapshot,
+                  aheadInQueue: waitingItems
+                });
+                return (
+                  <div className="bg-brand-sand/20 border border-brand-clay/40 rounded-xl p-3 text-[11px] font-bold text-brand-charcoal/80 space-y-1">
+                    <div className="flex justify-between"><span>New Session Duration:</span><span>{preview.durationLabel}</span></div>
+                    <div className="flex justify-between"><span>Est. End Time:</span><span className="font-mono">{preview.estimatedEndTime}</span></div>
+                    <div className="flex justify-between"><span>Seats / Tables Required:</span><span>{preview.seatsRequired} / {preview.tablesRequired}</span></div>
+                  </div>
+                );
+              })()}
+
+              {returnErrors.form && (
+                <p className="text-[11px] text-red-600 font-bold bg-red-50 border border-red-200 rounded-xl p-2.5">
+                  {returnErrors.form}
+                </p>
+              )}
+
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <button
+                  onClick={() => setReturnModalOpen(false)}
+                  className="cursor-pointer py-3 border border-brand-clay hover:bg-brand-sand text-brand-charcoal text-xs font-bold rounded-xl text-center"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmReturn}
+                  className="cursor-pointer py-3 bg-brand-terracotta hover:bg-brand-terracotta-hover text-brand-cream text-xs font-bold rounded-xl text-center shadow-md"
+                >
+                  Return to Waiting
+                </button>
+              </div>
             </div>
 
           </div>

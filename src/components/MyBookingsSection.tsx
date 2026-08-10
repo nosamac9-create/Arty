@@ -7,9 +7,10 @@ import React, { useState, useMemo } from 'react';
 import { useApp, getRiyadhNow } from '../context/AppContext';
 import { Calendar, Users, Hash, AlertCircle, Trash2, CalendarX, Compass, HelpCircle } from 'lucide-react';
 import { Booking } from '../types';
+import { resolveBookingInstructor } from '../utils/queueUtils';
 
 export const MyBookingsSection: React.FC = () => {
-  const { bookings, cancelBooking, setCustomerTab, workshops, currentUser, setAuthScreen } = useApp();
+  const { bookings, cancelBooking, setCustomerTab, workshops, currentUser, setAuthScreen, staff, workshopSessions } = useApp();
   const [activeTab, setActiveTab] = useState<'Upcoming' | 'Past'>('Upcoming');
   const [hoveredTooltipId, setHoveredTooltipId] = useState<string | null>(null);
 
@@ -197,6 +198,11 @@ export const MyBookingsSection: React.FC = () => {
                       <span className="flex items-center gap-1">
                         <Users className="h-3.5 w-3.5 text-brand-sage" />
                         <span>{b.participants} {b.participants === 1 ? 'artist' : 'artists'}</span>
+                      </span>
+                      {/* Tutor resolved from the booked session record */}
+                      <span className="flex items-center gap-1">
+                        <span className="text-brand-sage">🎓</span>
+                        <span>{resolveBookingInstructor(b, { staff, workshopSessions }).name}</span>
                       </span>
                       <span className="flex items-center gap-1 font-mono font-bold text-brand-terracotta">
                         <Hash className="h-3 w-3" />

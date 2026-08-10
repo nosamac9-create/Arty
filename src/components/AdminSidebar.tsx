@@ -7,14 +7,21 @@ import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { 
   LayoutDashboard, Users, CalendarDays, Palette, ListOrdered, 
-  Flame, HelpCircle, ChevronLeft, ChevronRight, Menu, LogOut, ShieldAlert, Settings, Sparkles, UserCheck
+  Flame, HelpCircle, ChevronLeft, ChevronRight, ChevronDown, Menu, LogOut, ShieldAlert, Settings, Sparkles, UserCheck
 } from 'lucide-react';
+import { SETTINGS_SECTIONS } from '../utils/adminAccess';
+import { formatTime } from '../utils/calendarConfig';
 
 export const AdminSidebar: React.FC = () => {
-  const { adminTab, setAdminTab, setPerspective } = useApp();
+  const {
+    adminTab, setAdminTab, setPerspective, currentStaff, canAccessAdminPage, logoutStaff,
+    settingsSection, setSettingsSection
+  } = useApp();
   const [collapsed, setCollapsed] = useState(false);
+  // Settings is a parent item; its subsections live in this submenu.
+  const [settingsOpen, setSettingsOpen] = useState(adminTab === 'settings');
 
-  const sidebarItems = [
+  const allSidebarItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'queue', label: 'Live Queue', icon: ListOrdered },
     { id: 'customers', label: 'Customers', icon: Users },
@@ -26,6 +33,13 @@ export const AdminSidebar: React.FC = () => {
     { id: 'system-health', label: 'System Health', icon: ShieldAlert },
     { id: 'settings', label: 'Settings', icon: Settings },
   ] as const;
+
+  // Only pages this account is authorized for are listed. The router enforces
+  // the same rule, so hiding a button is not the security boundary.
+  const sidebarItems = useMemo(
+    () => allSidebarItems.filter(item => canAccessAdminPage(item.id)),
+    [currentStaff]
+  );
 
   return (
     <aside 
@@ -61,6 +75,68 @@ export const AdminSidebar: React.FC = () => {
           {sidebarItems.map((item) => {
             const Icon = item.icon;
             const isActive = adminTab === item.id;
+
+            // Settings is a parent item with a submenu of its sections.
+            if (item.id === 'settings') {
+              return (
+                <div key={item.id} className="space-y-1">
+                  <button
+                    onClick={() => {
+                      if (collapsed) {
+                        setAdminTab('settings');
+                        return;
+                      }
+                      setSettingsOpen(open => !open);
+                    }}
+                    className={`flex items-center w-full rounded-xl p-3 text-sm font-semibold transition-all duration-150 cursor-pointer ${
+                      isActive
+                        ? 'bg-brand-terracotta text-brand-cream shadow-sm'
+                        : 'text-brand-cream/70 hover:text-brand-cream hover:bg-brand-sand/10'
+                    }`}
+                  >
+                    <Icon className={`h-5 w-5 shrink-0 ${isActive ? 'text-brand-cream' : 'text-brand-sage'}`} />
+                    {!collapsed && (
+                      <>
+                        <span className="ml-3 text-left leading-none flex-1">{item.label}</span>
+                        <ChevronDown
+                          className={`h-4 w-4 shrink-0 transition-transform ${settingsOpen ? 'rotate-180' : ''}`}
+                        />
+                      </>
+                    )}
+                  </button>
+
+                  {!collapsed && settingsOpen && (
+                    <div className="ml-4 pl-3 border-l border-brand-cream/15 space-y-0.5">
+                      {SETTINGS_SECTIONS.map(section => {
+                        const isSectionActive = isActive && settingsSection === section.id;
+                        return (
+                          <button
+                            key={section.id}
+                            onClick={() => {
+                              setSettingsSection(section.id);
+                              setAdminTab('settings');
+                            }}
+                            className={`flex items-center w-full rounded-lg px-3 py-2 text-xs font-semibold text-left transition-all cursor-pointer ${
+                              isSectionActive
+                                ? 'bg-brand-sand/20 text-brand-cream'
+                                : 'text-brand-cream/55 hover:text-brand-cream hover:bg-brand-sand/10'
+                            }`}
+                          >
+                            <span
+                              className={`h-1.5 w-1.5 rounded-full mr-2.5 shrink-0 ${
+                                isSectionActive ? 'bg-brand-terracotta' : 'bg-brand-cream/25'
+                              }`}
+                            />
+                            <span className="leading-tight">{section.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
             return (
               <button
                 key={item.id}
@@ -79,14 +155,29 @@ export const AdminSidebar: React.FC = () => {
         </nav>
       </div>
 
-      {/* Back to Customer site */}
+      {/* Signed-in account, then sign out / back to the customer site */}
       <div className="p-3 border-t border-brand-clay/10 space-y-1">
+        {currentStaff && !collapsed && (
+          <div className="px-3 py-2 mb-1">
+            <p className="text-xs font-bold text-brand-cream truncate">{currentStaff.name}</p>
+            <p className="text-[10px] font-semibold text-brand-sage">{currentStaff.role || 'Staff'}</p>
+          </div>
+        )}
+
         <button
           onClick={() => setPerspective('customer')}
           className="flex items-center w-full rounded-xl p-3 text-xs font-bold text-brand-cream/70 hover:text-brand-cream hover:bg-brand-terracotta/20 transition-all cursor-pointer"
         >
           <LogOut className="h-4 w-4 shrink-0 text-brand-terracotta" />
           {!collapsed && <span className="ml-3 text-left">Customer Site</span>}
+        </button>
+
+        <button
+          onClick={() => logoutStaff()}
+          className="flex items-center w-full rounded-xl p-3 text-xs font-bold text-brand-cream/70 hover:text-brand-cream hover:bg-red-500/20 transition-all cursor-pointer"
+        >
+          <LogOut className="h-4 w-4 shrink-0 text-red-400" />
+          {!collapsed && <span className="ml-3 text-left">Sign Out</span>}
         </button>
       </div>
     </aside>
@@ -175,7 +266,7 @@ export const AdminTopBar: React.FC = () => {
                       <div className="flex justify-between items-start mb-1">
                         <span className="font-bold text-brand-terracotta font-mono text-[9px]">{n.pieceId}</span>
                         <span className="text-[9px] text-brand-charcoal/45 font-semibold">
-                          {new Date(n.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                          {formatTime(n.timestamp)}
                         </span>
                       </div>
                       <p className="font-semibold text-brand-charcoal/90">{n.message}</p>

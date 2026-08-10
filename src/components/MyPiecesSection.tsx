@@ -6,10 +6,11 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Sparkles, Calendar, Box, Flame, Compass, Clock, LogIn, Hash } from 'lucide-react';
-import { PotteryPiece } from '../types';
+import { PotteryPiece, stageCustomerLabel } from '../types';
+import { formatDateTime } from '../utils/calendarConfig';
 
 export const MyPiecesSection: React.FC = () => {
-  const { pieces, setCustomerTab, currentUser, notifications, markNotificationAsRead } = useApp();
+  const { pieces, setCustomerTab, currentUser, notifications, markNotificationAsRead, pipelineStages } = useApp();
 
   // Filter pieces strictly for the logged-in customer
   const userPieces = React.useMemo(() => {
@@ -34,8 +35,21 @@ export const MyPiecesSection: React.FC = () => {
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   }, [notifications, currentUser]);
 
-  // Stages array
-  const STAGES = ['Created', 'In Processing', 'Ready for Collection', 'Collected'];
+  /**
+   * Customer-facing stages come from Settings → Piece Pipeline Stages: the ones
+   * marked visible to the customer, in the configured order, using the customer
+   * label where one is set.
+   */
+  const customerStages = React.useMemo(
+    () => [...pipelineStages]
+      .filter(stage => stage.visibleToCustomer)
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+    [pipelineStages]
+  );
+
+  const STAGES = customerStages.length > 0
+    ? customerStages.map(stageCustomerLabel)
+    : ['Created', 'In Processing', 'Ready for Collection', 'Collected'];
 
   // Map database status to 4-stage index
   const getStageIndex = (status: PotteryPiece['status']): number => {
@@ -54,6 +68,21 @@ export const MyPiecesSection: React.FC = () => {
       default:
         return 0;
     }
+  };
+
+  /**
+   * Broken is an internal handling state, so the customer tracker keeps showing the
+   * last stage the piece actually reached rather than resetting to Created. The
+   * customer is told to contact the café through the notification instead.
+   */
+  const getCustomerStageIndex = (piece: PotteryPiece): number => {
+    if (piece.status !== 'Broken') return getStageIndex(piece.status);
+
+    const lastKnown = [...(piece.history || [])]
+      .reverse()
+      .find(h => h.status !== 'Broken');
+
+    return lastKnown ? getStageIndex(lastKnown.status as PotteryPiece['status']) : 0;
   };
 
   return (
@@ -93,7 +122,7 @@ export const MyPiecesSection: React.FC = () => {
                     {n.message}
                   </p>
                   <span className="text-[9px] text-brand-charcoal/45 font-semibold block mt-1.5">
-                    {new Date(n.timestamp).toLocaleString()}
+                    {formatDateTime(n.timestamp)}
                   </span>
                 </div>
               </div>
@@ -153,28 +182,39 @@ export const MyPiecesSection: React.FC = () => {
         /* Grid of Piece Cards */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {userPieces.map((p) => {
-            const currentStageIdx = getStageIndex(p.status);
+            const currentStageIdx = getCustomerStageIndex(p);
             const isReady = p.status === 'Ready for Collection';
             
+            const isBroken = p.status === 'Broken';
+
             return (
               <div
                 key={p.id}
                 className={`relative bg-white rounded-[32px] p-6 shadow-xl shadow-brand-charcoal/5 border flex flex-col justify-between transition-all duration-300 ${
-                  isReady 
-                    ? 'border-2 border-brand-terracotta ring-4 ring-brand-terracotta/5' 
-                    : 'border-brand-clay/60'
+                  isBroken
+                    ? 'border-2 border-red-300 ring-4 ring-red-100'
+                    : isReady
+                      ? 'border-2 border-brand-terracotta ring-4 ring-brand-terracotta/5'
+                      : 'border-brand-clay/60'
                 }`}
               >
                 
                 {/* Ready Banner */}
-                {isReady && (
+                {isReady && !isBroken && (
                   <div className="absolute top-0 left-0 right-0 bg-brand-terracotta text-brand-cream text-center text-xs font-bold py-2 rounded-t-[30px] tracking-wider">
                     🎉 Ready! Ready for collection at Arty Café shelf.
                   </div>
                 )}
 
+                {/* Broken Banner — states the status plainly, with no internal notes */}
+                {isBroken && (
+                  <div className="absolute top-0 left-0 right-0 bg-red-600 text-white text-center text-xs font-bold py-2 rounded-t-[30px] tracking-wider">
+                    Broken — please contact Arty Café
+                  </div>
+                )}
+
                 {/* Piece Image and Info */}
-                <div className={`space-y-4 ${isReady ? 'pt-6' : ''}`}>
+                <div className={`space-y-4 ${isReady || isBroken ? 'pt-6' : ''}`}>
                   <div className="aspect-video w-full rounded-2xl overflow-hidden bg-brand-sand border border-brand-clay/40">
                     <img 
                       src={p.image || 'https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261?auto=format&fit=crop&w=600&q=80'} 
@@ -214,6 +254,16 @@ export const MyPiecesSection: React.FC = () => {
                     )}
                   </div>
                 </div>
+
+                {/* Broken status notice — no internal damage note is shown */}
+                {isBroken && (
+                  <div className="mt-4 p-3 rounded-2xl bg-red-50 border border-red-200 text-left">
+                    <p className="text-xs font-bold text-red-800">Status: Broken</p>
+                    <p className="text-[11px] text-red-700 mt-0.5 leading-relaxed">
+                      Unfortunately this piece was damaged. Please contact Arty Café so our team can assist you.
+                    </p>
+                  </div>
+                )}
 
                 {/* Progress Tracker Bar */}
                 <div className="mt-6 pt-5 border-t border-brand-clay/50 space-y-4">

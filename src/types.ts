@@ -12,6 +12,13 @@ export interface WorkshopSessionRecord {
   duration?: string;
   instructor?: string;
   staffId?: string;
+  /** Studio space this session occupies. Ids are stable; the labels are for display. */
+  roomId?: string;
+  room?: string;
+  tableId?: string;
+  tableName?: string;
+  /** Id of the recurring rule that generated this session, when it was generated. */
+  ruleId?: string;
   capacity: number;
   status: 'Published' | 'Cancelled' | 'Unavailable' | 'Unpublished';
   createdAt?: string;
@@ -45,6 +52,8 @@ export interface RecurringScheduleRule {
   staffId?: string;
   capacity: number;
   room?: string;
+  roomId?: string;
+  tableId?: string;
   effectiveStartDate: string; // YYYY-MM-DD
   effectiveEndDate?: string; // YYYY-MM-DD
   status: 'Active' | 'Inactive';
@@ -58,6 +67,8 @@ export interface SessionException {
   endTime?: string;
   instructor?: string;
   staffId?: string;
+  roomId?: string;
+  tableId?: string;
   capacity?: number;
   reason?: string;
 }
@@ -81,6 +92,8 @@ export interface Workshop {
   instructor: string;
   staffId?: string;
   room: string;
+  roomId?: string;
+  tableId?: string;
   materials: string[];
   whatWeProvide?: string[];
   instructions?: string;
@@ -93,10 +106,59 @@ export interface Workshop {
   sessions?: WorkshopSession[] | WorkshopSessionRecord[];
   recurringSchedules?: RecurringScheduleRule[];
   sessionExceptions?: SessionException[];
+  /**
+   * Values for admin-created fields, keyed by the stable fieldKey. Kept even if
+   * the field is later disabled, so no historical data is lost.
+   */
+  customFields?: Record<string, any>;
+}
+
+/**
+ * Everything the customer submitted on the birthday form, keyed by stable field
+ * keys rather than the visible labels — so renaming a label in Settings never
+ * makes a previously submitted value unreadable.
+ */
+export interface BirthdayBookingDetails {
+  packageId?: string;
+  packageName?: string;
+  eventDate?: string;
+  eventTime?: string;
+  guestCount?: number;
+  birthdayPersonName?: string;
+  birthdayPersonAge?: string;
+  activitySelection?: string;
+  cakeOption?: string;
+  cakeSize?: string;
+  cakePhotoUrl?: string;
+  themeOrColors?: string;
+  addOns?: string[];
+  specialRequests?: string;
+  notes?: string;
+  termsAccepted?: boolean;
+  termsAcceptedAt?: string;
+  /** Version of the terms text the customer actually agreed to. */
+  termsVersion?: string;
+  /** The exact wording shown at acceptance time. */
+  termsSnapshot?: string[];
+  totalAmount?: number;
+  depositAmount?: number;
+  submittedAt?: string;
+  /**
+   * Every configurable form field, by stable key, with the label shown at the
+   * time of submission. Optional answers are kept, never silently dropped.
+   */
+  fieldValues?: Array<{
+    key: string;
+    label: string;
+    value: string;
+    /** Full-quality submitted image (data URL) for image fields. */
+    imageUrl?: string;
+  }>;
 }
 
 export interface DraftBooking {
   workshopId: string;
+  sessionId?: string;
   workshopTitle: string;
   date: string;
   time: string;
@@ -105,6 +167,8 @@ export interface DraftBooking {
   customerName?: string;
   customerEmail?: string;
   customerPhone?: string;
+  /** Present when the draft is a birthday package reservation. */
+  birthdayDetails?: BirthdayBookingDetails;
 }
 
 export interface CustomerAccount {
@@ -116,7 +180,14 @@ export interface CustomerAccount {
   source?: 'Website Registration' | 'Workshop Booking' | 'Event Booking' | 'Birthday Package' | 'Live Queue' | 'Admin Created' | 'Walk-in' | string;
   status?: 'Active' | 'VIP' | 'Inactive' | 'Blocked' | string;
   notes?: string;
+  /** True once a website account is created for, or linked to, this record. */
   hasAccount?: boolean;
+  /** Id of the linked authentication user. The account-type source of truth. */
+  userId?: string;
+  /** Digits-only national form, the primary returning-customer match key. */
+  normalizedPhone?: string;
+  /** Phone exactly as entered, for display. */
+  displayPhone?: string;
   createdAt: string;
   updatedAt?: string;
   totalSpent?: number;
@@ -127,7 +198,11 @@ export interface Booking {
   customerName: string;
   customerEmail: string;
   customerPhone: string;
+  /** The shared customer record this booking belongs to. */
+  customerId?: string;
   workshopId: string;
+  /** Id of the booked workshop session — the link used to resolve the tutor. */
+  sessionId?: string;
   workshopTitle: string;
   date: string; // e.g. "2026-07-20"
   time: string; // e.g. "16:00"
@@ -137,6 +212,8 @@ export interface Booking {
   status: 'Pending' | 'Checked In' | 'In Progress' | 'Completed' | 'Cancelled';
   paymentStatus: 'Paid' | 'Unpaid' | 'Refunded' | 'Deposit Paid';
   notes?: string;
+  /** Full birthday submission, kept on the one shared booking record. */
+  birthdayDetails?: BirthdayBookingDetails;
   createdAt: string;
   timeline: { time: string; action: string }[];
 }
@@ -144,6 +221,8 @@ export interface Booking {
 export interface QueueItem {
   id: string; // e.g. "Q-034"
   bookingId?: string; // e.g. "ART-10293"
+  /** The shared customer record this visit belongs to. */
+  customerId?: string;
   name: string;
   phone: string;
   activity: string; // e.g. "Pottery Wheel Workshop" or "Walk-in Clay Play"
@@ -152,13 +231,30 @@ export interface QueueItem {
   elapsedMinutes: number;
   staffAvatar: string;
   staffName: string;
+  staffId?: string;
   status: 'Waiting' | 'Called' | 'In Progress' | 'Completed' | 'Cancelled';
   source: 'Website' | 'Walk-in' | 'Admin';
   type: 'With Instructor' | 'Without Instructor';
   hours?: number;
+  /** @deprecated Legacy free-text category; With Instructor entries now link a real session. */
   workshopType?: 'Painting' | 'Wheel' | 'Pottery' | 'Handbuilding' | 'Other';
   date: string; // YYYY-MM-DD
   seatedTime?: string; // ISO string
+
+  // Real record links for With Instructor entries — the tutor is always resolved
+  // from these, never from a stored name.
+  workshopId?: string;
+  sessionId?: string;
+  sessionStartTime?: string;
+  sessionEndTime?: string;
+  sessionDuration?: string;
+  sessionCapacity?: number;
+
+  /** Set on an entry created by returning a completed self-guided guest to Waiting. */
+  returnedFromQueueId?: string;
+  /** Set on the completed entry that was extended; its session record stays intact. */
+  extendedByQueueId?: string;
+
   history: { status: 'Waiting' | 'Called' | 'In Progress' | 'Completed' | 'Cancelled'; timestamp: string }[];
 }
 
@@ -172,15 +268,24 @@ export interface PotteryPiece {
   customerId?: string;
   dateCreated: string;
   image: string;
-  status: 'Created' | 'Drying' | 'In Processing' | 'Glazing' | 'Firing' | 'Ready for Collection' | 'Collected';
+  status: 'Created' | 'Drying' | 'In Processing' | 'Glazing' | 'Firing' | 'Ready for Collection' | 'Collected' | 'Broken';
   daysElapsed: number;
   assignedStaff: string;
+  /** Internal-only damage note for a Broken piece. Never sent to the customer. */
+  damageNote?: string;
   storageLocation?: string;
   notes?: string;
   additionalDescriptionGlazingNotes?: string;
   expectedCompletion?: string;
   expectedReadyDate?: string;
-  history?: { status: string; timestamp: string; user: string; reason?: string }[];
+  history?: {
+    status: string;
+    timestamp: string;
+    /** Riyadh-local date/time the change was recorded, e.g. "2026-08-03 04:15 PM". */
+    riyadhTime?: string;
+    user: string;
+    reason?: string;
+  }[];
   [key: string]: any;
 }
 
@@ -202,7 +307,19 @@ export interface NotificationItem {
 export interface TestResult {
   id: string;
   name: string;
-  category: 'Database' | 'Authentication' | 'Roles & Permissions' | 'Bookings & Capacity' | 'Queue' | 'Pieces' | 'Data Integrity' | 'Routes';
+  category:
+    | 'Validation'
+    | 'Dashboard'
+    | 'Live Queue'
+    | 'Bookings'
+    | 'Workshops'
+    | 'Events'
+    | 'Customers'
+    | 'Pieces'
+    | 'Staff'
+    | 'Settings'
+    | 'Roles & Access'
+    | 'Data Integrity';
   description: string;
   duration: number; // ms
   status: 'passed' | 'failed' | 'skipped';
@@ -430,10 +547,15 @@ export const INITIAL_QUEUE: QueueItem[] = [
     elapsedMinutes: 22,
     staffAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&h=150&q=80',
     staffName: 'Ali bin Khalid',
+    // Real record links — the tutor is resolved from these, not from staffName.
+    staffId: 'staff-1',
+    workshopId: 'ws-1',
+    sessionId: 'sess-ws1-1',
+    sessionStartTime: '11:00 AM',
+    sessionCapacity: 8,
     status: 'Waiting',
     source: 'Website',
     type: 'With Instructor',
-    workshopType: 'Wheel',
     date: getRelativeRiyadhDateStr(0),
     history: [
       { status: 'Waiting', timestamp: new Date().toISOString() }
@@ -554,34 +676,75 @@ export const INITIAL_PIECES: PotteryPiece[] = [
   }
 ];
 
-export const SYSTEM_TESTS: TestResult[] = [
-  { id: 't-1', name: 'Database Connectivity Check', category: 'Database', description: 'Verifies the application can establish a secure, low-latency connection to the Firestore instance.', duration: 18, status: 'passed' },
-  { id: 't-2', name: 'Auth Key Signing', category: 'Authentication', description: 'Tests JWT token encoding, decoding, and salt rotations for secure client authentication sessions.', duration: 32, status: 'passed' },
-  { id: 't-3', name: 'Access Controls on Firing Kilns', category: 'Roles & Permissions', description: 'Ensures only validated staff and admin profiles can shift statuses to "Firing" or "Collected".', duration: 12, status: 'passed' },
-  { id: 't-4', name: 'Double Booking Prevention Race Condition', category: 'Bookings & Capacity', description: 'Simulates 5 concurrent requests attempting to purchase the last spot in a pottery wheel masterclass.', duration: 145, status: 'passed' },
-  { id: 't-5', name: 'Waitlist Automation Overflow', category: 'Queue', description: 'Tests if live queue cards properly re-index and trigger SMS notifications when position changes.', duration: 48, status: 'passed' },
-  { id: 't-6', name: 'Pottery Firing Timeline Integrity', category: 'Pieces', description: 'Validates days-elapsed logic and prevents skipping critical stages (e.g. going straight from Created to Ready).', duration: 14, status: 'passed' },
-  { id: 't-7', name: 'Check-in POS Sync', category: 'Database', description: 'Ensures checked-in bookings sync instantly with the tablet dashboard without manual pull refresh.', duration: 24, status: 'passed' },
-  { id: 't-8', name: 'Date-Strip Available Slot Checker', category: 'Routes', description: 'Verifies the mobile date-strip calculations properly mark dates with available workshops.', duration: 9, status: 'passed' },
-  { id: 't-9', name: 'Jeddah SMS Country Prefix Parser', category: 'Data Integrity', description: 'Fails if telephone field fails to format +966 inputs correctly into E.164 standard.', duration: 11, status: 'passed' },
-  { id: 't-10', name: 'Vite Production Build Artifact Integrity', category: 'Routes', description: 'Ensures all compiled script modules have correctly resolved entry-points.', duration: 124, status: 'passed' }
-];
+// The System Health suite is no longer a hardcoded list. Real tests that
+// execute against the database live in src/utils/systemTests.ts.
 
+/**
+ * One pottery pipeline stage. This is the single configuration the Pottery
+ * Pieces page, the logging console, the tracker, the filters and the customer
+ * view all read — there is no second hardcoded status list.
+ */
 export interface PipelineStage {
   id: string;
   name: string;
   color: string;
   order: number;
   visibleToCustomer: boolean;
+  /** Disabled stages stay valid for historical pieces but cannot be selected. */
+  enabled?: boolean;
+  /** Optional customer-facing wording; falls back to `name`. */
+  customerLabel?: string;
+  /** Whether moving a piece into this stage notifies the customer. */
+  notifyCustomer?: boolean;
+}
+
+/** The pottery workflow as the application actually uses it today. */
+export const DEFAULT_PIPELINE_STAGES: PipelineStage[] = [
+  { id: 'stage-1', name: 'Created', color: '#E07A5F', order: 0, visibleToCustomer: true, enabled: true, notifyCustomer: true },
+  { id: 'stage-2', name: 'Drying', color: '#D4C5B9', order: 1, visibleToCustomer: false, enabled: true, notifyCustomer: true },
+  { id: 'stage-3', name: 'In Processing', color: '#3D405B', order: 2, visibleToCustomer: true, enabled: true, notifyCustomer: true },
+  { id: 'stage-4', name: 'Glazing', color: '#81B29A', order: 3, visibleToCustomer: false, enabled: true, notifyCustomer: true },
+  { id: 'stage-5', name: 'Firing', color: '#F2CC8F', order: 4, visibleToCustomer: false, enabled: true, notifyCustomer: true },
+  { id: 'stage-6', name: 'Ready for Collection', color: '#335C67', order: 5, visibleToCustomer: true, enabled: true, notifyCustomer: true },
+  { id: 'stage-7', name: 'Collected', color: '#111111', order: 6, visibleToCustomer: true, enabled: true, notifyCustomer: true },
+  // Internal handling stage — the customer is told to contact the café, never
+  // shown the damage details.
+  { id: 'stage-8', name: 'Broken', color: '#B91C1C', order: 7, visibleToCustomer: false, enabled: true, notifyCustomer: true }
+];
+
+/** A stage is selectable for a new update unless it has been disabled. */
+export function isStageEnabled(stage: PipelineStage): boolean {
+  return stage.enabled !== false;
+}
+
+/** Wording shown to the customer for a stage. */
+export function stageCustomerLabel(stage: PipelineStage): string {
+  return stage.customerLabel?.trim() || stage.name;
 }
 
 export interface StaffWeeklyShift {
+  id?: string;
   isWorking: boolean;
   startTime: string;
   endTime: string;
   breakStart?: string;
   breakEnd?: string;
 }
+
+/**
+ * A single day of a staff member's saved weekly schedule.
+ * Holds zero or more shifts so a staff member can work multiple shifts per day.
+ */
+export interface StaffDaySchedule {
+  isWorking: boolean;
+  shifts: StaffWeeklyShift[];
+}
+
+/**
+ * Day entries are read as either the multi-shift form or the legacy single-shift
+ * form. All writes use StaffDaySchedule; use getDayShifts() to read either shape.
+ */
+export type StaffScheduleDayEntry = StaffDaySchedule | StaffWeeklyShift;
 
 export interface StaffTimeOff {
   id: string;
@@ -590,6 +753,8 @@ export interface StaffTimeOff {
   reason: string;
   status: 'Approved' | 'Pending' | 'Rejected';
 }
+
+export type StaffRole = 'Super Admin' | 'Admin' | 'Staff';
 
 export interface StaffMember {
   id: string;
@@ -601,14 +766,468 @@ export interface StaffMember {
   position: string;
   skills?: string[];
   status: 'Active' | 'On Leave' | 'Inactive' | 'Former Staff';
-  weeklySchedule?: Record<string, StaffWeeklyShift>; // Key: 'Sunday', 'Monday', etc.
+  weeklySchedule?: Record<string, StaffScheduleDayEntry>; // Key: 'Sunday', 'Monday', etc. Empty by default for new staff.
   breakPeriods?: { name: string; startTime: string; endTime: string }[];
   timeOff?: StaffTimeOff[];
   notes?: string;
   canAssignWorkshops?: boolean;
   canAssignPieces?: boolean;
+
+  // ---- Admin Console account ----
+  /** Super Admin has unrestricted access; the role itself grants it. */
+  role?: StaffRole;
+  /** Admin Console page ids this staff member may open. Ignored for Super Admin. */
+  permissions?: string[];
+  /** Whether this staff member can sign in to the Admin Console at all. */
+  hasConsoleAccess?: boolean;
+  /** Console credential. A staff profile may exist with no login account. */
+  password?: string;
+  /** True while the password is the auto-provisioned bootstrap one. */
+  passwordIsTemporary?: boolean;
+  /** Stable id of the linked console user; equals staff.id when linked. */
+  userId?: string;
+  /** Digits-only national phone, so login accepts any entered format. */
+  normalizedPhone?: string;
+  lastLoginAt?: string;
+
   createdAt?: string;
   updatedAt?: string;
+}
+
+/**
+ * The single shared birthday-package record. The Staff Console edits it and the
+ * customer site renders from it — there is no second copy of these details.
+ */
+export interface BirthdayCakeSize {
+  id: string;
+  /** e.g. "Small (15 cm)" */
+  label: string;
+  price: number;
+}
+
+export interface BirthdayPackage {
+  id: string;
+  name: string;
+  image: string;
+  shortDescription: string;
+  fullDescription: string;
+
+  price: number;
+  pricingType: 'Per child' | 'Per person' | 'Fixed price';
+  /** Customer-visible pricing label, e.g. "Per Child". */
+  pricingLabel?: string;
+
+  duration: string; // e.g. "2 Hours"
+  minGuests: number;
+  maxGuests: number;
+  ageInformation: string;
+
+  /** The "Includes:" list — decorations, beverages, table reservation, etc. */
+  includedItems: string[];
+  /** The "Your choice of one activity" list. */
+  activityChoices: string[];
+  /** Extra notes shown under the activities, e.g. firing and collection details. */
+  additionalInfo: string[];
+
+  /** Customized cake block. */
+  cakeDescription: string;
+  cakeSizes: BirthdayCakeSize[];
+
+  /** e.g. "Includes Professional Trainer/Artist upon request." */
+  trainerInfo: string;
+  /** e.g. "Pottery will be delivered or collected after firing." */
+  deliveryInfo: string;
+
+  availableDays: string[];
+  availableTimes: string[];
+  terms: string;
+  customerNotes: string;
+  depositAmount?: number;
+
+  status: 'Published' | 'Draft';
+  displayOrder: number;
+  createdAt?: string;
+  updatedAt?: string;
+
+  /** @deprecated Folded into includedItems by normalizeBirthdayPackage(). */
+  includedActivities?: string[];
+  /** @deprecated */
+  includedMaterials?: string[];
+  /** @deprecated */
+  foodAndBeverages?: string[];
+  /** @deprecated */
+  decorations?: string[];
+}
+
+/** Cake pricing is identical across packages unless staff change it. */
+export const DEFAULT_CAKE_SIZES: BirthdayCakeSize[] = [
+  { id: 'cake-s', label: 'Small (15 cm)', price: 350 },
+  { id: 'cake-m', label: 'Medium (25 cm)', price: 650 },
+  { id: 'cake-l', label: 'Large (35 cm)', price: 800 }
+];
+
+/**
+ * Fills in the structured fields for records saved before they existed, so the
+ * customer site always has one consistent shape to render.
+ */
+export function normalizeBirthdayPackage(pkg: BirthdayPackage): BirthdayPackage {
+  const includedItems = pkg.includedItems?.length
+    ? pkg.includedItems
+    : [...(pkg.decorations || []), ...(pkg.foodAndBeverages || []), ...(pkg.includedMaterials || [])];
+
+  return {
+    ...pkg,
+    includedItems,
+    activityChoices: pkg.activityChoices?.length ? pkg.activityChoices : (pkg.includedActivities || []),
+    additionalInfo: pkg.additionalInfo || [],
+    cakeSizes: pkg.cakeSizes?.length ? pkg.cakeSizes : DEFAULT_CAKE_SIZES,
+    cakeDescription: pkg.cakeDescription || '',
+    trainerInfo: pkg.trainerInfo || '',
+    deliveryInfo: pkg.deliveryInfo || '',
+    pricingLabel: pkg.pricingLabel || (pkg.pricingType === 'Fixed price' ? 'Fixed price' : pkg.pricingType)
+  };
+}
+
+/** A field on the customer birthday booking form, configured in Settings → Events/Birthday. */
+export interface BirthdayFormField {
+  id: string;
+  key: string;
+  label: string;
+  type: 'short_text' | 'long_text' | 'number' | 'date' | 'time' | 'phone' | 'dropdown' | 'package' | 'image';
+  placeholder?: string;
+  helpText?: string;
+  options?: string[];
+  required: boolean;
+  enabled: boolean;
+  order: number;
+  /** Core fields back the existing booking logic and cannot be deleted. */
+  system?: boolean;
+}
+
+/**
+ * Default birthday booking form layout — mirrors the fields the form has always
+ * shown. Staff can relabel, reorder, disable or extend these in Settings.
+ */
+export const DEFAULT_BIRTHDAY_FORM_FIELDS: BirthdayFormField[] = [
+  { id: 'bf-1', key: 'bookingName', label: 'Booking Name', type: 'short_text', placeholder: 'e.g. Noura Al-Amri', required: true, enabled: true, order: 0, system: true },
+  { id: 'bf-2', key: 'phone', label: 'Phone Number', type: 'phone', required: true, enabled: true, order: 1, system: true },
+  { id: 'bf-3', key: 'numberOfPeople', label: 'Number of People', type: 'number', required: true, enabled: true, order: 2, system: true },
+  { id: 'bf-4', key: 'package', label: 'Package', type: 'package', required: true, enabled: true, order: 3, system: true },
+  { id: 'bf-5', key: 'bookingDate', label: 'Date / Day', type: 'date', required: true, enabled: true, order: 4, system: true },
+  { id: 'bf-6', key: 'bookingTime', label: 'Time', type: 'time', required: true, enabled: true, order: 5, system: true },
+  {
+    id: 'bf-7', key: 'balloonColor', label: 'Balloon Color 🎈', type: 'dropdown', required: false, enabled: true, order: 6,
+    options: ['Pink & White', 'Pastel Blue & White', 'Gold & Cream', 'Rose Gold & Blush', 'Sage Green & Neutral', 'Rainbow Multi-Color', 'Custom Mix']
+  },
+  {
+    id: 'bf-8', key: 'drinksChoice', label: 'Drinks — coffee or fresh juices of your choice', type: 'dropdown', required: false, enabled: true, order: 7,
+    options: [
+      'Fresh Juices (Orange, Lemonade, Watermelon)',
+      'Specialty Coffee Bar (Latte, Cappuccino, Spanish Latte)',
+      'Mixed Bar (Coffee & Fresh Juices)'
+    ]
+  },
+  { id: 'bf-9', key: 'birthdayPersonName', label: 'Name of the Birthday Person', type: 'short_text', placeholder: 'e.g. Maya (Turning 8!)', required: true, enabled: true, order: 8 },
+  { id: 'bf-10', key: 'cakePhoto', label: 'Please attach a photo of the cake', type: 'image', helpText: 'Send us your customized cake design photo and we will prepare it for you!', required: false, enabled: true, order: 9 }
+];
+
+/**
+ * Seed content for the shared package records. The Staff Console edits these and
+ * the customer site renders them — there is no second copy anywhere.
+ */
+export const DEFAULT_BIRTHDAY_PACKAGES: BirthdayPackage[] = [
+  {
+    id: 'bpkg-1',
+    name: 'Canvas & Create',
+    image: 'https://images.unsplash.com/photo-1513151233558-d860c5398176?auto=format&fit=crop&w=800&q=80',
+    shortDescription: 'Pre-sketched canvas, acrylic painting, balloons and studio decor.',
+    fullDescription: 'A creative celebration in our studio: private space, your choice of one painting activity per child, balloon decoration and complimentary beverages.',
+    price: 165,
+    pricingType: 'Per child',
+    pricingLabel: 'Per Child',
+    duration: '2 Hours',
+    minGuests: 5,
+    maxGuests: 20,
+    ageInformation: '4+ years',
+    includedItems: [
+      'Studio decorations: balloons and setup',
+      'Complimentary beverages',
+      'Table reservation'
+    ],
+    activityChoices: [
+      'Canvas Painting (Size 85)',
+      'Pre-made Pottery Painting',
+      '3D Figures Painting',
+      'Tote Bag Painting'
+    ],
+    additionalInfo: [],
+    cakeDescription: 'Send us your cake design and we will do it.',
+    cakeSizes: [
+      { id: 'cake-s', label: 'Small (15 cm)', price: 350 },
+      { id: 'cake-m', label: 'Medium (25 cm)', price: 650 },
+      { id: 'cake-l', label: 'Large (35 cm)', price: 800 }
+    ],
+    trainerInfo: 'Includes Professional Trainer/Artist upon request.',
+    deliveryInfo: '',
+    availableDays: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Saturday'],
+    availableTimes: ['10:00 AM', '01:00 PM', '04:00 PM', '07:00 PM'],
+    terms: 'A 500 SAR deposit is required to confirm the booking. Changes or cancellations must be made at least four days before the scheduled date to receive a refund of the deposit. Bringing outside food or drinks is not allowed.',
+    customerNotes: '',
+    depositAmount: 500,
+    status: 'Published',
+    displayOrder: 0
+  },
+  {
+    id: 'bpkg-2',
+    name: 'Pottery Party',
+    image: 'https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?auto=format&fit=crop&w=800&q=80',
+    shortDescription: 'Handbuilding clay, wheel throwing, firing service and studio decor.',
+    fullDescription: 'A hands-on clay celebration: private studio space, your choice of one pottery activity per child, balloon decoration and complimentary beverages.',
+    price: 200,
+    pricingType: 'Per child',
+    pricingLabel: 'Per Child',
+    duration: '2.5 Hours',
+    minGuests: 5,
+    maxGuests: 20,
+    ageInformation: '6+ years',
+    includedItems: [
+      'Studio decorations: balloons and setup',
+      'Complimentary beverages',
+      'Table reservation'
+    ],
+    activityChoices: [
+      'Hand-made Pottery Making',
+      'Wheel Throwing'
+    ],
+    additionalInfo: [
+      'Both activities include pottery coloring and firing.',
+      'Pottery will be delivered or collected after firing.'
+    ],
+    cakeDescription: 'Send us your cake design and we will do it.',
+    cakeSizes: [
+      { id: 'cake-s', label: 'Small (15 cm)', price: 350 },
+      { id: 'cake-m', label: 'Medium (25 cm)', price: 650 },
+      { id: 'cake-l', label: 'Large (35 cm)', price: 800 }
+    ],
+    trainerInfo: 'Includes Professional Trainer/Artist.',
+    deliveryInfo: 'Pottery will be delivered or collected after firing.',
+    availableDays: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Saturday'],
+    availableTimes: ['10:00 AM', '01:00 PM', '04:00 PM', '07:00 PM'],
+    terms: 'A 500 SAR deposit is required to confirm the booking. Changes or cancellations must be made at least four days before the scheduled date to receive a refund of the deposit. Bringing outside food or drinks is not allowed.',
+    customerNotes: '',
+    depositAmount: 500,
+    status: 'Published',
+    displayOrder: 1
+  }
+];
+
+/**
+ * A bookable studio resource — a room or a table station.
+ *
+ * This is the single shared record used by Settings, the workshop Monthly
+ * Schedule, the session calendar, saved sessions, events and every availability
+ * check. Sessions store the stable `id`, never just the display name.
+ */
+export interface StudioResource {
+  id: string;
+  name: string;
+  type: 'Studio Room' | 'Table Station';
+  seats: number;
+  location?: string;
+  notes?: string;
+  status: 'Active' | 'Inactive' | 'Maintenance';
+  order: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** Only Active resources can take a new assignment. */
+export function isAssignableResource(resource: Pick<StudioResource, 'status'>): boolean {
+  return resource.status === 'Active';
+}
+
+export const DEFAULT_STUDIO_RESOURCES: StudioResource[] = [
+  { id: 'res-room-1', name: 'Studio Room 1', type: 'Studio Room', seats: 12, location: 'Ground floor', status: 'Active', order: 0 },
+  { id: 'res-room-2', name: 'Studio Room 2', type: 'Studio Room', seats: 10, location: 'Ground floor', status: 'Active', order: 1 },
+  { id: 'res-table-1', name: 'Table Station 1', type: 'Table Station', seats: 4, location: 'Main lounge', status: 'Active', order: 2 },
+  { id: 'res-table-2', name: 'Table Station 2', type: 'Table Station', seats: 4, location: 'Main lounge', status: 'Active', order: 3 }
+];
+
+
+// ============================================================================
+// WORKSHOP FIELD CONFIGURATION
+// The two Workshop cards are rendered from these records, so the admin controls
+// the whole field structure — not just dropdown contents.
+// ============================================================================
+
+export type WorkshopFieldType =
+  | 'short_text'
+  | 'long_text'
+  | 'rich_text'
+  | 'number'
+  | 'dropdown'
+  | 'multi_select'
+  | 'tags'
+  | 'checkbox'
+  | 'date'
+  | 'time';
+
+export type WorkshopCardSection = 'curriculum' | 'logistics';
+
+/** Live records that supply a field's options; never a manual list. */
+export type WorkshopFieldDataSource = 'staff' | 'studio-resources';
+
+export interface WorkshopFieldConfig {
+  fieldId: string;
+  /** Stable key. Renaming the label never changes this, so saved values survive. */
+  fieldKey: string;
+  cardSection: WorkshopCardSection;
+  label: string;
+  fieldType: WorkshopFieldType;
+  placeholder?: string;
+  required: boolean;
+  enabled: boolean;
+  displayOrder: number;
+  options?: string[];
+  customerVisible: boolean;
+
+  /**
+   * Core fields are bound to a real Workshop property. They can be renamed,
+   * reordered, hidden and made optional, but not deleted or retyped — their
+   * values are typed columns the rest of the app relies on.
+   */
+  system?: boolean;
+  boundTo?: keyof Workshop | string;
+  /** Options come from live records rather than the `options` array. */
+  dataSource?: WorkshopFieldDataSource;
+
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/**
+ * The existing hardcoded fields of both Workshop cards, migrated into
+ * configuration. Order matches the cards as they render today.
+ */
+export const DEFAULT_WORKSHOP_FIELDS: WorkshopFieldConfig[] = [
+  // ---- Workshop Curriculum basics ----
+  { fieldId: 'wf-title', fieldKey: 'title', cardSection: 'curriculum', label: 'Workshop Title',
+    fieldType: 'short_text', placeholder: 'e.g. Traditional Arabic Calligraphy Glazing',
+    required: true, enabled: true, displayOrder: 0,
+    customerVisible: true, system: true, boundTo: 'title' },
+
+  { fieldId: 'wf-category', fieldKey: 'category', cardSection: 'curriculum', label: 'Category',
+    fieldType: 'dropdown', required: true, enabled: true, displayOrder: 1,
+    customerVisible: true, system: true, boundTo: 'category' },
+
+  { fieldId: 'wf-hook', fieldKey: 'hook', cardSection: 'curriculum', label: 'One-Line Hook (Subtext)',
+    fieldType: 'short_text', placeholder: 'e.g. Mold clay on the wheel and paint under the stars',
+    required: false, enabled: true, displayOrder: 2,
+    customerVisible: true, system: true, boundTo: 'hook' },
+
+  { fieldId: 'wf-description', fieldKey: 'description', cardSection: 'curriculum',
+    label: 'Short Catchy Description', fieldType: 'long_text',
+    placeholder: 'Brief summary shown on grids...',
+    required: false, enabled: true, displayOrder: 3,
+    customerVisible: true, system: true, boundTo: 'description' },
+
+  { fieldId: 'wf-full-details', fieldKey: 'fullDetails', cardSection: 'curriculum',
+    label: 'Full Details curriculum (Rich Text)', fieldType: 'rich_text',
+    placeholder: 'Write full specifications of what students will accomplish week by week...',
+    required: false, enabled: true, displayOrder: 4,
+    customerVisible: true, system: true, boundTo: 'fullDetails' },
+
+  // ---- Logistics & Metadata ----
+  { fieldId: 'wf-price', fieldKey: 'price', cardSection: 'logistics', label: 'Price in SAR',
+    fieldType: 'number', required: true, enabled: true, displayOrder: 0,
+    customerVisible: true, system: true, boundTo: 'price' },
+
+  { fieldId: 'wf-duration', fieldKey: 'duration', cardSection: 'logistics', label: 'Duration',
+    fieldType: 'dropdown', required: true, enabled: true, displayOrder: 1,
+    options: ['1 Hour', '1.5 Hours', '2 Hours', '2.5 Hours', '3 Hours'],
+    customerVisible: true, system: true, boundTo: 'duration' },
+
+  { fieldId: 'wf-age-range', fieldKey: 'ageRange', cardSection: 'logistics', label: 'Age Range',
+    fieldType: 'dropdown', required: true, enabled: true, displayOrder: 2,
+    options: ['All Ages', '4+ years', '6+ years', '12+ years', '16+ years', 'Adults only'],
+    customerVisible: true, system: true, boundTo: 'ageRange' },
+
+  { fieldId: 'wf-skill-level', fieldKey: 'skillLevel', cardSection: 'logistics', label: 'Skill Level',
+    fieldType: 'dropdown', required: false, enabled: true, displayOrder: 3,
+    options: ['Beginner', 'Intermediate', 'Advanced', 'All Levels'],
+    customerVisible: true, system: true, boundTo: 'skillLevel' },
+
+  // Live sources — options always come from the real records.
+  { fieldId: 'wf-tutor', fieldKey: 'tutor', cardSection: 'logistics', label: 'Tutor / Artist Specialist',
+    fieldType: 'dropdown', required: false, enabled: true, displayOrder: 4,
+    customerVisible: true, system: true, boundTo: 'staffId', dataSource: 'staff' },
+
+  { fieldId: 'wf-room', fieldKey: 'room', cardSection: 'logistics', label: 'Studio Room / Table Station',
+    fieldType: 'dropdown', required: false, enabled: true, displayOrder: 5,
+    customerVisible: false, system: true, boundTo: 'roomId', dataSource: 'studio-resources' },
+
+  { fieldId: 'wf-materials', fieldKey: 'materials', cardSection: 'logistics',
+    label: 'Materials Included (Press Enter key)', fieldType: 'tags',
+    placeholder: 'Add a material and press Enter...',
+    required: false, enabled: true, displayOrder: 6,
+    customerVisible: true, system: true, boundTo: 'materials' }
+];
+
+export const WORKSHOP_FIELD_TYPES: Array<{ value: WorkshopFieldType; label: string }> = [
+  { value: 'short_text', label: 'Short text' },
+  { value: 'long_text', label: 'Long text / textarea' },
+  { value: 'rich_text', label: 'Rich text' },
+  { value: 'number', label: 'Number' },
+  { value: 'dropdown', label: 'Dropdown' },
+  { value: 'multi_select', label: 'Multi-select' },
+  { value: 'tags', label: 'Tags' },
+  { value: 'checkbox', label: 'Checkbox' },
+  { value: 'date', label: 'Date' },
+  { value: 'time', label: 'Time' }
+];
+
+/**
+ * Layout is derived from the field type rather than configured: text areas,
+ * rich text and multi-value inputs need the full row, everything else pairs up.
+ */
+export function fieldSpansFullRow(type: WorkshopFieldType): boolean {
+  return type === 'long_text' || type === 'rich_text' || type === 'tags' || type === 'multi_select';
+}
+
+/**
+ * Reshapes a stored value for the field's current type. The type of any field
+ * can be changed at any time, so a value saved as a list may now be edited as
+ * text (and the other way round) — this keeps the existing value usable
+ * instead of dropping it.
+ */
+export function coerceFieldValue(value: any, type: WorkshopFieldType): any {
+  const wantsList = type === 'tags' || type === 'multi_select';
+
+  if (wantsList) {
+    if (Array.isArray(value)) return value;
+    if (value === undefined || value === null || value === '') return [];
+    return String(value).split(',').map(v => v.trim()).filter(Boolean);
+  }
+
+  if (Array.isArray(value)) return value.join(', ');
+  if (type === 'checkbox') return !!value;
+  return value;
+}
+
+/** Field types that carry an editable option list. */
+export function fieldTypeUsesOptions(type: WorkshopFieldType): boolean {
+  return type === 'dropdown' || type === 'multi_select';
+}
+
+/** Enabled fields for a card, in configured order. */
+export function fieldsForCard(
+  fields: WorkshopFieldConfig[],
+  card: WorkshopCardSection,
+  includeDisabled = false
+): WorkshopFieldConfig[] {
+  return fields
+    .filter(f => f.cardSection === card && (includeDisabled || f.enabled))
+    .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0));
 }
 
 export interface StudioTableConfig {
@@ -627,6 +1246,54 @@ export interface CapacitySettingsConfig {
   tables: StudioTableConfig[];
 }
 
+/**
+ * Customer-facing birthday terms. Stored in settings so staff can edit them;
+ * {deposit} and {cancellationDays} are filled in at render time so the wording
+ * follows the configured values instead of being hardcoded.
+ */
+export interface BirthdayTermsConfig {
+  /** Bumped whenever staff change the wording; saved with each acceptance. */
+  version: string;
+  title: string;
+  /** Lines shown before the numbered supplies list. */
+  leadingItems: string[];
+  suppliesIntro: string;
+  supplies: string[];
+  /** Lines shown after the supplies list. */
+  trailingItems: string[];
+  updatedAt?: string;
+}
+
+export const DEFAULT_BIRTHDAY_TERMS: BirthdayTermsConfig = {
+  version: '2026-08-1',
+  title: 'Event Terms and Guidelines',
+  leadingItems: [
+    'Please adhere to the scheduled time of the event.'
+  ],
+  suppliesIntro: 'All event supplies will be provided by Arty Café, including:',
+  supplies: [
+    'Celebration cake',
+    'Balloons',
+    'Beverages',
+    'Music'
+  ],
+  trailingItems: [
+    'A deposit of {deposit} SAR is required to confirm the booking.',
+    'Changes or cancellations must be made at least {cancellationDays} days before the scheduled event to receive a refund of the deposit.',
+    'Outside food and beverages are strictly prohibited.'
+  ]
+};
+
+/** Substitutes the dynamic values into a terms line. */
+export function renderTermsLine(
+  line: string,
+  values: { deposit: number; cancellationDays: number }
+): string {
+  return line
+    .replace(/\{deposit\}/g, String(values.deposit))
+    .replace(/\{cancellationDays\}/g, String(values.cancellationDays));
+}
+
 export interface EventsSettingsConfig {
   minimumBirthdayBookingDays?: number;
   minBirthdayNoticeDays?: number;
@@ -634,13 +1301,73 @@ export interface EventsSettingsConfig {
   maxGuestsPerEvent?: number;
   depositPercentage?: number;
   cancellationNoticeDays?: number;
+  /** Editable birthday terms shown before final submission. */
+  birthdayTerms?: BirthdayTermsConfig;
 }
+
+/**
+ * A configurable option list used by the Workshop form.
+ *
+ * Only genuinely static option lists live here. Tutors come from Staff
+ * Management and studio rooms/tables from Settings → Capacity; those are live
+ * records and are never duplicated as manual options.
+ */
+export type WorkshopOptionType =
+  | 'category'
+  | 'workshopType'
+  | 'material'
+  | 'skillLevel'
+  | 'ageGroup'
+  | 'durationPreset'
+  | 'pricingType'
+  /** @deprecated Rooms now come from Settings → Capacity. */
+  | 'room';
 
 export interface WorkshopOption {
   id: string;
-  type: 'skillLevel' | 'category' | 'workshopType' | 'room' | 'material';
+  type: WorkshopOptionType;
   value: string;
   order: number;
+  /** Disabled options stay valid on saved workshops but cannot be chosen. */
+  enabled?: boolean;
+}
+
+/** Which card on the Workshop form each list belongs to. */
+export interface WorkshopOptionList {
+  type: WorkshopOptionType;
+  label: string;
+  card: 'curriculum' | 'logistics';
+  hint?: string;
+}
+
+/**
+ * Mirrors the two Workshop page cards exactly.
+ *
+ * Curriculum Basics holds Workshop Title, Category, One-Line Hook, Short
+ * Description and Full Details — only Category is a selectable list, the rest
+ * are free text and are deliberately not turned into option lists.
+ *
+ * Logistics & Metadata holds Price, Duration, Age Range, Skill Level, Tutor,
+ * Studio Room / Table Station and Materials Included. Price is a number; Tutor
+ * and Studio Room are live records configured at their own source.
+ */
+export const WORKSHOP_OPTION_LISTS: WorkshopOptionList[] = [
+  { type: 'category', label: 'Categories', card: 'curriculum', hint: 'The Category dropdown on the Workshop Curriculum basics card.' },
+  { type: 'durationPreset', label: 'Duration Presets', card: 'logistics', hint: 'The Duration dropdown on Logistics & Metadata.' },
+  { type: 'ageGroup', label: 'Age Groups', card: 'logistics', hint: 'The Age Range dropdown on Logistics & Metadata.' },
+  { type: 'skillLevel', label: 'Skill Levels', card: 'logistics', hint: 'The Skill Level dropdown on Logistics & Metadata.' },
+  { type: 'material', label: 'Materials Included', card: 'logistics', hint: 'Suggestions for the Materials Included tag input.' }
+];
+
+/** Option lists seeded so the Workshop form always has something to offer. */
+export const DEFAULT_WORKSHOP_OPTIONS: Array<{ type: WorkshopOptionType; values: string[] }> = [
+  { type: 'skillLevel', values: ['Beginner', 'Intermediate', 'Advanced', 'All Levels'] },
+  { type: 'ageGroup', values: ['All Ages', '4+ years', '6+ years', '12+ years', '16+ years', 'Adults only'] },
+  { type: 'durationPreset', values: ['1 Hour', '1.5 Hours', '2 Hours', '2.5 Hours', '3 Hours'] }
+];
+
+export function isWorkshopOptionEnabled(option: WorkshopOption): boolean {
+  return option.enabled !== false;
 }
 
 export interface EventOption {
@@ -810,6 +1537,8 @@ export interface AppEvent {
   host: string;
   staffId?: string;
   location: string;
+  roomId?: string;
+  tableId?: string;
   ageRequirement: string;
   skillLevel: string;
   status: 'Draft' | 'Published' | 'Fully Booked' | 'Cancelled' | 'Completed' | 'Archived';
@@ -858,3 +1587,102 @@ export const INITIAL_EVENTS: AppEvent[] = [
   }
 ];
 
+
+// ==========================================================
+// PRE-PAYMENT BOOKING POP-UP
+// Plain-text content only. Admins write normal text; nothing
+// here is ever interpreted as HTML, so there is no way to
+// inject markup or script through these settings.
+// ==========================================================
+
+export interface PrePaymentPopupConfig {
+  enabled: boolean;
+  /** Heading shown at the top of the pop-up. */
+  title: string;
+  /** Main message. Plain text; blank lines separate paragraphs. */
+  message: string;
+  /** Optional short instructions, one per line, shown as a list. */
+  instructions: string[];
+  /** Label on the confirm button. */
+  buttonLabel: string;
+  requiredCheckbox: boolean;
+  checkboxLabel: string;
+}
+
+export const DEFAULT_PREPAYMENT_POPUP: PrePaymentPopupConfig = {
+  enabled: true,
+  title: 'Important Studio Safety & Timeline Instructions',
+  message: 'Please note the following studio rules before proceeding to payment.',
+  instructions: [
+    'Clay Processing Time: All pottery created in the studio takes 10 to 14 days to completely air dry, undergo bisque-firing, be hand-glazed, and fired a second time.',
+    'Live Tracker: Once booked, your piece will appear in your "My Pieces" collection tracker where you can track its lifecycle stages.',
+    'Safety Attire: We recommend wearing clothes you do not mind getting a little clay on (although aprons are provided!).',
+    'Storage Window: Your finished pieces will be held at our collection shelves for up to 30 days post-firing.'
+  ],
+  buttonLabel: 'Continue to Payment',
+  requiredCheckbox: true,
+  checkboxLabel: 'I confirm I have read these safety rules and understand the 10-14 day firing timeline.'
+};
+
+/** Turns a fragment of the old HTML body into readable plain text. */
+function htmlFragmentToText(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Reads the stored pop-up setting into the plain-text shape, migrating the
+ * legacy HTML `body` where one is present: list items become instructions and
+ * the remaining prose becomes the message. Runs on every read, so an older
+ * saved record needs no separate upgrade step.
+ */
+export function migratePrePaymentPopup(raw: any): PrePaymentPopupConfig {
+  const stored = raw || {};
+
+  let message: string = typeof stored.message === 'string' ? stored.message : '';
+  let instructions: string[] = Array.isArray(stored.instructions)
+    ? stored.instructions.filter((line: any) => typeof line === 'string' && line.trim())
+    : [];
+
+  // Legacy records carry an HTML body and no plain-text fields yet.
+  const legacyBody: string = typeof stored.body === 'string' ? stored.body : '';
+  if (legacyBody.trim() && !message.trim() && instructions.length === 0) {
+    const items = [...legacyBody.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)]
+      .map(m => htmlFragmentToText(m[1]))
+      .filter(Boolean);
+
+    const prose = htmlFragmentToText(legacyBody.replace(/<ul[\s\S]*?<\/ul>/gi, '')
+                                              .replace(/<ol[\s\S]*?<\/ol>/gi, ''));
+
+    instructions = items;
+    message = prose || (items.length ? '' : htmlFragmentToText(legacyBody));
+  }
+
+  return {
+    enabled: stored.enabled !== false,
+    title: typeof stored.title === 'string' ? stored.title : DEFAULT_PREPAYMENT_POPUP.title,
+    message: message || (legacyBody.trim() ? '' : DEFAULT_PREPAYMENT_POPUP.message),
+    instructions,
+    buttonLabel: typeof stored.buttonLabel === 'string' && stored.buttonLabel.trim()
+      ? stored.buttonLabel
+      : DEFAULT_PREPAYMENT_POPUP.buttonLabel,
+    requiredCheckbox: stored.requiredCheckbox !== false,
+    checkboxLabel: typeof stored.checkboxLabel === 'string'
+      ? stored.checkboxLabel
+      : DEFAULT_PREPAYMENT_POPUP.checkboxLabel
+  };
+}
+
+/** Splits the message into paragraphs for rendering as text nodes. */
+export function popupParagraphs(message: string): string[] {
+  return (message || '').split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+}

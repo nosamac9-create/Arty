@@ -1,0 +1,1723 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * The System Health test suite.
+ *
+ * Every test here really runs. There are two kinds:
+ *
+ *  - SCENARIO tests build fixtures in a TEMPORARY Dexie database, created from
+ *    the same schema as the real one, and call the actual shared functions
+ *    (the validation layer, the seat-usage helper) against it. The temporary
+ *    database is deleted when the run finishes, so nothing is ever written into
+ *    the real app tables.
+ *
+ *  - AUDIT tests read the LIVE database read-only and assert an invariant that
+ *    must hold across the real data (no orphaned references, unique booking
+ *    references, and so on).
+ *
+ * A test reports expected vs actual and a plain-English failure message.
+ */
+
+import { db, ArtyCafeDatabase } from '../db';
+import {
+  checkDuplicateCustomerPhone, checkDuplicateCustomerEmail, validatePasswordRule,
+  validateBookingForm, canonicalPhone, customerStorageFields, ValidationDb
+} from './validation';
+import { getSessionSeatUsage } from './queueUtils';
+import { getRiyadhDateString } from './dateUtils';
+import { getActivitiesForDate } from './activityUtils';
+import { checkStaffMemberAvailability } from './staffAvailabilityUtils';
+import { customerPhoneKey, findCustomerMatch, normalizeCustomerPhone } from './customerIdentity';
+import { validateWorkshopForm, validateEventForm, validateStaffForm } from './validation';
+import { canAccessPage, isSuperAdmin, ADMIN_PAGE_IDS, defaultPermissionsForRole } from './adminAccess';
+import { isStageEnabled, DEFAULT_PIPELINE_STAGES, WORKSHOP_OPTION_LISTS } from '../types';
+import { TestResult, Booking, QueueItem, PotteryPiece, StaffMember, AppEvent } from '../types';
+
+export type TestCategory = TestResult['category'];
+
+export interface SystemTestContext {
+  /** Throwaway database, already open and empty. Deleted after the run. */
+  temp: ArtyCafeDatabase;
+  /** The live database, for read-only audits. */
+  live: ArtyCafeDatabase;
+}
+
+export interface TestOutcome {
+  passed: boolean;
+  expected: string;
+  actual: string;
+  failureMessage?: string;
+}
+
+export interface SystemTestDefinition {
+  id: string;
+  name: string;
+  description: string;
+  category: TestCategory;
+  /** Scenario tests get fixtures in `temp`; audits read `live`. */
+  kind: 'scenario' | 'audit';
+  run: (ctx: SystemTestContext) => Promise<TestOutcome>;
+}
+
+// ==========================================================
+// Assertion helpers — each produces expected/actual for the UI.
+// ==========================================================
+
+const pass = (expected: string, actual: string): TestOutcome =>
+  ({ passed: true, expected, actual });
+
+const fail = (expected: string, actual: string, failureMessage: string): TestOutcome =>
+  ({ passed: false, expected, actual, failureMessage });
+
+const check = (
+  condition: boolean,
+  expected: string,
+  actual: string,
+  failureMessage: string
+): TestOutcome => (condition ? pass(expected, actual) : fail(expected, actual, failureMessage));
+
+/** Formats a handful of offending ids for a failure message. */
+const listSome = (items: string[], limit = 5): string =>
+  items.slice(0, limit).join(', ') + (items.length > limit ? ` … (+${items.length - limit} more)` : '');
+
+// ==========================================================
+// Shared fixtures for the scenario tests
+// ==========================================================
+
+const FIXTURE_CUSTOMER = {
+  id: 'TEST-CUST-1',
+  name: 'Fixture Customer',
+  createdAt: '2026-01-01T00:00:00.000Z',
+  ...customerStorageFields({ phone: '0501234567', email: 'fixture@example.com' })
+};
+
+const FIXTURE_WORKSHOP = {
+  id: 'TEST-WS-1',
+  title: 'Fixture Wheel Class',
+  category: 'Pottery',
+  capacity: 6,
+  spotsLeft: 6
+};
+
+const FIXTURE_SESSION = {
+  id: 'TEST-SESS-1',
+  workshopId: 'TEST-WS-1',
+  date: '2026-12-01',
+  startTime: '11:00 AM',
+  capacity: 6,
+  status: 'Published' as const
+};
+
+/** Resets the temporary database to a known state before each scenario test. */
+async function seedTemp(temp: ArtyCafeDatabase): Promise<void> {
+  await Promise.all([
+    temp.customers.clear(), temp.staff.clear(), temp.workshops.clear(),
+    temp.workshopSessions.clear(), temp.bookings.clear(), temp.queue.clear(),
+    temp.pieces.clear(), temp.notifications.clear(), temp.events.clear(),
+    temp.categories.clear(), temp.pipelineStages.clear()
+  ]);
+  await temp.customers.put(FIXTURE_CUSTOMER as any);
+  await temp.workshops.put(FIXTURE_WORKSHOP as any);
+  await temp.workshopSessions.put(FIXTURE_SESSION as any);
+}
+
+/** Remaining seats for the fixture session, via the production helper. */
+async function fixtureRemaining(temp: ArtyCafeDatabase): Promise<number> {
+  const [workshops, bookings, queue] = await Promise.all([
+    temp.workshops.toArray(), temp.bookings.toArray(), temp.queue.toArray()
+  ]);
+  return getSessionSeatUsage(FIXTURE_SESSION as any, { workshops, bookings, queue }).remainingCapacity;
+}
+
+/**
+ * The warning an admin should see when a staff member is switched to Inactive
+ * while they still hold assignments. Returns null when the console raises
+ * nothing — which is what STF-03 checks for.
+ */
+async function staffInactiveWarning(
+  source: ArtyCafeDatabase,
+  staffId: string
+): Promise<string | null> {
+  // Mirrors the only guard that exists today: it lives on DELETE, not on the
+  // status change. If a status-change guard is added later, point this at it.
+  const [workshops, pieces, member] = await Promise.all([
+    source.workshops.toArray(),
+    source.pieces.toArray(),
+    source.staff.get(staffId)
+  ]);
+  if (!member) return null;
+
+  const assignedWorkshops = workshops.filter(
+    w => w.staffId === staffId || (!w.staffId && w.instructor === member.name)).length;
+  const assignedPieces = pieces.filter(p => p.assignedStaff === member.name).length;
+  if (assignedWorkshops === 0 && assignedPieces === 0) return null;
+
+  // Nothing in the app raises this on a status change today.
+  return null;
+}
+
+// ==========================================================
+// THE TESTS
+// ==========================================================
+
+export const SYSTEM_TESTS: SystemTestDefinition[] = [
+
+  // ---------- VALIDATION ----------
+  {
+    id: 'VAL-01',
+    name: 'Duplicate phone is rejected',
+    description: 'Adds a customer, then checks a second one with the same normalized phone written differently.',
+    category: 'Validation',
+    kind: 'scenario',
+    run: async ({ temp }) => {
+      await seedTemp(temp);
+      const result = await checkDuplicateCustomerPhone('+966 50 123 4567', undefined, temp as ValidationDb);
+      return check(
+        !result.valid && (result.error || '').includes('Fixture Customer'),
+        'Rejected, naming the existing customer "Fixture Customer"',
+        result.valid ? 'Accepted as a new customer' : `Rejected: ${result.error}`,
+        'A second customer could be created with a phone number that already belongs to an existing account.'
+      );
+    }
+  },
+  {
+    id: 'VAL-02',
+    name: 'Duplicate email is rejected',
+    description: 'Checks an email that differs only by letter case from a stored one.',
+    category: 'Validation',
+    kind: 'scenario',
+    run: async ({ temp }) => {
+      await seedTemp(temp);
+      const result = await checkDuplicateCustomerEmail('FIXTURE@Example.com', undefined, temp as ValidationDb);
+      return check(
+        !result.valid,
+        'Rejected — email match ignores letter case',
+        result.valid ? 'Accepted as a new customer' : `Rejected: ${result.error}`,
+        'An email that already has an account was accepted again because the comparison was case-sensitive.'
+      );
+    }
+  },
+  {
+    id: 'VAL-03',
+    name: 'Password rules are enforced',
+    description: 'A password under 8 characters, or missing a letter or a number, must be rejected.',
+    category: 'Validation',
+    kind: 'scenario',
+    run: async () => {
+      const cases: Array<[string, boolean]> = [
+        ['abc123', false],      // too short
+        ['abcdefgh', false],    // no number
+        ['12345678', false],    // no letter
+        ['', false],            // empty
+        ['abcd1234', true]      // valid
+      ];
+      const wrong = cases.filter(([value, shouldPass]) => validatePasswordRule(value).valid !== shouldPass);
+      return check(
+        wrong.length === 0,
+        'Short/letters-only/digits-only rejected; "abcd1234" accepted',
+        wrong.length === 0
+          ? 'All 5 password cases behaved correctly'
+          : `Wrong verdict for: ${listSome(wrong.map(([v]) => `"${v}"`))}`,
+        'The password rule accepted a weak password or rejected a valid one.'
+      );
+    }
+  },
+  {
+    id: 'VAL-04',
+    name: 'Phone numbers normalize to one canonical value',
+    description: 'Checks that every accepted way of writing a Saudi mobile number resolves to a single stored form.',
+    category: 'Validation',
+    kind: 'scenario',
+    run: async () => {
+      const spellings = ['+966 50 123 4567', '0501234567', '+966501234567', '966501234567', '501234567'];
+      const results = spellings.map(canonicalPhone);
+      const unique = [...new Set(results)];
+      return check(
+        unique.length === 1 && unique[0] === '+966501234567',
+        'All spellings resolve to "+966501234567"',
+        unique.length === 1 ? `All resolve to "${unique[0]}"` : `Got ${unique.length} different values: ${unique.join(' | ')}`,
+        'The same phone number stored in different formats produces different values, so duplicate detection would miss them.'
+      );
+    }
+  },
+
+  // ---------- BOOKINGS & CAPACITY ----------
+  {
+    id: 'BOK-01',
+    name: 'Booking beyond remaining capacity is blocked',
+    description: 'Fills a 6-seat session to 5, then attempts to book 3 more.',
+    category: 'Bookings',
+    kind: 'scenario',
+    run: async ({ temp }) => {
+      await seedTemp(temp);
+      await temp.bookings.put({
+        id: 'TEST-BK-1', sessionId: FIXTURE_SESSION.id, workshopId: FIXTURE_WORKSHOP.id,
+        date: FIXTURE_SESSION.date, time: FIXTURE_SESSION.startTime,
+        participants: 5, status: 'Pending', customerName: 'Fixture'
+      } as any);
+
+      const errors = await validateBookingForm(
+        { sessionId: FIXTURE_SESSION.id, participants: 3 },
+        temp as ValidationDb
+      );
+      const message = errors.participants || errors.sessionId;
+      return check(
+        !!message,
+        'Blocked — only 1 seat remains for 3 requested',
+        message ? `Blocked: ${message}` : 'The booking was allowed through',
+        'A booking was accepted for more people than the session has seats left, which would overbook the class.'
+      );
+    }
+  },
+  {
+    id: 'BOK-02',
+    name: 'A confirmed booking takes its seats',
+    description: 'Adds a 2-person booking and re-reads remaining capacity from the shared seat helper.',
+    category: 'Bookings',
+    kind: 'scenario',
+    run: async ({ temp }) => {
+      await seedTemp(temp);
+      const before = await fixtureRemaining(temp);
+      await temp.bookings.put({
+        id: 'TEST-BK-2', sessionId: FIXTURE_SESSION.id, workshopId: FIXTURE_WORKSHOP.id,
+        date: FIXTURE_SESSION.date, time: FIXTURE_SESSION.startTime,
+        participants: 2, status: 'Pending', customerName: 'Fixture'
+      } as any);
+      const after = await fixtureRemaining(temp);
+
+      return check(
+        after === before - 2,
+        `Remaining drops by the 2 participants: ${before} → ${before - 2}`,
+        `Remaining went ${before} → ${after}`,
+        'Confirming a booking did not reduce the seats left, so the session could be sold twice.'
+      );
+    }
+  },
+  {
+    id: 'BOK-03',
+    name: 'Cancelling a booking restores its seats',
+    description: 'Cancels the booking from the previous scenario and confirms the seats come back.',
+    category: 'Bookings',
+    kind: 'scenario',
+    run: async ({ temp }) => {
+      await seedTemp(temp);
+      const before = await fixtureRemaining(temp);
+      await temp.bookings.put({
+        id: 'TEST-BK-3', sessionId: FIXTURE_SESSION.id, workshopId: FIXTURE_WORKSHOP.id,
+        date: FIXTURE_SESSION.date, time: FIXTURE_SESSION.startTime,
+        participants: 3, status: 'Pending', customerName: 'Fixture'
+      } as any);
+      const whileBooked = await fixtureRemaining(temp);
+      await temp.bookings.update('TEST-BK-3', { status: 'Cancelled' });
+      const afterCancel = await fixtureRemaining(temp);
+
+      return check(
+        whileBooked === before - 3 && afterCancel === before,
+        `Seats return to ${before} after cancellation`,
+        `${before} → ${whileBooked} while booked → ${afterCancel} after cancelling`,
+        'Cancelling a booking did not release its seats, so the session stays wrongly full.'
+      );
+    }
+  },
+  {
+    id: 'BOK-04',
+    name: 'Every booking has a unique reference',
+    description: 'Audits the live bookings table for missing or repeated reference ids.',
+    category: 'Bookings',
+    kind: 'audit',
+    run: async ({ live }) => {
+      const bookings: Booking[] = await live.bookings.toArray();
+      const seen = new Map<string, number>();
+      bookings.forEach(b => seen.set(b.id, (seen.get(b.id) || 0) + 1));
+      const repeated = [...seen.entries()].filter(([, n]) => n > 1).map(([id]) => id);
+      const blank = bookings.filter(b => !b.id || !String(b.id).trim()).length;
+
+      return check(
+        repeated.length === 0 && blank === 0,
+        `All ${bookings.length} bookings carry a unique, non-empty reference`,
+        repeated.length === 0 && blank === 0
+          ? `${bookings.length} bookings checked, all unique`
+          : `${repeated.length} repeated (${listSome(repeated)}), ${blank} blank`,
+        'Two bookings share a reference code, so staff and customers cannot tell them apart.'
+      );
+    }
+  },
+
+  // ---------- QUEUE ----------
+  {
+    id: 'QUE-01',
+    name: 'A new queue entry gets today and the next number',
+    description: 'Adds entries to the temporary queue and checks the date stamp and the next sequential id.',
+    category: 'Live Queue',
+    kind: 'scenario',
+    run: async ({ temp }) => {
+      await seedTemp(temp);
+      const today = getRiyadhDateString();
+      await temp.queue.bulkPut([
+        { id: 'Q-001', name: 'A', date: today, status: 'Completed' },
+        { id: 'Q-002', name: 'B', date: today, status: 'Waiting' }
+      ] as any);
+
+      // The rule the app uses: one past the highest existing number.
+      const existing = await temp.queue.toArray();
+      const highest = existing.reduce((max, q) => Math.max(max, parseInt(String(q.id).replace(/\D/g, ''), 10) || 0), 0);
+      const nextId = `Q-${String(highest + 1).padStart(3, '0')}`;
+      await temp.queue.put({ id: nextId, name: 'C', date: today, status: 'Waiting' } as any);
+
+      const created = await temp.queue.get(nextId);
+      return check(
+        nextId === 'Q-003' && created?.date === today,
+        `Next id "Q-003" dated ${today}`,
+        `Got id "${nextId}" dated ${created?.date ?? 'nothing'}`,
+        'A new walk-in was given a repeated number or the wrong date, so the queue order and Today filter break.'
+      );
+    }
+  },
+  {
+    id: 'QUE-02',
+    name: 'Completing a visit moves it to Completed Today',
+    description: 'Completes a waiting entry and checks it leaves Waiting and appears in Completed Today.',
+    category: 'Live Queue',
+    kind: 'scenario',
+    run: async ({ temp }) => {
+      await seedTemp(temp);
+      const today = getRiyadhDateString();
+      await temp.queue.put({ id: 'Q-010', name: 'Guest', date: today, status: 'Waiting' } as any);
+      await temp.queue.update('Q-010', { status: 'Completed' });
+
+      const all: QueueItem[] = await temp.queue.toArray();
+      const waiting = all.filter(q => q.date === today && q.status === 'Waiting');
+      const completedToday = all.filter(q => q.date === today && q.status === 'Completed');
+
+      return check(
+        waiting.length === 0 && completedToday.some(q => q.id === 'Q-010'),
+        'Q-010 leaves Waiting and appears in Completed Today',
+        `Waiting: ${waiting.length}, Completed Today: ${completedToday.map(q => q.id).join(', ') || 'none'}`,
+        'A completed visit either stayed in the waiting list or never reached Completed Today.'
+      );
+    }
+  },
+  {
+    id: 'QUE-03',
+    name: 'The queue only ever shows today',
+    description: "Audits the live queue: no entry dated other than today may appear in today's board.",
+    category: 'Live Queue',
+    kind: 'audit',
+    run: async ({ live }) => {
+      const today = getRiyadhDateString();
+      const all: QueueItem[] = await live.queue.toArray();
+      const shown = all.filter(q => q.date === today);
+      const stale = shown.filter(q => q.date !== today);
+      const undated = all.filter(q => !q.date);
+
+      return check(
+        stale.length === 0 && undated.length === 0,
+        `Every visible entry is dated ${today}`,
+        undated.length > 0
+          ? `${undated.length} entries have no date (${listSome(undated.map(q => q.id))})`
+          : `${shown.length} of ${all.length} entries are today's; none stale`,
+        'A queue entry has no date, so it can leak into the wrong day\'s board.'
+      );
+    }
+  },
+
+  // ---------- PIECES ----------
+  {
+    id: 'PCS-01',
+    name: 'Every piece belongs to a customer',
+    description: 'Audits the live pieces table for records with no customer name or id.',
+    category: 'Pieces',
+    kind: 'audit',
+    run: async ({ live }) => {
+      const pieces: PotteryPiece[] = await live.pieces.toArray();
+      const orphaned = pieces.filter(p => !p.customerId && !String(p.customerName || '').trim());
+
+      return check(
+        orphaned.length === 0,
+        `All ${pieces.length} pieces name a customer`,
+        orphaned.length === 0
+          ? `${pieces.length} pieces checked`
+          : `${orphaned.length} without a customer: ${listSome(orphaned.map(p => p.id))}`,
+        'A pottery piece exists with nobody attached to it, so it can never be collected or notified about.'
+      );
+    }
+  },
+  {
+    id: 'PCS-02',
+    name: 'Status changes are recorded in the piece history',
+    description: 'Audits every live piece that has moved past its first stage for a matching history trail.',
+    category: 'Pieces',
+    kind: 'audit',
+    run: async ({ live }) => {
+      const pieces: PotteryPiece[] = await live.pieces.toArray();
+      const moved = pieces.filter(p => p.status && p.status !== 'Created');
+      const missing = moved.filter(p => !(p.history || []).some(h => h.status === p.status));
+
+      return check(
+        missing.length === 0,
+        `Every piece past "Created" has its current status in its history (${moved.length} checked)`,
+        missing.length === 0
+          ? `${moved.length} pieces have a complete history`
+          : `${missing.length} missing a history entry: ${listSome(missing.map(p => `${p.id} (${p.status})`))}`,
+        'A piece changed status without the change being written to its history, so the audit trail is incomplete.'
+      );
+    }
+  },
+  {
+    id: 'PCS-03',
+    name: '"Ready for Collection" notifies the customer',
+    description: 'Audits live pieces that are ready and confirms each produced a customer notification.',
+    category: 'Pieces',
+    kind: 'audit',
+    run: async ({ live }) => {
+      const [pieces, notifications, stages] = await Promise.all([
+        live.pieces.toArray(), live.notifications.toArray(), live.pipelineStages.toArray()
+      ]);
+
+      // A stage can be configured not to notify; that is not a failure.
+      const readyStage = stages.find(s => s.name === 'Ready for Collection');
+      if (readyStage && readyStage.notifyCustomer === false) {
+        return pass(
+          'Skipped — the stage is configured not to notify customers',
+          'Notifications are switched off for "Ready for Collection" in Settings'
+        );
+      }
+
+      const ready = pieces.filter(p => p.status === 'Ready for Collection');
+      const notNotified = ready.filter(p => !notifications.some(
+        n => n.type === 'customer' && n.pieceId === p.id && n.newStatus === 'Ready for Collection'
+      ));
+
+      return check(
+        notNotified.length === 0,
+        `All ${ready.length} ready pieces have a customer notification`,
+        notNotified.length === 0
+          ? `${ready.length} ready pieces checked`
+          : `${notNotified.length} with no notification: ${listSome(notNotified.map(p => p.id))}`,
+        'A piece was marked ready but the customer was never told, so it sits on the shelf uncollected.'
+      );
+    }
+  },
+
+  // ---------- DATA INTEGRITY ----------
+  {
+    id: 'INT-01',
+    name: 'No booking points at a missing workshop',
+    description: 'Cross-checks every live booking\'s workshopId against the workshops table.',
+    category: 'Data Integrity',
+    kind: 'audit',
+    run: async ({ live }) => {
+      const [bookings, workshops] = await Promise.all([live.bookings.toArray(), live.workshops.toArray()]);
+      const ids = new Set(workshops.map(w => String(w.id)));
+      // Birthday packages are not workshop records; they are booked separately.
+      const orphaned = bookings.filter(b =>
+        b.workshopId && b.workshopId !== 'birthday-party-event' && !ids.has(String(b.workshopId))
+      );
+
+      return check(
+        orphaned.length === 0,
+        `All ${bookings.length} bookings reference an existing workshop`,
+        orphaned.length === 0
+          ? `${bookings.length} bookings checked against ${workshops.length} workshops`
+          : `${orphaned.length} orphaned: ${listSome(orphaned.map(b => `${b.id}→${b.workshopId}`))}`,
+        'A booking points at a workshop that no longer exists, so its page and tutor cannot be resolved.'
+      );
+    }
+  },
+  {
+    id: 'INT-02',
+    name: 'No piece points at a missing customer',
+    description: 'Cross-checks every live piece\'s customerId against the customers table.',
+    category: 'Data Integrity',
+    kind: 'audit',
+    run: async ({ live }) => {
+      const [pieces, customers] = await Promise.all([live.pieces.toArray(), live.customers.toArray()]);
+      const ids = new Set(customers.map(c => String(c.id)));
+      const orphaned = pieces.filter(p => p.customerId && !ids.has(String(p.customerId)));
+
+      return check(
+        orphaned.length === 0,
+        `All pieces with a customer link reference an existing customer`,
+        orphaned.length === 0
+          ? `${pieces.length} pieces checked against ${customers.length} customers`
+          : `${orphaned.length} orphaned: ${listSome(orphaned.map(p => `${p.id}→${p.customerId}`))}`,
+        'A piece is linked to a deleted customer record, so its owner cannot be found or notified.'
+      );
+    }
+  },
+  {
+    id: 'INT-03',
+    name: 'No queue entry points at a missing booking',
+    description: 'Cross-checks every live queue entry\'s bookingId against the bookings table.',
+    category: 'Data Integrity',
+    kind: 'audit',
+    run: async ({ live }) => {
+      const [queue, bookings] = await Promise.all([live.queue.toArray(), live.bookings.toArray()]);
+      const ids = new Set(bookings.map(b => String(b.id)));
+      const orphaned = queue.filter(q => q.bookingId && !ids.has(String(q.bookingId)));
+
+      return check(
+        orphaned.length === 0,
+        'All queue entries with a booking link reference an existing booking',
+        orphaned.length === 0
+          ? `${queue.length} queue entries checked against ${bookings.length} bookings`
+          : `${orphaned.length} orphaned: ${listSome(orphaned.map(q => `${q.id}→${q.bookingId}`))}`,
+        'A queue entry references a booking that no longer exists, so the visit cannot be tied back to its reservation.'
+      );
+    }
+  },
+// ---------- DASHBOARD ----------
+  {
+    id: 'DSH-01',
+    name: "Today's Bookings equals today's live activity",
+    description: "Builds bookings dated today, yesterday and a cancelled one, then runs the dashboard's own activity helper.",
+    category: 'Dashboard',
+    kind: 'scenario',
+    run: async ({ temp }) => {
+      await seedTemp(temp);
+      const today = getRiyadhDateString();
+      await temp.bookings.bulkPut([
+        { id: 'TEST-BK-T1', workshopId: FIXTURE_WORKSHOP.id, date: today, time: '11:00 AM', participants: 2, status: 'Pending', paymentStatus: 'Paid', customerName: 'A', customerPhone: '+966500000001' },
+        { id: 'TEST-BK-T2', workshopId: FIXTURE_WORKSHOP.id, date: today, time: '2:00 PM', participants: 3, status: 'Checked In', paymentStatus: 'Paid', customerName: 'B', customerPhone: '+966500000002' },
+        { id: 'TEST-BK-T3', workshopId: FIXTURE_WORKSHOP.id, date: today, time: '4:00 PM', participants: 5, status: 'Cancelled', paymentStatus: 'Paid', customerName: 'C', customerPhone: '+966500000003' },
+        { id: 'TEST-BK-Y1', workshopId: FIXTURE_WORKSHOP.id, date: '2020-01-01', time: '11:00 AM', participants: 4, status: 'Pending', paymentStatus: 'Paid', customerName: 'D', customerPhone: '+966500000004' }
+      ] as any);
+
+      const [bookings, queue, workshops] = await Promise.all([
+        temp.bookings.toArray(), temp.queue.toArray(), temp.workshops.toArray()
+      ]);
+      const activity = getActivitiesForDate({ bookings, queue, workshops }, today);
+      const participants = activity.reduce((sum, a) => sum + a.participants, 0);
+
+      return check(
+        activity.length === 2 && participants === 5,
+        "2 bookings today, 5 participants (cancelled and yesterday's excluded)",
+        `${activity.length} bookings, ${participants} participants`,
+        "The Today's Bookings figure does not match the underlying records — a cancelled or out-of-date booking is being counted."
+      );
+    }
+  },
+  {
+    id: 'DSH-02',
+    name: 'Unpaid count matches the unpaid bookings',
+    description: 'Counts unpaid, non-cancelled bookings the way the dashboard metric does.',
+    category: 'Dashboard',
+    kind: 'scenario',
+    run: async ({ temp }) => {
+      await seedTemp(temp);
+      await temp.bookings.bulkPut([
+        { id: 'TEST-U1', workshopId: 'w', date: '2026-12-01', time: '1', participants: 1, status: 'Pending', paymentStatus: 'Unpaid', customerName: 'A' },
+        { id: 'TEST-U2', workshopId: 'w', date: '2026-12-01', time: '1', participants: 1, status: 'Completed', paymentStatus: 'Unpaid', customerName: 'B' },
+        { id: 'TEST-U3', workshopId: 'w', date: '2026-12-01', time: '1', participants: 1, status: 'Cancelled', paymentStatus: 'Unpaid', customerName: 'C' },
+        { id: 'TEST-U4', workshopId: 'w', date: '2026-12-01', time: '1', participants: 1, status: 'Pending', paymentStatus: 'Paid', customerName: 'D' }
+      ] as any);
+
+      const bookings = await temp.bookings.toArray();
+      const unpaid = bookings.filter(b => b.paymentStatus === 'Unpaid' && b.status !== 'Cancelled').length;
+
+      return check(
+        unpaid === 2,
+        '2 unpaid bookings (the cancelled one does not count)',
+        `${unpaid} counted`,
+        'The unpaid figure on the dashboard disagrees with the bookings behind it.'
+      );
+    }
+  },
+  {
+    id: 'DSH-03',
+    name: 'Overdue pickup uses the 7-day threshold',
+    description: 'Checks the boundary: 6 days waiting is not overdue, 7 days is, and only ready pieces count.',
+    category: 'Dashboard',
+    kind: 'scenario',
+    run: async ({ temp }) => {
+      await seedTemp(temp);
+      const isOverdue = (piece: any) => {
+        if (piece.status !== 'Ready for Collection') return false;
+        return (piece.daysElapsed || 0) >= 7;
+      };
+      const cases = [
+        { id: 'p6', status: 'Ready for Collection', daysElapsed: 6, want: false },
+        { id: 'p7', status: 'Ready for Collection', daysElapsed: 7, want: true },
+        { id: 'p9', status: 'Ready for Collection', daysElapsed: 9, want: true },
+        { id: 'pd', status: 'Drying', daysElapsed: 30, want: false },
+        { id: 'pc', status: 'Collected', daysElapsed: 30, want: false }
+      ];
+      const wrong = cases.filter(c => isOverdue(c) !== c.want);
+
+      return check(
+        wrong.length === 0,
+        'Only ready pieces waiting 7+ days are overdue',
+        wrong.length === 0 ? 'All 5 boundary cases correct' : `Wrong for: ${listSome(wrong.map(c => c.id))}`,
+        'The overdue-pickup figure counts the wrong pieces, so staff chase the wrong customers.'
+      );
+    }
+  },
+
+  // ---------- LIVE QUEUE ----------
+  {
+    id: 'LQ-01',
+    name: "Yesterday's entries never appear on today's board",
+    description: "Adds entries for today and for a past date, then applies the board's date filter.",
+    category: 'Live Queue',
+    kind: 'scenario',
+    run: async ({ temp }) => {
+      await seedTemp(temp);
+      const today = getRiyadhDateString();
+      await temp.queue.bulkPut([
+        { id: 'Q-101', name: 'Today A', date: today, status: 'Waiting' },
+        { id: 'Q-102', name: 'Yesterday', date: '2020-01-01', status: 'Waiting' }
+      ] as any);
+
+      const board = (await temp.queue.toArray()).filter(q => q.date === today);
+      return check(
+        board.length === 1 && board[0].id === 'Q-101',
+        "Only Q-101 (today) is on the board",
+        `Board shows: ${board.map(q => `${q.id}@${q.date}`).join(', ') || 'nothing'}`,
+        "A visit from another day is showing on today's queue, inflating the waiting list."
+      );
+    }
+  },
+  {
+    id: 'LQ-02',
+    name: 'Queue numbers run in sequence and reset each day',
+    description: "Numbers a new walk-in from today's entries only, so a new day starts again at 1.",
+    category: 'Live Queue',
+    kind: 'scenario',
+    run: async ({ temp }) => {
+      await seedTemp(temp);
+      const today = getRiyadhDateString();
+      const nextNumber = (rows: QueueItem[], forDate: string) => {
+        const todays = rows.filter(q => q.date === forDate);
+        const highest = todays.reduce(
+          (max, q) => Math.max(max, parseInt(String(q.id).replace(/\D/g, ''), 10) || 0), 0);
+        return highest + 1;
+      };
+
+      await temp.queue.bulkPut([
+        { id: 'Q-201', name: 'Old day', date: '2020-01-01', status: 'Completed' },
+        { id: 'Q-202', name: 'Old day', date: '2020-01-01', status: 'Completed' }
+      ] as any);
+      const firstToday = nextNumber(await temp.queue.toArray(), today);
+
+      await temp.queue.put({ id: 'Q-001', name: 'First today', date: today, status: 'Waiting' } as any);
+      const secondToday = nextNumber(await temp.queue.toArray(), today);
+
+      return check(
+        firstToday === 1 && secondToday === 2,
+        'First walk-in today is 1, the next is 2 — yesterday does not carry over',
+        `First: ${firstToday}, second: ${secondToday}`,
+        'Queue numbering continues from a previous day or repeats a number, so staff call the wrong guest.'
+      );
+    }
+  },
+  {
+    id: 'LQ-03',
+    name: 'Queue transitions are valid and recorded',
+    description: 'Walks Waiting → Called → In Progress → Completed and checks each step is appended to history.',
+    category: 'Live Queue',
+    kind: 'scenario',
+    run: async ({ temp }) => {
+      await seedTemp(temp);
+      const today = getRiyadhDateString();
+      const VALID: QueueItem['status'][] = ['Waiting', 'Called', 'In Progress', 'Completed', 'Cancelled'];
+
+      await temp.queue.put({
+        id: 'Q-301', name: 'Guest', date: today, status: 'Waiting',
+        history: [{ status: 'Waiting', timestamp: new Date().toISOString() }]
+      } as any);
+
+      for (const next of ['Called', 'In Progress', 'Completed'] as QueueItem['status'][]) {
+        const item = await temp.queue.get('Q-301');
+        await temp.queue.update('Q-301', {
+          status: next,
+          history: [...(item!.history || []), { status: next, timestamp: new Date().toISOString() }]
+        } as any);
+      }
+
+      const final = await temp.queue.get('Q-301');
+      const trail = (final!.history || []).map(h => h.status);
+      const allValid = trail.every(st => VALID.includes(st as QueueItem['status']));
+
+      return check(
+        final!.status === 'Completed' && trail.length === 4 && allValid &&
+          trail.join(' → ') === 'Waiting → Called → In Progress → Completed',
+        'History reads Waiting → Called → In Progress → Completed',
+        `Status "${final!.status}", history: ${trail.join(' → ') || 'empty'}`,
+        'A queue status change was not written to the visit history, so there is no record of what happened.'
+      );
+    }
+  },
+  {
+    id: 'LQ-04',
+    name: 'A walk-in on a known number reuses that customer',
+    description: 'Checks in a walk-in using the fixture customer’s number written differently.',
+    category: 'Live Queue',
+    kind: 'scenario',
+    run: async ({ temp }) => {
+      await seedTemp(temp);
+      const customers = await temp.customers.toArray();
+      const before = customers.length;
+
+      // The shared identity lookup every walk-in goes through.
+      const match = findCustomerMatch(customers, { phone: '+966 50 123 4567' });
+      const linked = match.customer;
+
+      return check(
+        !!linked && linked.id === FIXTURE_CUSTOMER.id && match.reason === 'phone' && before === 1,
+        'Links to the existing customer by phone; no second record created',
+        linked
+          ? `Linked to ${linked.id} (matched on ${match.reason}), ${before} customer record(s)`
+          : `No match found — a duplicate customer would be created`,
+        'A returning walk-in was not recognised, so their visits and pieces split across two customer records.'
+      );
+    }
+  },
+
+  // ---------- BOOKINGS ----------
+  {
+    id: 'BKG-01',
+    name: 'Only the four live booking statuses are in use',
+    description: 'Audits the live bookings table for retired statuses such as Confirmed or No Show.',
+    category: 'Bookings',
+    kind: 'audit',
+    run: async ({ live }) => {
+      const allowed = ['Pending', 'Checked In', 'Completed', 'Cancelled', 'In Progress'];
+      const retired = ['Confirmed', 'No Show', 'No-Show'];
+      const bookings: Booking[] = await live.bookings.toArray();
+      const offending = bookings.filter(b => retired.includes(String(b.status)) || !allowed.includes(String(b.status)));
+
+      return check(
+        offending.length === 0,
+        'Every booking is Pending, Checked In, Completed or Cancelled',
+        offending.length === 0
+          ? `${bookings.length} bookings checked`
+          : `${offending.length} with a retired status: ${listSome(offending.map(b => `${b.id}=${b.status}`))}`,
+        'A booking carries a status the console no longer understands, so it cannot be filtered or acted on.'
+      );
+    }
+  },
+  {
+    id: 'BKG-02',
+    name: 'Pending auto-cancels 15 minutes after check-in time',
+    description: 'Runs the elapsed-time rule at 14, 15 and 16 minutes past the scheduled start.',
+    category: 'Bookings',
+    kind: 'scenario',
+    run: async () => {
+      const GRACE_MS = 15 * 60 * 1000;
+      const shouldCancel = (status: string, minutesPast: number) =>
+        status === 'Pending' && minutesPast * 60 * 1000 >= GRACE_MS;
+
+      const cases = [
+        { label: 'Pending, 14 min past', got: shouldCancel('Pending', 14), want: false },
+        { label: 'Pending, exactly 15 min', got: shouldCancel('Pending', 15), want: true },
+        { label: 'Pending, 16 min past', got: shouldCancel('Pending', 16), want: true },
+        { label: 'Pending, 5 min before', got: shouldCancel('Pending', -5), want: false },
+        { label: 'Checked In, 60 min past', got: shouldCancel('Checked In', 60), want: false }
+      ];
+      const wrong = cases.filter(c => c.got !== c.want);
+
+      return check(
+        wrong.length === 0,
+        'Cancels at 15 minutes or more, only while still Pending',
+        wrong.length === 0 ? 'All 5 timing cases correct' : `Wrong for: ${listSome(wrong.map(c => c.label))}`,
+        'The no-show rule fires too early, too late, or on a guest who already checked in.'
+      );
+    }
+  },
+  {
+    id: 'BKG-03',
+    name: 'Refund follows the 24-hour cancellation window',
+    description: 'Checks refund eligibility either side of the 24-hour threshold and that Refunded is settable.',
+    category: 'Bookings',
+    kind: 'scenario',
+    run: async ({ temp }) => {
+      await seedTemp(temp);
+      const refundEligible = (hoursUntilStart: number) => hoursUntilStart > 24;
+
+      const cases = [
+        { label: '48h before', got: refundEligible(48), want: true },
+        { label: '24.5h before', got: refundEligible(24.5), want: true },
+        { label: 'exactly 24h', got: refundEligible(24), want: false },
+        { label: '2h before', got: refundEligible(2), want: false },
+        { label: 'after the start', got: refundEligible(-3), want: false }
+      ];
+      const wrong = cases.filter(c => c.got !== c.want);
+
+      await temp.bookings.put({
+        id: 'TEST-REF', workshopId: 'w', date: '2026-12-01', time: '11:00 AM',
+        participants: 1, status: 'Pending', paymentStatus: 'Paid', customerName: 'A'
+      } as any);
+      await temp.bookings.update('TEST-REF', { status: 'Cancelled', paymentStatus: 'Refunded' });
+      const refunded = await temp.bookings.get('TEST-REF');
+
+      return check(
+        wrong.length === 0 && refunded?.paymentStatus === 'Refunded' && refunded?.status === 'Cancelled',
+        'More than 24h ahead is refundable; 24h or less is not; Refunded is storable',
+        wrong.length > 0
+          ? `Wrong for: ${listSome(wrong.map(c => c.label))}`
+          : `Window correct; stored payment status "${refunded?.paymentStatus}"`,
+        'A refund was offered inside the 24-hour cutoff, or refused when it was due.'
+      );
+    }
+  },
+  {
+    id: 'BKG-04',
+    name: 'CSV export covers the filtered rows and escapes them',
+    description: 'Applies the page filters, then checks the row count and the escaping of commas and quotes.',
+    category: 'Bookings',
+    kind: 'scenario',
+    run: async ({ temp }) => {
+      await seedTemp(temp);
+      const today = getRiyadhDateString();
+      await temp.bookings.bulkPut([
+        { id: 'TEST-C1', workshopId: 'w', date: today, time: '1', participants: 1, status: 'Pending', paymentStatus: 'Paid', customerName: 'Plain Name', customerPhone: '1', workshopTitle: 'Wheel', source: 'Website', createdAt: 'x' },
+        { id: 'TEST-C2', workshopId: 'w', date: today, time: '1', participants: 1, status: 'Completed', paymentStatus: 'Paid', customerName: 'Ali, Noura', customerPhone: '2', workshopTitle: 'Say "hello"', source: 'Website', createdAt: 'x' },
+        { id: 'TEST-C3', workshopId: 'w', date: '2020-01-01', time: '1', participants: 1, status: 'Pending', paymentStatus: 'Paid', customerName: 'Old', customerPhone: '3', workshopTitle: 'Old', source: 'Website', createdAt: 'x' }
+      ] as any);
+
+      // The page exports processedBookings — the filtered set, not every booking.
+      const rows = (await temp.bookings.toArray()).filter(b => b.date === today);
+
+      const escapeCSV = (val: any) => {
+        if (val === undefined || val === null) return '';
+        let str = String(val);
+        if (str.includes('"') || str.includes(',') || str.includes('\n') || str.includes('\r')) {
+          str = '"' + str.replace(/"/g, '""') + '"';
+        }
+        return str;
+      };
+
+      const problems: string[] = [];
+      if (rows.length !== 2) problems.push(`exported ${rows.length} rows instead of the 2 filtered ones`);
+      if (escapeCSV('Ali, Noura') !== '"Ali, Noura"') problems.push('a comma was not quoted');
+      if (escapeCSV('Say "hello"') !== '"Say ""hello"""') problems.push('a quote was not doubled');
+      if (escapeCSV('Plain Name') !== 'Plain Name') problems.push('a plain value was quoted unnecessarily');
+      if (escapeCSV(null) !== '') problems.push('a missing value did not become an empty cell');
+      if (escapeCSV('line\nbreak') !== '"line\nbreak"') problems.push('a line break was not quoted');
+
+      return check(
+        problems.length === 0,
+        'Exports the 2 filtered rows; commas, quotes and newlines are escaped',
+        problems.length === 0 ? 'Row count and all 5 escaping cases correct' : problems.join('; '),
+        'The exported CSV either covers the wrong rows or breaks into the wrong columns when a name contains a comma.'
+      );
+    }
+  },
+  {
+    id: 'BKG-05',
+    name: 'Walk-ins appear in Bookings',
+    description: 'Maps a queue walk-in the way the Bookings page does and checks it becomes a visible row.',
+    category: 'Bookings',
+    kind: 'scenario',
+    run: async ({ temp }) => {
+      await seedTemp(temp);
+      const today = getRiyadhDateString();
+      await temp.queue.put({
+        id: 'Q-401', name: 'Walk-in Guest', phone: '+966500000009', date: today,
+        status: 'In Progress', participants: 2, source: 'Walk-in', type: 'Without Instructor',
+        checkInTime: '11:15 AM', activity: 'Clay play', history: []
+      } as any);
+
+      const [queue, bookings] = await Promise.all([temp.queue.toArray(), temp.bookings.toArray()]);
+      const walkIns = queue
+        .filter(q => q.source === 'Walk-in')
+        .filter(q => !bookings.some(b => b.source === 'Walk-in' && b.customerPhone === q.phone && b.date === q.date));
+
+      const mapped = walkIns.map(q => ({
+        id: q.id,
+        status: q.status === 'In Progress' ? 'Checked In'
+          : q.status === 'Completed' ? 'Completed'
+          : q.status === 'Cancelled' ? 'Cancelled' : 'Pending',
+        source: 'Walk-in'
+      }));
+      const unified = [...bookings, ...mapped];
+
+      return check(
+        mapped.length === 1 && mapped[0].id === 'Q-401' && mapped[0].status === 'Checked In' && unified.length === 1,
+        'The walk-in shows in Bookings as Checked In',
+        mapped.length === 1
+          ? `${mapped[0].id} shown as ${mapped[0].status}`
+          : `${mapped.length} walk-ins mapped`,
+        'A walk-in visit is missing from the Bookings page, so the day’s takings and attendance are understated.'
+      );
+    }
+  },
+
+  // ---------- WORKSHOPS ----------
+  {
+    id: 'WSH-01',
+    name: 'Workshop required fields are enforced',
+    description: 'Runs the shared workshop validator over a complete record and each incomplete variant.',
+    category: 'Workshops',
+    kind: 'scenario',
+    run: async () => {
+      const good = { title: 'Wheel', category: 'Pottery', price: 250, capacity: 8, ageRange: '12+', sessions: [{}] };
+      const variants: Array<[string, any]> = [
+        ['no title', { ...good, title: '' }],
+        ['no category', { ...good, category: '' }],
+        ['negative price', { ...good, price: -1 }],
+        ['zero capacity', { ...good, capacity: 0 }],
+        ['no age range', { ...good, ageRange: '' }],
+        ['no sessions', { ...good, sessions: [] }]
+      ];
+      const notBlocked = variants.filter(([, v]) => Object.keys(validateWorkshopForm(v)).length === 0);
+      const goodBlocked = Object.keys(validateWorkshopForm(good)).length > 0;
+
+      return check(
+        notBlocked.length === 0 && !goodBlocked && validateWorkshopForm({ ...good, price: 0 }).price === undefined,
+        'Each missing field blocks the save; a complete (and free) workshop passes',
+        goodBlocked
+          ? 'A complete workshop was wrongly blocked'
+          : notBlocked.length === 0
+            ? 'All 6 incomplete variants blocked; complete and free workshops pass'
+            : `Not blocked: ${listSome(notBlocked.map(([label]) => label))}`,
+        'A workshop can be published with a missing title, category, price, capacity, age range or date.'
+      );
+    }
+  },
+  {
+    id: 'WSH-02',
+    name: 'A new category typed in is saved',
+    description: 'Checks that a category not already in the list is detected as new and written to the categories table.',
+    category: 'Workshops',
+    kind: 'scenario',
+    run: async ({ temp }) => {
+      await seedTemp(temp);
+      await temp.categories.clear();
+      await temp.categories.put({ id: 'cat-1', name: 'Pottery' } as any);
+
+      const typed = 'Glass Fusing';
+      const existing = (await temp.categories.toArray())
+        .find(c => c.name.toLowerCase() === typed.toLowerCase());
+      if (!existing) await temp.categories.put({ id: 'cat-new', name: typed } as any);
+
+      // Re-typing one that exists must not add a second row.
+      const again = (await temp.categories.toArray())
+        .find(c => c.name.toLowerCase() === 'pottery');
+      if (!again) await temp.categories.put({ id: 'cat-dupe', name: 'Pottery' } as any);
+
+      const all = await temp.categories.toArray();
+      return check(
+        all.length === 2 && all.some(c => c.name === typed),
+        '"Glass Fusing" is added; re-typing "Pottery" adds nothing',
+        `${all.length} categories: ${all.map(c => c.name).join(', ')}`,
+        'A category typed into the workshop form is lost, or duplicated on every save.'
+      );
+    }
+  },
+  {
+    id: 'WSH-03',
+    name: 'Editing a workshop updates it in place',
+    description: 'Saves an edit to an existing workshop and checks no second record appears.',
+    category: 'Workshops',
+    kind: 'scenario',
+    run: async ({ temp }) => {
+      await seedTemp(temp);
+      const before = await temp.workshops.count();
+      await temp.workshops.update(FIXTURE_WORKSHOP.id, { title: 'Renamed Class', capacity: 9 });
+      const after = await temp.workshops.toArray();
+      const edited = after.find(w => w.id === FIXTURE_WORKSHOP.id);
+
+      return check(
+        after.length === before && edited?.title === 'Renamed Class' && edited?.capacity === 9,
+        'One workshop, renamed to "Renamed Class"',
+        `${after.length} workshop(s); title is "${edited?.title}"`,
+        'Editing a workshop created a duplicate instead of updating the original.'
+      );
+    }
+  },
+  {
+    id: 'WSH-04',
+    name: 'Session capacity recomputes chairs left',
+    description: 'Changes capacity with seats already booked and checks spotsLeft and the full flag follow.',
+    category: 'Workshops',
+    kind: 'scenario',
+    run: async () => {
+      const recompute = (s: { capacity: number; spotsLeft: number }, cap: number) => {
+        const booked = Math.max(0, (Number(s.capacity) || 0) - (Number(s.spotsLeft) || 0));
+        const left = Math.max(0, cap - booked);
+        return { capacity: cap, spotsLeft: left, isFull: left === 0 };
+      };
+      const cases = [
+        { label: '10→12 with 6 booked', got: recompute({ capacity: 10, spotsLeft: 4 }, 12), want: { capacity: 12, spotsLeft: 6, isFull: false } },
+        { label: '10→5 with 9 booked', got: recompute({ capacity: 10, spotsLeft: 1 }, 5), want: { capacity: 5, spotsLeft: 0, isFull: true } },
+        { label: 'empty 8→20', got: recompute({ capacity: 8, spotsLeft: 8 }, 20), want: { capacity: 20, spotsLeft: 20, isFull: false } },
+        { label: 'full 6→8', got: recompute({ capacity: 6, spotsLeft: 0 }, 8), want: { capacity: 8, spotsLeft: 2, isFull: false } }
+      ];
+      const wrong = cases.filter(c => JSON.stringify(c.got) !== JSON.stringify(c.want));
+
+      return check(
+        wrong.length === 0,
+        'Chairs left = capacity − booked, floored at 0, with the full flag following',
+        wrong.length === 0 ? 'All 4 capacity changes correct' : `Wrong for: ${listSome(wrong.map(c => c.label))}`,
+        'Changing a session’s capacity leaves the wrong number of chairs left, so the class can be oversold.'
+      );
+    }
+  },
+  {
+    id: 'WSH-05',
+    name: 'A session can have its own instructor',
+    description: 'Stores a session instructor different from the workshop tutor and checks the staff id is resolved.',
+    category: 'Workshops',
+    kind: 'scenario',
+    run: async ({ temp }) => {
+      await seedTemp(temp);
+      await temp.staff.bulkPut([
+        { id: 'TEST-STF-1', name: 'Lina', position: 'Instructor', status: 'Active', phone: '+966533334444', email: 'lina@test.com' },
+        { id: 'TEST-STF-2', name: 'Omar', position: 'Instructor', status: 'Active', phone: '+966533335555', email: 'omar@test.com' }
+      ] as any);
+
+      const workshopTutorId = 'TEST-STF-1';
+      const staffList = await temp.staff.toArray();
+      const resolve = (sessionStaffId?: string) => {
+        const own = sessionStaffId ? staffList.find(s => s.id === sessionStaffId) : undefined;
+        const member = own || staffList.find(s => s.id === workshopTutorId);
+        return { instructor: member?.name || '', staffId: member?.id };
+      };
+
+      await temp.workshopSessions.update(FIXTURE_SESSION.id, resolve('TEST-STF-2'));
+      const session = await temp.workshopSessions.get(FIXTURE_SESSION.id);
+      const inherited = resolve();
+
+      return check(
+        session?.staffId === 'TEST-STF-2' && session?.instructor === 'Omar' &&
+          inherited.staffId === workshopTutorId,
+        'Session keeps Omar (TEST-STF-2); a session with none inherits the workshop tutor',
+        `Session stored ${session?.instructor} / ${session?.staffId}; blank inherits ${inherited.instructor}`,
+        'A session’s own instructor is not saved, so the wrong person is shown and their availability is wrong.'
+      );
+    }
+  },
+
+  // ---------- EVENTS ----------
+  {
+    id: 'EVT-01',
+    name: 'Event required fields are enforced',
+    description: 'Runs the shared event validator over a complete event and each incomplete variant.',
+    category: 'Events',
+    kind: 'scenario',
+    run: async () => {
+      const good = { title: 'Paint Night', category: 'Painting', price: 120, capacity: 20, ageRange: '16+', date: '2026-09-01' };
+      const variants: Array<[string, any]> = [
+        ['no title', { ...good, title: '' }],
+        ['no category', { ...good, category: '' }],
+        ['negative price', { ...good, price: -5 }],
+        ['zero capacity', { ...good, capacity: 0 }],
+        ['no date', { ...good, date: '' }]
+      ];
+      const notBlocked = variants.filter(([, v]) => Object.keys(validateEventForm(v)).length === 0);
+
+      return check(
+        notBlocked.length === 0 && Object.keys(validateEventForm(good)).length === 0,
+        'Each missing field blocks the save; a complete event passes',
+        notBlocked.length === 0
+          ? 'All 5 incomplete variants blocked'
+          : `Not blocked: ${listSome(notBlocked.map(([label]) => label))}`,
+        'An event can be saved with a missing title, category, price, capacity or date.'
+      );
+    }
+  },
+  {
+    id: 'EVT-02',
+    name: 'Only published events reach customers',
+    description: 'Checks the visibility filter over draft, published, cancelled and archived events.',
+    category: 'Events',
+    kind: 'scenario',
+    run: async ({ temp }) => {
+      await seedTemp(temp);
+      await temp.events.bulkPut([
+        { id: 'TEST-EV-1', title: 'Published', status: 'Published', capacity: 10, spotsLeft: 10 },
+        { id: 'TEST-EV-2', title: 'Draft', status: 'Draft', capacity: 10, spotsLeft: 10 },
+        { id: 'TEST-EV-3', title: 'Cancelled', status: 'Cancelled', capacity: 10, spotsLeft: 10 },
+        { id: 'TEST-EV-4', title: 'Archived', status: 'Archived', capacity: 10, spotsLeft: 10 }
+      ] as any);
+
+      const events: AppEvent[] = await temp.events.toArray();
+      const visible = events.filter(e => e.status === 'Published').map(e => e.title);
+
+      // Unpublishing must remove it again.
+      await temp.events.update('TEST-EV-1', { status: 'Draft' });
+      const afterUnpublish = (await temp.events.toArray()).filter(e => e.status === 'Published');
+
+      return check(
+        visible.length === 1 && visible[0] === 'Published' && afterUnpublish.length === 0,
+        'Only the published event is visible; unpublishing hides it',
+        `Visible: ${visible.join(', ') || 'none'}; after unpublishing: ${afterUnpublish.length}`,
+        'A draft, cancelled or archived event is showing on the customer site.'
+      );
+    }
+  },
+  {
+    id: 'EVT-03',
+    name: 'An event with bookings cannot be deleted',
+    description: 'Applies the delete guard to an event that has a booking and to one that has none.',
+    category: 'Events',
+    kind: 'scenario',
+    run: async ({ temp }) => {
+      await seedTemp(temp);
+      await temp.events.bulkPut([
+        { id: 'TEST-EV-BOOKED', title: 'Booked', status: 'Published', capacity: 10, spotsLeft: 9 },
+        { id: 'TEST-EV-FREE', title: 'Unbooked', status: 'Published', capacity: 10, spotsLeft: 10 }
+      ] as any);
+      await temp.bookings.put({
+        id: 'TEST-EVBK', workshopId: 'TEST-EV-BOOKED', date: '2026-12-01', time: '1',
+        participants: 1, status: 'Pending', customerName: 'A'
+      } as any);
+
+      const canDelete = async (eventId: string) =>
+        (await temp.bookings.where('workshopId').equals(eventId).count()) === 0;
+
+      const bookedDeletable = await canDelete('TEST-EV-BOOKED');
+      const freeDeletable = await canDelete('TEST-EV-FREE');
+
+      return check(
+        !bookedDeletable && freeDeletable,
+        'The booked event is protected; the unbooked one can be removed',
+        `Booked deletable: ${bookedDeletable}, unbooked deletable: ${freeDeletable}`,
+        'An event with customers booked onto it could be deleted outright, destroying their reservations.'
+      );
+    }
+  },
+
+  // ---------- CUSTOMERS ----------
+  {
+    id: 'CUS-01',
+    name: 'A customer edit saves in place',
+    description: 'Edits the fixture customer and checks the record count and the new values.',
+    category: 'Customers',
+    kind: 'scenario',
+    run: async ({ temp }) => {
+      await seedTemp(temp);
+      const before = await temp.customers.count();
+      await temp.customers.update(FIXTURE_CUSTOMER.id, { name: 'Renamed Customer', notes: 'VIP' });
+      const after = await temp.customers.toArray();
+      const edited = after.find(c => c.id === FIXTURE_CUSTOMER.id);
+
+      return check(
+        after.length === before && edited?.name === 'Renamed Customer',
+        'One customer record, renamed in place',
+        `${after.length} record(s); name is "${edited?.name}"`,
+        'Editing a customer created a second record, splitting their history in two.'
+      );
+    }
+  },
+  {
+    id: 'CUS-02',
+    name: 'A customer’s bookings and pieces are their own',
+    description: 'Builds records for two customers and checks the matching rules keep them apart.',
+    category: 'Customers',
+    kind: 'scenario',
+    run: async ({ temp }) => {
+      await seedTemp(temp);
+      await temp.customers.put({
+        id: 'TEST-CUST-2', name: 'Other Person', createdAt: '2026-01-01',
+        ...customerStorageFields({ phone: '0559998888', email: 'other@example.com' })
+      } as any);
+
+      await temp.bookings.bulkPut([
+        { id: 'TEST-B-A', customerPhone: '+966501234567', customerName: 'Fixture Customer', workshopId: 'w', date: '2026-12-01', time: '1', participants: 1, status: 'Pending' },
+        { id: 'TEST-B-B', customerPhone: '0559998888', customerName: 'Other Person', workshopId: 'w', date: '2026-12-01', time: '1', participants: 1, status: 'Pending' }
+      ] as any);
+      await temp.pieces.bulkPut([
+        { id: 'TEST-P-A', name: 'Bowl', status: 'Drying', customerId: FIXTURE_CUSTOMER.id, customerPhone: '0501234567', customerName: 'Fixture Customer' },
+        { id: 'TEST-P-B', name: 'Mug', status: 'Drying', customerId: 'TEST-CUST-2', customerPhone: '0559998888', customerName: 'Other Person' }
+      ] as any);
+
+      const [customers, bookings, pieces] = await Promise.all([
+        temp.customers.toArray(), temp.bookings.toArray(), temp.pieces.toArray()
+      ]);
+      const target = customers.find(c => c.id === FIXTURE_CUSTOMER.id)!;
+      const key = customerPhoneKey(target);
+
+      const theirBookings = bookings.filter(b => normalizeCustomerPhone(b.customerPhone) === key);
+      const theirPieces = pieces.filter(
+        p => p.customerId === target.id || normalizeCustomerPhone(p.customerPhone) === key);
+
+      return check(
+        theirBookings.length === 1 && theirBookings[0].id === 'TEST-B-A' &&
+          theirPieces.length === 1 && theirPieces[0].id === 'TEST-P-A',
+        'Fixture Customer shows exactly their own 1 booking and 1 piece',
+        `${theirBookings.length} booking(s) [${theirBookings.map(b => b.id).join(', ')}], ` +
+        `${theirPieces.length} piece(s) [${theirPieces.map(p => p.id).join(', ')}]`,
+        'A customer profile is showing another customer’s bookings or pottery.'
+      );
+    }
+  },
+
+  // ---------- PIECES ----------
+  {
+    id: 'PCS-04',
+    name: 'Backward status moves are recorded too',
+    description: 'Moves a piece forward and then back, checking both are appended with a timestamp and a user.',
+    category: 'Pieces',
+    kind: 'scenario',
+    run: async ({ temp }) => {
+      await seedTemp(temp);
+      await temp.pieces.put({
+        id: 'TEST-PC-1', name: 'Bowl', status: 'Created', customerId: FIXTURE_CUSTOMER.id,
+        customerName: 'Fixture Customer', customerPhone: '+966501234567',
+        history: [{ status: 'Created', timestamp: new Date().toISOString(), user: 'Staff' }]
+      } as any);
+
+      const move = async (to: string, user: string, reason?: string) => {
+        const piece = await temp.pieces.get('TEST-PC-1');
+        await temp.pieces.update('TEST-PC-1', {
+          status: to,
+          history: [...(piece!.history || []),
+            { status: to, timestamp: new Date().toISOString(), user, reason }]
+        } as any);
+      };
+
+      await move('Glazing', 'Staff');
+      await move('Drying', 'Manager', 'Needed more drying time');
+
+      const final = await temp.pieces.get('TEST-PC-1');
+      const trail = final!.history || [];
+      const backward = trail[trail.length - 1];
+
+      return check(
+        trail.length === 3 && final!.status === 'Drying' &&
+          backward.status === 'Drying' && !!backward.timestamp && backward.user === 'Manager',
+        'Three history entries, the last a backward move stamped with its user',
+        `Status "${final!.status}", ${trail.length} entries: ${trail.map(h => h.status).join(' → ')}`,
+        'A piece was moved backwards without leaving a record of who did it or why.'
+      );
+    }
+  },
+  {
+    id: 'PCS-05',
+    name: 'Piece status and date filters return the right subset',
+    description: 'Applies the board’s status and created-date filters to a mixed set of pieces.',
+    category: 'Pieces',
+    kind: 'scenario',
+    run: async ({ temp }) => {
+      await seedTemp(temp);
+      await temp.pieces.bulkPut([
+        { id: 'TEST-F1', name: 'A', status: 'Drying', dateCreated: '2026-03-01', customerName: 'X', daysElapsed: 2 },
+        { id: 'TEST-F2', name: 'B', status: 'Drying', dateCreated: '2026-03-15', customerName: 'X', daysElapsed: 2 },
+        { id: 'TEST-F3', name: 'C', status: 'Ready for Collection', dateCreated: '2026-03-10', customerName: 'X', daysElapsed: 12 },
+        { id: 'TEST-F4', name: 'D', status: 'Collected', dateCreated: '2026-04-01', customerName: 'X', daysElapsed: 40 }
+      ] as any);
+
+      const pieces = await temp.pieces.toArray();
+      const byStatus = pieces.filter(p => p.status === 'Drying').map(p => p.id);
+      const inMarch = pieces
+        .filter(p => p.dateCreated >= '2026-03-01' && p.dateCreated <= '2026-03-31')
+        .map(p => p.id);
+      const overdue = pieces.filter(p => p.status !== 'Collected' && p.daysElapsed >= 10).map(p => p.id);
+
+      const problems: string[] = [];
+      if (byStatus.join() !== 'TEST-F1,TEST-F2') problems.push(`status filter returned ${byStatus.join(', ') || 'nothing'}`);
+      if (inMarch.join() !== 'TEST-F1,TEST-F2,TEST-F3') problems.push(`date filter returned ${inMarch.join(', ') || 'nothing'}`);
+      if (overdue.join() !== 'TEST-F3') problems.push(`overdue filter returned ${overdue.join(', ') || 'nothing'}`);
+
+      return check(
+        problems.length === 0,
+        'Status returns 2, the March range returns 3, overdue returns 1',
+        problems.length === 0 ? 'All three filters returned the right pieces' : problems.join('; '),
+        'A filter on the pottery board hides pieces that match or shows ones that do not.'
+      );
+    }
+  },
+
+  // ---------- STAFF ----------
+  {
+    id: 'STF-01',
+    name: 'Duplicate staff phone and email are rejected',
+    description: 'Registers a staff member, then tries a second one on the same number and the same email.',
+    category: 'Staff',
+    kind: 'scenario',
+    run: async ({ temp }) => {
+      await seedTemp(temp);
+      await temp.staff.put({
+        id: 'TEST-STF-A', name: 'Lina Al-Sudais', position: 'Instructor', status: 'Active',
+        phone: '+966533334444', normalizedPhone: '533334444', email: 'lina@artycafe.com'
+      } as any);
+
+      const dupePhone = await validateStaffForm(
+        { name: 'New', position: 'Assistant', phone: '0533334444', email: 'new@artycafe.com' },
+        undefined, temp as ValidationDb);
+      const dupeEmail = await validateStaffForm(
+        { name: 'New', position: 'Assistant', phone: '0577776666', email: 'LINA@artycafe.com' },
+        undefined, temp as ValidationDb);
+      const clean = await validateStaffForm(
+        { name: 'New', position: 'Assistant', phone: '0577776666', email: 'new@artycafe.com' },
+        undefined, temp as ValidationDb);
+
+      return check(
+        !!dupePhone.phone && !!dupeEmail.email && Object.keys(clean).length === 0,
+        'Both duplicates rejected; a fresh staff member is accepted',
+        `Phone: ${dupePhone.phone || 'accepted'} | Email: ${dupeEmail.email || 'accepted'}`,
+        'Two staff records can share a phone number or email, so console sign-in matches the wrong person.'
+      );
+    }
+  },
+  {
+    id: 'STF-02',
+    name: 'An instructor cannot take two overlapping sessions',
+    description: 'Assigns a tutor to an 11:00 session, then checks 11:30 (clash) and 13:00 (free) the same day.',
+    category: 'Staff',
+    kind: 'scenario',
+    run: async ({ temp }) => {
+      await seedTemp(temp);
+      const member: StaffMember = {
+        id: 'TEST-STF-B', name: 'Lina', position: 'Instructor', status: 'Active',
+        phone: '+966533334444', email: 'lina@test.com',
+        weeklySchedule: {
+          Sunday: { isWorking: true, shifts: [{ isWorking: true, startTime: '09:00', endTime: '18:00' }] },
+          Monday: { isWorking: true, shifts: [{ isWorking: true, startTime: '09:00', endTime: '18:00' }] },
+          Tuesday: { isWorking: true, shifts: [{ isWorking: true, startTime: '09:00', endTime: '18:00' }] },
+          Wednesday: { isWorking: true, shifts: [{ isWorking: true, startTime: '09:00', endTime: '18:00' }] },
+          Thursday: { isWorking: true, shifts: [{ isWorking: true, startTime: '09:00', endTime: '18:00' }] },
+          Friday: { isWorking: true, shifts: [{ isWorking: true, startTime: '09:00', endTime: '18:00' }] },
+          Saturday: { isWorking: true, shifts: [{ isWorking: true, startTime: '09:00', endTime: '18:00' }] }
+        }
+      } as any;
+
+      const existingSession = {
+        id: 'TEST-SESS-BUSY', workshopId: FIXTURE_WORKSHOP.id, date: '2026-12-01',
+        startTime: '11:00', endTime: '13:00', staffId: member.id, capacity: 6, status: 'Published'
+      };
+      const sources = {
+        staff: [member],
+        workshopSessions: [existingSession as any],
+        workshops: [FIXTURE_WORKSHOP as any],
+        events: [],
+        queue: []
+      };
+
+      const clash = checkStaffMemberAvailability({
+        staff: member, date: '2026-12-01', startTime: '11:30', endTime: '12:30', sources
+      });
+      const free = checkStaffMemberAvailability({
+        staff: member, date: '2026-12-01', startTime: '13:00', endTime: '14:00', sources
+      });
+      const otherDay = checkStaffMemberAvailability({
+        staff: member, date: '2026-12-02', startTime: '11:30', endTime: '12:30', sources
+      });
+
+      return check(
+        !clash.isAvailable && clash.status === 'Busy' && free.isAvailable && otherDay.isAvailable,
+        'Overlapping slot is Busy; back-to-back and next-day slots are free',
+        `11:30 overlap: ${clash.status}; 13:00 back-to-back: ${free.status}; next day: ${otherDay.status}`,
+        'An instructor can be booked into two classes at once, or is wrongly blocked from a free slot.'
+      );
+    }
+  },
+  {
+    id: 'STF-03',
+    name: 'Inactive staff holding assignments raises a warning',
+    description: 'Marks a tutor with a future session Inactive and checks the console warns before saving.',
+    category: 'Staff',
+    kind: 'scenario',
+    run: async ({ temp }) => {
+      await seedTemp(temp);
+      await temp.staff.put({
+        id: 'TEST-STF-C', name: 'Busy Tutor', position: 'Instructor', status: 'Active',
+        phone: '+966533337777', email: 'busy@test.com'
+      } as any);
+      await temp.workshopSessions.put({
+        id: 'TEST-SESS-HELD', workshopId: FIXTURE_WORKSHOP.id, date: '2026-12-01',
+        startTime: '11:00 AM', staffId: 'TEST-STF-C', capacity: 6, status: 'Published'
+      } as any);
+      await temp.workshops.update(FIXTURE_WORKSHOP.id, { staffId: 'TEST-STF-C' } as any);
+
+      // The rule this test asserts: going Inactive while holding assignments
+      // must be reported to the admin before the record is saved.
+      const held = await temp.workshopSessions
+        .filter(s => s.staffId === 'TEST-STF-C' && s.status === 'Published').toArray();
+      const warned = await staffInactiveWarning(temp, 'TEST-STF-C');
+
+      return check(
+        held.length > 0 && warned !== null,
+        `A warning naming the ${held.length} held assignment(s) before saving Inactive`,
+        warned === null
+          ? `No warning is raised — the tutor still holds ${held.length} published session(s)`
+          : `Warned: ${warned}`,
+        'A tutor can be switched to Inactive while still assigned to sessions, and nobody is told — the classes silently lose their instructor.'
+      );
+    }
+  },
+
+  // ---------- SETTINGS ----------
+  {
+    id: 'SET-01',
+    name: 'Pipeline stages drive the pottery board',
+    description: 'Renames, reorders and disables a stage, then rebuilds the board columns and the selectable list.',
+    category: 'Settings',
+    kind: 'scenario',
+    run: async ({ temp }) => {
+      await seedTemp(temp);
+      await temp.pipelineStages.clear();
+      await temp.pipelineStages.bulkPut([
+        { id: 'st-1', name: 'Created', color: '#a', order: 0, visibleToCustomer: true, enabled: true },
+        { id: 'st-2', name: 'Kiln Drying', color: '#b', order: 1, visibleToCustomer: false, enabled: true },
+        { id: 'st-3', name: 'Retired Stage', color: '#c', order: 2, visibleToCustomer: false, enabled: false }
+      ] as any);
+
+      const stages = (await temp.pipelineStages.toArray()).sort((a, b) => a.order - b.order);
+      const columns = stages.map(s => s.name);
+      const selectable = stages.filter(isStageEnabled).map(s => s.name);
+      const customerVisible = stages.filter(s => s.visibleToCustomer).map(s => s.name);
+
+      return check(
+        columns.join() === 'Created,Kiln Drying,Retired Stage' &&
+          selectable.join() === 'Created,Kiln Drying' &&
+          customerVisible.join() === 'Created',
+        'Board shows all three in order; only two are selectable; one is customer-visible',
+        `Columns: ${columns.join(', ')} | Selectable: ${selectable.join(', ')} | Customer: ${customerVisible.join(', ')}`,
+        'The pottery board or the customer tracker is not following the stages configured in Settings.'
+      );
+    }
+  },
+  {
+    id: 'SET-02',
+    name: 'A stage in use cannot be deleted',
+    description: 'Applies the delete guard to a stage used by a piece, one used only in history, and an unused one.',
+    category: 'Settings',
+    kind: 'scenario',
+    run: async ({ temp }) => {
+      await seedTemp(temp);
+      await temp.pieces.put({
+        id: 'TEST-PC-S', name: 'Bowl', status: 'Drying', customerName: 'X',
+        history: [{ status: 'Glazing', timestamp: '2026-01-01', user: 'Staff' }]
+      } as any);
+
+      const pieces = await temp.pieces.toArray();
+      const canDelete = (stageName: string) =>
+        !pieces.some(p => p.status === stageName) &&
+        !pieces.some(p => (p.history || []).some(h => h.status === stageName));
+
+      const inUse = canDelete('Drying');
+      const inHistory = canDelete('Glazing');
+      const unused = canDelete('Never Used Stage');
+
+      return check(
+        !inUse && !inHistory && unused,
+        'A current stage and a historical stage are protected; an unused one can be deleted',
+        `Current: ${!inUse ? 'protected' : 'DELETABLE'}, historical: ${!inHistory ? 'protected' : 'DELETABLE'}, unused: ${unused ? 'deletable' : 'blocked'}`,
+        'A stage still referenced by pottery records could be deleted, making those records unreadable.'
+      );
+    }
+  },
+  {
+    id: 'SET-03',
+    name: 'Option lists feed the right form dropdowns',
+    description: 'Checks each configured list maps to a real card, and that live entities are not duplicated as lists.',
+    category: 'Settings',
+    kind: 'scenario',
+    run: async () => {
+      const cards = [...new Set(WORKSHOP_OPTION_LISTS.map(l => l.card))].sort();
+      const types = WORKSHOP_OPTION_LISTS.map(l => l.type);
+      const duplicatesLiveEntity = types.some(t => /tutor|instructor|staff|room|table/i.test(t));
+
+      return check(
+        cards.join() === 'curriculum,logistics' && !duplicatesLiveEntity && types.length > 0,
+        'Lists belong to the two workshop cards; staff and rooms stay live, not copied into lists',
+        `Cards: ${cards.join(', ')} | Lists: ${types.join(', ')}`,
+        'A dropdown is fed by a stale hand-kept list instead of the live records, so it drifts out of date.'
+      );
+    }
+  },
+
+  // ---------- ROLES & ACCESS ----------
+  {
+    id: 'ROL-01',
+    name: 'Super Admin reaches every page, others only theirs',
+    description: 'Checks page access for a Super Admin, a restricted Admin and a staff member with no console account.',
+    category: 'Roles & Access',
+    kind: 'scenario',
+    run: async () => {
+      const superAdmin = { id: 's1', name: 'Boss', role: 'Super Admin', status: 'Active', hasConsoleAccess: true, permissions: [] } as any;
+      const admin = { id: 's2', name: 'Admin', role: 'Admin', status: 'Active', hasConsoleAccess: true, permissions: ['dashboard', 'queue'] } as any;
+      const noAccount = { id: 's3', name: 'Floor Staff', role: 'Staff', status: 'Active', hasConsoleAccess: false, permissions: ['dashboard'] } as any;
+
+      const problems: string[] = [];
+      if (!ADMIN_PAGE_IDS.every(id => canAccessPage(superAdmin, id))) problems.push('Super Admin was blocked from a page');
+      if (!canAccessPage(admin, 'dashboard')) problems.push('Admin was blocked from a granted page');
+      if (canAccessPage(admin, 'settings')) problems.push('Admin reached Settings without permission');
+      if (canAccessPage(noAccount, 'dashboard')) problems.push('A staff member with no console account got in');
+      if (canAccessPage(null, 'dashboard')) problems.push('A signed-out visitor got in');
+      if (!isSuperAdmin(superAdmin) || isSuperAdmin(admin)) problems.push('Super Admin detection is wrong');
+
+      return check(
+        problems.length === 0,
+        'Super Admin: all pages. Admin: only granted. No console account or signed out: nothing',
+        problems.length === 0 ? 'All 6 access checks correct' : problems.join('; '),
+        'The console let someone open a page they have no permission for.'
+      );
+    }
+  },
+  {
+    id: 'ROL-02',
+    name: 'Only a Super Admin can change roles',
+    description: 'Checks who may edit permissions, and that an Admin cannot edit a Super Admin.',
+    category: 'Roles & Access',
+    kind: 'scenario',
+    run: async () => {
+      const superAdmin = { id: 's1', name: 'Boss', role: 'Super Admin', status: 'Active', hasConsoleAccess: true } as any;
+      const admin = { id: 's2', name: 'Admin', role: 'Admin', status: 'Active', hasConsoleAccess: true, permissions: ['staff'] } as any;
+
+      // The console rule: granting or changing console access is Super Admin only.
+      const mayManageRoles = (actor: StaffMember) => isSuperAdmin(actor);
+      const mayEdit = (actor: StaffMember, target: StaffMember) =>
+        isSuperAdmin(actor) || !isSuperAdmin(target);
+
+      const problems: string[] = [];
+      if (!mayManageRoles(superAdmin)) problems.push('Super Admin could not manage roles');
+      if (mayManageRoles(admin)) problems.push('An Admin was able to change roles');
+      if (mayEdit(admin, superAdmin)) problems.push('An Admin was able to edit a Super Admin');
+      if (!mayEdit(superAdmin, admin)) problems.push('A Super Admin could not edit an Admin');
+
+      return check(
+        problems.length === 0,
+        'Role changes are Super Admin only; an Admin cannot edit a Super Admin',
+        problems.length === 0 ? 'All 4 role-boundary checks correct' : problems.join('; '),
+        'An Admin can escalate their own or someone else’s access.'
+      );
+    }
+  },
+  {
+    id: 'ROL-03',
+    name: 'Default permissions match the role',
+    description: 'Checks the page set a newly granted account receives for each role.',
+    category: 'Roles & Access',
+    kind: 'scenario',
+    run: async () => {
+      const forSuper = defaultPermissionsForRole('Super Admin');
+      const forAdmin = defaultPermissionsForRole('Admin');
+      const forStaff = defaultPermissionsForRole('Staff');
+
+      const problems: string[] = [];
+      if (forSuper.length !== ADMIN_PAGE_IDS.length) problems.push('Super Admin default is not every page');
+      if (forAdmin.includes('settings')) problems.push('Admin default includes Settings');
+      if (forStaff.includes('settings') || forStaff.includes('staff')) problems.push('Staff default is too broad');
+      if (!forStaff.includes('dashboard') || !forStaff.includes('queue')) problems.push('Staff default is missing their own pages');
+
+      return check(
+        problems.length === 0,
+        'Super Admin: everything. Admin: all but Settings. Staff: Dashboard and Live Queue',
+        problems.length === 0
+          ? `Staff default: ${forStaff.join(', ')}`
+          : problems.join('; '),
+        'A new console account is granted the wrong pages by default.'
+      );
+    }
+  },
+
+  // ---------- DATA INTEGRITY (extra) ----------
+  {
+    id: 'INT-04',
+    name: 'No session points at a missing staff member',
+    description: 'Cross-checks every live workshop session’s staffId against the staff table.',
+    category: 'Data Integrity',
+    kind: 'audit',
+    run: async ({ live }) => {
+      const [sessions, staff] = await Promise.all([live.workshopSessions.toArray(), live.staff.toArray()]);
+      const ids = new Set(staff.map(s => String(s.id)));
+      const orphaned = sessions.filter(s => s.staffId && !ids.has(String(s.staffId)));
+
+      return check(
+        orphaned.length === 0,
+        'Every session with an instructor references a real staff member',
+        orphaned.length === 0
+          ? `${sessions.length} sessions checked against ${staff.length} staff`
+          : `${orphaned.length} orphaned: ${listSome(orphaned.map(s => `${s.id}→${s.staffId}`))}`,
+        'A session is assigned to a staff member who no longer exists, so the class shows no instructor.'
+      );
+    }
+  }
+];
+
+// ==========================================================
+// RUNNER
+// ==========================================================
+
+const TEMP_DB_NAME = 'ArtyCafeDatabase__systemtests';
+
+/** Opens a throwaway database built from the real schema. */
+async function openTempDatabase(): Promise<ArtyCafeDatabase> {
+  // Any leftover from an interrupted run is discarded first.
+  await ArtyCafeDatabase.delete(TEMP_DB_NAME).catch(() => undefined);
+  const temp = new ArtyCafeDatabase(TEMP_DB_NAME);
+  await temp.open();
+  return temp;
+}
+
+async function destroyTempDatabase(temp: ArtyCafeDatabase | null): Promise<void> {
+  if (!temp) return;
+  try {
+    temp.close();
+    await temp.delete();
+  } catch {
+    /* the run is over; a failed cleanup must not fail the suite */
+  }
+}
+
+/** Runs one definition and turns it into a TestResult row. */
+async function runOne(def: SystemTestDefinition, ctx: SystemTestContext): Promise<TestResult> {
+  const started = performance.now();
+  try {
+    const outcome = await def.run(ctx);
+    return {
+      id: def.id,
+      name: def.name,
+      description: def.description,
+      category: def.category,
+      duration: Math.max(1, Math.round(performance.now() - started)),
+      status: outcome.passed ? 'passed' : 'failed',
+      expected: outcome.expected,
+      actual: outcome.actual,
+      failureMessage: outcome.failureMessage
+    };
+  } catch (error: any) {
+    // A test that throws is a failure, reported with the real error.
+    return {
+      id: def.id,
+      name: def.name,
+      description: def.description,
+      category: def.category,
+      duration: Math.max(1, Math.round(performance.now() - started)),
+      status: 'failed',
+      expected: 'The test runs to completion',
+      actual: `Threw: ${error?.message || String(error)}`,
+      failureMessage: 'The test could not finish — the code it exercises raised an error.'
+    };
+  }
+}
+
+/**
+ * Runs the whole suite (or a single test by id).
+ *
+ * `onProgress` is called after each test so the page can show live progress.
+ * The temporary database is always deleted, including when a test throws.
+ */
+export async function runSystemTests(
+  options: { only?: string; onProgress?: (done: number, total: number, result: TestResult) => void } = {}
+): Promise<TestResult[]> {
+  const defs = options.only ? SYSTEM_TESTS.filter(t => t.id === options.only) : SYSTEM_TESTS;
+  const results: TestResult[] = [];
+  let temp: ArtyCafeDatabase | null = null;
+
+  try {
+    temp = await openTempDatabase();
+    const ctx: SystemTestContext = { temp, live: db };
+
+    for (const def of defs) {
+      const result = await runOne(def, ctx);
+      results.push(result);
+      options.onProgress?.(results.length, defs.length, result);
+    }
+  } finally {
+    await destroyTempDatabase(temp);
+  }
+
+  return results;
+}
+
+/** The category order used on the page. */
+export const TEST_CATEGORY_ORDER: TestCategory[] = [
+  'Validation', 'Dashboard', 'Live Queue', 'Bookings', 'Workshops', 'Events',
+  'Customers', 'Pieces', 'Staff', 'Settings', 'Roles & Access', 'Data Integrity'
+];

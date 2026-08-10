@@ -1,11 +1,18 @@
 /**
- * Utility functions for Asia/Riyadh local timezone date management
+ * Utility functions for Asia/Riyadh local timezone date management.
+ *
+ * Locale and calendar come from the shared calendar configuration, so these never
+ * fall back to a device locale that would render Hijri dates. Timezone maths is
+ * unchanged.
  */
+
+import { APP_LOCALE, APP_CALENDAR, RIYADH_TIME_ZONE } from './calendarConfig';
 
 export function getRiyadhNow(): Date {
   const now = new Date();
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Riyadh',
+  const formatter = new Intl.DateTimeFormat(APP_LOCALE, {
+    calendar: APP_CALENDAR,
+    timeZone: RIYADH_TIME_ZONE,
     year: 'numeric',
     month: 'numeric',
     day: 'numeric',
@@ -56,8 +63,9 @@ export function parseBookingDateTimeToRiyadhDate(dateStr: string, timeStr: strin
 }
 
 export function getRiyadhDateString(date: Date = new Date()): string {
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Riyadh',
+  const formatter = new Intl.DateTimeFormat(APP_LOCALE, {
+    calendar: APP_CALENDAR,
+    timeZone: RIYADH_TIME_ZONE,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -70,8 +78,9 @@ export function getRiyadhDateString(date: Date = new Date()): string {
 }
 
 export function getRiyadhFormattedDate(date: Date = new Date()): string {
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Riyadh',
+  const formatter = new Intl.DateTimeFormat(APP_LOCALE, {
+    calendar: APP_CALENDAR,
+    timeZone: RIYADH_TIME_ZONE,
     weekday: 'long',
     month: 'long',
     day: 'numeric',

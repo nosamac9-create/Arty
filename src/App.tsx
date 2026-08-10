@@ -18,6 +18,24 @@ import { BirthdayBookingSection } from './components/BirthdayBookingSection';
 import { MyPiecesSection } from './components/MyPiecesSection';
 
 import { AdminSidebar, AdminTopBar } from './components/AdminSidebar';
+import { AdminLoginSection } from './components/AdminLoginSection';
+import { firstAllowedPage, getPageLabel } from './utils/adminAccess';
+
+/** Shown when a signed-in account opens a page it is not authorized for. */
+const AdminAccessDenied: React.FC<{ pageId: string }> = ({ pageId }) => (
+  <div className="p-10 flex items-center justify-center">
+    <div className="max-w-md w-full bg-white border border-brand-clay rounded-3xl p-8 text-center space-y-3 shadow-sm">
+      <div className="mx-auto h-12 w-12 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center">
+        <span className="text-xl font-bold">!</span>
+      </div>
+      <h2 className="font-display text-xl font-bold text-brand-charcoal">Access restricted</h2>
+      <p className="text-xs text-brand-charcoal/65 leading-relaxed">
+        Your account does not have permission to open <strong>{getPageLabel(pageId)}</strong>.
+        Ask a Super Admin to grant it in Settings → Staff Registry.
+      </p>
+    </div>
+  </div>
+);
 import { AdminDashboardSection } from './components/AdminDashboardSection';
 import { LiveQueueSection } from './components/LiveQueueSection';
 import { AdminBookingsSection } from './components/AdminBookingsSection';
@@ -32,7 +50,18 @@ import { AdminSettingsSection } from './components/AdminSettingsSection';
 import { Sparkles, ArrowRightLeft } from 'lucide-react';
 
 export default function App() {
-  const { perspective, setPerspective, customerTab, adminTab } = useApp();
+  const {
+    perspective, setPerspective, customerTab, adminTab, setAdminTab,
+    currentStaff, staffAuthChecked, canAccessAdminPage
+  } = useApp();
+
+  // Land on, and stay on, a page this account is allowed to open.
+  React.useEffect(() => {
+    if (!currentStaff) return;
+    if (canAccessAdminPage(adminTab)) return;
+    const landing = firstAllowedPage(currentStaff);
+    if (landing && landing !== adminTab) setAdminTab(landing);
+  }, [currentStaff, adminTab]);
 
   return (
     <div className="min-h-screen bg-brand-cream font-sans text-brand-charcoal flex flex-col justify-between selection:bg-brand-terracotta/20">
@@ -96,6 +125,15 @@ export default function App() {
       ) : (
         
         /* 2. ADMIN CONSOLE PERSPECTIVE FRAME */
+        !staffAuthChecked ? (
+          <div className="flex-1 flex items-center justify-center bg-brand-cream text-xs font-bold text-brand-charcoal/50">
+            Checking your session…
+          </div>
+        ) : !currentStaff ? (
+          /* No console session: the login screen is the only thing rendered, so
+             protected pages are never mounted for an unauthenticated visitor. */
+          <AdminLoginSection />
+        ) : (
         <div className="flex flex-1 min-h-[calc(100vh-32px)] overflow-hidden">
           <AdminSidebar />
           
@@ -103,19 +141,28 @@ export default function App() {
             <AdminTopBar />
             
             <main className="flex-1">
-              {adminTab === 'dashboard' && <AdminDashboardSection />}
-              {adminTab === 'queue' && <LiveQueueSection />}
-              {adminTab === 'customers' && <AdminCustomersSection />}
-              {adminTab === 'staff' && <AdminStaffSection />}
-              {adminTab === 'bookings' && <AdminBookingsSection />}
-              {adminTab === 'workshops-admin' && <AdminWorkshopFormSection />}
-              {adminTab === 'events-admin' && <AdminEventsSection />}
-              {adminTab === 'pieces-admin' && <AdminPiecesTrackingSection />}
-              {adminTab === 'system-health' && <SystemHealthSection />}
-              {adminTab === 'settings' && <AdminSettingsSection />}
+              {/* Every page is gated: the component is not rendered at all unless
+                  the signed-in account is authorized for it. */}
+              {!canAccessAdminPage(adminTab) ? (
+                <AdminAccessDenied pageId={adminTab} />
+              ) : (
+                <>
+                  {adminTab === 'dashboard' && <AdminDashboardSection />}
+                  {adminTab === 'queue' && <LiveQueueSection />}
+                  {adminTab === 'customers' && <AdminCustomersSection />}
+                  {adminTab === 'staff' && <AdminStaffSection />}
+                  {adminTab === 'bookings' && <AdminBookingsSection />}
+                  {adminTab === 'workshops-admin' && <AdminWorkshopFormSection />}
+                  {adminTab === 'events-admin' && <AdminEventsSection />}
+                  {adminTab === 'pieces-admin' && <AdminPiecesTrackingSection />}
+                  {adminTab === 'system-health' && <SystemHealthSection />}
+                  {adminTab === 'settings' && <AdminSettingsSection />}
+                </>
+              )}
             </main>
           </div>
         </div>
+        )
       )}
 
     </div>

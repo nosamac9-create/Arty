@@ -8,13 +8,18 @@ import { useApp } from '../context/AppContext';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
 import { getRiyadhNow, parseBookingDateTimeToRiyadhDate, getRiyadhDateString } from '../utils/dateUtils';
+import { resolveStaffName } from '../utils/staffAssignments';
+import { getSessionSeatUsage } from '../utils/queueUtils';
+import { validateBookingForm } from '../utils/validation';
+import { MONTH_NAMES, WEEKDAY_NAMES_SHORT } from '../utils/calendarConfig';
 import { 
   Calendar as CalendarIcon, User, Flame, Clock, Award, Map, CheckCircle2, Minus, Plus, Edit, ArrowLeft, Users, ChevronLeft, ChevronRight 
 } from 'lucide-react';
 
 export const WorkshopDetailSection: React.FC = () => {
   const { 
-    workshops, selectedWorkshopId, setCustomerTab, setPendingBooking, currentUser, todayDateStr
+    workshops, selectedWorkshopId, setCustomerTab, setPendingBooking, currentUser, todayDateStr, staff, queue,
+    workshopFields
   } = useApp();
 
   const workshop = useMemo(() => {
@@ -56,11 +61,10 @@ export const WorkshopDetailSection: React.FC = () => {
       if (sess.status !== 'Published') continue;
       if (sess.date < todayStr) continue;
 
-      const activeBookings = dbBookings.filter(
-        b => b.date === sess.date && b.time === sess.startTime && b.status !== 'Cancelled'
-      );
-      const bookedCount = activeBookings.reduce((sum, b) => sum + (b.participants || 1), 0);
-      const spotsLeft = Math.max(0, sess.capacity - bookedCount);
+      // Same shared calculation the studio console uses: bookings AND walk-ins.
+      const { remainingCapacity: spotsLeft } = getSessionSeatUsage(sess, {
+        workshops, bookings: dbBookings, queue
+      });
       if (spotsLeft <= 0) continue;
 
       const sessDateObj = parseBookingDateTimeToRiyadhDate(sess.date, sess.startTime);
@@ -70,12 +74,12 @@ export const WorkshopDetailSection: React.FC = () => {
       }
     }
     return setOfDates;
-  }, [dbSessions, dbBookings]);
+  }, [dbSessions, dbBookings, queue, workshops]);
 
   // Dynamic Date Strip Generation (Starting from TODAY i = 0 for same-day booking)
   const dateStrip = useMemo(() => {
     const dates = [];
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const days = WEEKDAY_NAMES_SHORT;
     const todayRiyadhStr = getRiyadhDateString();
     const [y, m, d] = (todayRiyadhStr || '2026-07-23').split('-').map(Number);
     const baseDate = new Date(y, m - 1, d);
@@ -149,10 +153,8 @@ export const WorkshopDetailSection: React.FC = () => {
     setCalendarMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
   };
 
-  const monthNames = [
-    'January', 'February', 'March', 'April', 'May', 'June', 
-    'July', 'August', 'September', 'October', 'November', 'December'
-  ];
+  // English Gregorian month names from the shared calendar configuration.
+  const monthNames = MONTH_NAMES;
 
   // Time Slots for selected date calculated from Dexie
   const slots = useMemo(() => {
@@ -166,11 +168,9 @@ export const WorkshopDetailSection: React.FC = () => {
     const todayStr = getRiyadhDateString();
 
     return matchingSessions.map(sess => {
-      const activeBookings = dbBookings.filter(
-        b => b.date === selectedDate && b.time === sess.startTime && b.status !== 'Cancelled'
-      );
-      const bookedCount = activeBookings.reduce((sum, b) => sum + (b.participants || 1), 0);
-      const spotsLeft = Math.max(0, sess.capacity - bookedCount);
+      const { remainingCapacity: spotsLeft } = getSessionSeatUsage(sess, {
+        workshops, bookings: dbBookings, queue
+      });
 
       const sessDateObj = parseBookingDateTimeToRiyadhDate(selectedDate, sess.startTime);
       const isPastCutoff = selectedDate < todayStr || (selectedDate === todayStr && sessDateObj.getTime() < riyadhNow.getTime() + 30 * 60 * 1000);
@@ -182,13 +182,31 @@ export const WorkshopDetailSection: React.FC = () => {
         capacity: sess.capacity,
         isFull: spotsLeft <= 0,
         isPastCutoff,
-        instructor: sess.instructor || workshop.instructor
+        // Resolve the tutor from the assignment's staff ID so renames show through.
+        instructor: resolveStaffName(staff, sess.staffId || workshop.staffId, sess.instructor || workshop.instructor)
       };
     });
-  }, [dbSessions, dbBookings, selectedDate, workshop]);
+  }, [dbSessions, dbBookings, selectedDate, workshop, staff, queue, workshops]);
+
+  const workshopTutorName = resolveStaffName(staff, workshop?.staffId, workshop?.instructor);
+
+  /**
+   * Admin-created fields the Staff Console marked visible to customers. Core
+   * fields already have their own places on this page, and internal fields stay
+   * hidden unless explicitly configured.
+   */
+  const customerVisibleFields = useMemo(
+    () => workshopFields.filter(f => f.enabled && f.customerVisible && !f.system),
+    [workshopFields]
+  );
 
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
+  // Id of the chosen workshop session — travels with the booking so the tutor
+  // can always be resolved from the real session record.
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [participants, setParticipants] = useState<number>(1);
+  // Capacity/session message from the shared validation layer.
+  const [bookingError, setBookingError] = useState<string | null>(null);
 
   // Participant edit info sync
   const [isEditingInfo, setIsEditingInfo] = useState(false);
@@ -227,11 +245,24 @@ export const WorkshopDetailSection: React.FC = () => {
     return `${workshop.price} SAR / Person`;
   }, [workshop]);
 
-  const handleBook = () => {
+  const handleBook = async () => {
     if (!selectedSlot) return;
+
+    // Re-read capacity from the database rather than trusting the number the
+    // page loaded with, and confirm the session is still bookable.
+    const bookingErrors = await validateBookingForm({
+      sessionId: selectedSessionId,
+      participants
+    });
+    if (Object.keys(bookingErrors).length > 0) {
+      setBookingError(bookingErrors.sessionId || bookingErrors.participants || null);
+      return;
+    }
+    setBookingError(null);
 
     setPendingBooking({
       workshopId: workshop.id,
+      sessionId: selectedSessionId || undefined,
       workshopTitle: workshop.title,
       date: selectedDate,
       time: selectedSlot,
@@ -347,9 +378,31 @@ export const WorkshopDetailSection: React.FC = () => {
               </div>
               <div className="text-left">
                 <p className="text-[10px] font-bold text-brand-sage uppercase tracking-wider">Tutor</p>
-                <p className="text-sm font-semibold text-brand-charcoal">{workshop.instructor}</p>
+                <p className="text-sm font-semibold text-brand-charcoal">{workshopTutorName}</p>
               </div>
             </div>
+
+            {/* Admin-created fields marked "Visible to Customers" in
+                Settings → Workshop Detail Lists. */}
+            {customerVisibleFields.map(field => {
+              const value = workshop?.customFields?.[field.fieldKey];
+              const text = Array.isArray(value) ? value.join(', ') : value;
+              if (text === undefined || text === null || String(text).trim() === '') return null;
+
+              return (
+                <div key={field.fieldId} className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-cream text-brand-terracotta border border-brand-clay">
+                    <CalendarIcon className="h-5 w-5" />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-[10px] font-bold text-brand-sage uppercase tracking-wider">{field.label}</p>
+                    <p className="text-sm font-semibold text-brand-charcoal">
+                      {typeof text === 'boolean' ? (text ? 'Yes' : 'No') : String(text)}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
 
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-cream text-brand-terracotta border border-brand-clay">
@@ -546,7 +599,10 @@ export const WorkshopDetailSection: React.FC = () => {
                     return (
                       <button
                         key={s.id || s.time}
-                        onClick={() => setSelectedSlot(s.time)}
+                        onClick={() => {
+                          setSelectedSlot(s.time);
+                          setSelectedSessionId(s.id ? String(s.id) : null);
+                        }}
                         className={`px-4 py-3 rounded-2xl border transition-all cursor-pointer text-sm font-semibold flex justify-between items-center ${
                           isSelected 
                             ? 'border-2 border-brand-terracotta bg-brand-terracotta/5 text-brand-terracotta shadow-xs' 
@@ -638,6 +694,10 @@ export const WorkshopDetailSection: React.FC = () => {
                 <p className="text-[10px] text-brand-charcoal/40 italic font-medium">{priceSubtitle}</p>
               </div>
             </div>
+
+            {bookingError && (
+              <p className="text-xs text-red-500 font-bold text-center">{bookingError}</p>
+            )}
 
             {/* 5. Book button */}
             <button

@@ -8,6 +8,10 @@ import { useApp } from '../context/AppContext';
 import { Palette, Mail, Lock, User, Check, AlertCircle, ArrowLeft, LogIn, KeyRound, ShieldCheck, CheckCircle2, RefreshCw } from 'lucide-react';
 import { PhoneInput } from './PhoneInput';
 import { validatePhone, normalisePhone } from '../utils/phoneUtils';
+import {
+  validateCustomerForm, canonicalEmail, canonicalPhone, passwordChecklist,
+  validatePasswordRule, validatePasswordConfirmation
+} from '../utils/validation';
 
 export const AuthSection: React.FC = () => {
   const { 
@@ -23,6 +27,10 @@ export const AuthSection: React.FC = () => {
   const [phone, setPhone] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  // Field-keyed messages from the shared validation layer.
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const clearError = (key: string) =>
+    setErrors(prev => (prev[key] ? { ...prev, [key]: '' } : prev));
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Password Recovery States
@@ -59,42 +67,21 @@ export const AuthSection: React.FC = () => {
     e.preventDefault();
     setErrorMsg(null);
 
-    if (!fullName.trim()) {
-      setErrorMsg('Full name is required.');
-      return;
-    }
-
-    if (!email || !email.includes('@')) {
-      setErrorMsg('Valid email address is required.');
-      return;
-    }
-
-    if (!phone) {
-      setErrorMsg('Phone number is required.');
-      return;
-    }
-
-    const phoneValidation = validatePhone('+966', phone);
-    if (!phoneValidation.isValid) {
-      setErrorMsg(phoneValidation.error || 'Valid phone number is required.');
-      return;
-    }
-
-    if (!password || password.length < 6) {
-      setErrorMsg('Password must be at least 6 characters long.');
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setErrorMsg('Passwords do not match.');
-      return;
-    }
+    // Every rule comes from the shared validation layer, including the
+    // duplicate phone/email checks against the customers table.
+    const fieldErrors = await validateCustomerForm(
+      { name: fullName, email, phone, password, confirmPassword },
+      { requirePassword: true }
+    );
+    setErrors(fieldErrors);
+    if (Object.keys(fieldErrors).length > 0) return;
 
     setIsSubmitting(true);
     const res = await registerCustomer({
       name: fullName.trim(),
-      email: email.trim(),
-      phone: phone.trim(),
+      // Stored in the one canonical format, so duplicate checks match later.
+      email: canonicalEmail(email),
+      phone: canonicalPhone(phone),
       password
     });
     setIsSubmitting(false);
@@ -151,13 +138,16 @@ export const AuthSection: React.FC = () => {
     e.preventDefault();
     setErrorMsg(null);
 
-    if (!newPassword || newPassword.length < 6) {
-      setErrorMsg('New password must be at least 6 characters long.');
+    // The same shared password rules as sign-up.
+    const strength = validatePasswordRule(newPassword);
+    if (!strength.valid) {
+      setErrorMsg(strength.error!);
       return;
     }
 
-    if (newPassword !== confirmNewPassword) {
-      setErrorMsg('Passwords do not match.');
+    const match = validatePasswordConfirmation(newPassword, confirmNewPassword);
+    if (!match.valid) {
+      setErrorMsg(match.error!);
       return;
     }
 
@@ -353,9 +343,10 @@ export const AuthSection: React.FC = () => {
                       required
                       placeholder="Noura Al-Amri"
                       value={fullName}
-                      onChange={e => { setFullName(e.target.value); setErrorMsg(null); }}
+                      onChange={e => { setFullName(e.target.value); setErrorMsg(null); clearError('name'); }}
                       className="w-full bg-brand-cream border border-brand-clay rounded-xl py-3.5 px-4 text-sm font-semibold text-brand-charcoal shadow-2xs"
                     />
+                    {errors.name && <p className="text-xs text-red-500 font-medium">{errors.name}</p>}
                   </div>
 
                   <div className="space-y-1">
@@ -365,9 +356,10 @@ export const AuthSection: React.FC = () => {
                       required
                       placeholder="noura@amri.sa"
                       value={email}
-                      onChange={e => { setEmail(e.target.value); setErrorMsg(null); }}
+                      onChange={e => { setEmail(e.target.value); setErrorMsg(null); clearError('email'); }}
                       className="w-full bg-brand-cream border border-brand-clay rounded-xl py-3.5 px-4 text-sm font-semibold text-brand-charcoal shadow-2xs"
                     />
+                    {errors.email && <p className="text-xs text-red-500 font-medium">{errors.email}</p>}
                   </div>
 
                   {/* Phone with Country Code Dropdown */}
@@ -375,19 +367,35 @@ export const AuthSection: React.FC = () => {
                     label="Phone number"
                     required
                     value={phone}
-                    onChange={(val) => { setPhone(val); setErrorMsg(null); }}
+                    error={errors.phone}
+                    onChange={(val) => { setPhone(val); setErrorMsg(null); clearError('phone'); }}
                   />
 
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-brand-charcoal/80">Password (min 6 chars) *</label>
+                    <label className="text-xs font-bold text-brand-charcoal/80">Password *</label>
                     <input
                       type="password"
                       required
                       placeholder="••••••••"
                       value={password}
-                      onChange={e => { setPassword(e.target.value); setErrorMsg(null); }}
+                      onChange={e => { setPassword(e.target.value); setErrorMsg(null); clearError('password'); }}
                       className="w-full bg-brand-cream border border-brand-clay rounded-xl py-3.5 px-4 text-sm font-semibold text-brand-charcoal shadow-2xs"
                     />
+                    {/* Live checklist, updating as they type. */}
+                    <ul className="space-y-0.5 pt-0.5">
+                      {passwordChecklist(password).map(item => (
+                        <li
+                          key={item.label}
+                          className={`text-[11px] font-semibold flex items-center gap-1.5 ${
+                            item.met ? 'text-brand-sage' : 'text-brand-charcoal/45'
+                          }`}
+                        >
+                          <span>{item.met ? '✓' : '•'}</span>
+                          <span>{item.label}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    {errors.password && <p className="text-xs text-red-500 font-medium">{errors.password}</p>}
                   </div>
 
                   <div className="space-y-1">
@@ -397,9 +405,12 @@ export const AuthSection: React.FC = () => {
                       required
                       placeholder="••••••••"
                       value={confirmPassword}
-                      onChange={e => { setConfirmPassword(e.target.value); setErrorMsg(null); }}
+                      onChange={e => { setConfirmPassword(e.target.value); setErrorMsg(null); clearError('confirmPassword'); }}
                       className="w-full bg-brand-cream border border-brand-clay rounded-xl py-3.5 px-4 text-sm font-semibold text-brand-charcoal shadow-2xs"
                     />
+                    {errors.confirmPassword && (
+                      <p className="text-xs text-red-500 font-medium">{errors.confirmPassword}</p>
+                    )}
                   </div>
 
                   <button

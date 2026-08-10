@@ -2,8 +2,34 @@ import Dexie, { type Table } from 'dexie';
 import { 
   Workshop, Booking, QueueItem, PotteryPiece, TestResult, Category, NotificationItem,
   PipelineStage, StaffMember, WorkshopOption, EventOption, AppSetting, AppEvent, CustomerAccount,
-  WorkshopSessionRecord
+  WorkshopSessionRecord, BirthdayPackage, StudioResource
 } from './types';
+
+/**
+ * The current (version 9) store definitions.
+ *
+ * Named so a temporary database — used by the System Health suite, which must
+ * never write into the real tables — is created from exactly the same schema.
+ */
+export const ARTY_STORES_V9 = {
+  workshops: 'id, category, title, status',
+  workshopSessions: 'id, workshopId, date, status',
+  bookings: 'id, date, status, workshopId',
+  queue: 'id, date, status, type, bookingId',
+  pieces: 'id, status',
+  systemTests: 'id',
+  categories: 'id, name',
+  notifications: 'id, type, customerPhone',
+  pipelineStages: 'id, order',
+  staff: 'id, status',
+  workshopOptions: 'id, type, value, order',
+  eventOptions: 'id, type, value, order',
+  appSettings: 'id',
+  events: 'id, category, title, date, status',
+  customers: 'id, email, phone',
+  birthdayPackages: 'id, status, displayOrder',
+  studioResources: 'id, type, status, order'
+};
 
 export class ArtyCafeDatabase extends Dexie {
   workshops!: Table<Workshop>;
@@ -21,9 +47,12 @@ export class ArtyCafeDatabase extends Dexie {
   appSettings!: Table<AppSetting>;
   events!: Table<AppEvent>;
   customers!: Table<CustomerAccount>;
+  birthdayPackages!: Table<BirthdayPackage>;
+  studioResources!: Table<StudioResource>;
 
-  constructor() {
-    super('ArtyCafeDatabase');
+  /** `name` lets a throwaway database be created alongside the real one. */
+  constructor(name: string = 'ArtyCafeDatabase') {
+    super(name);
     this.version(3).stores({
       workshops: 'id, category, title',
       bookings: 'id, date, status, workshopId',
@@ -107,6 +136,27 @@ export class ArtyCafeDatabase extends Dexie {
       events: 'id, category, title, date, status',
       customers: 'id, email, phone'
     });
+
+    this.version(8).stores({
+      workshops: 'id, category, title, status',
+      workshopSessions: 'id, workshopId, date, status',
+      bookings: 'id, date, status, workshopId',
+      queue: 'id, date, status, type, bookingId',
+      pieces: 'id, status',
+      systemTests: 'id',
+      categories: 'id, name',
+      notifications: 'id, type, customerPhone',
+      pipelineStages: 'id, order',
+      staff: 'id, status',
+      workshopOptions: 'id, type, value, order',
+      eventOptions: 'id, type, value, order',
+      appSettings: 'id',
+      events: 'id, category, title, date, status',
+      customers: 'id, email, phone',
+      birthdayPackages: 'id, status, displayOrder'
+    });
+
+    this.version(9).stores(ARTY_STORES_V9);
   }
 }
 

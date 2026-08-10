@@ -7,14 +7,25 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
-import { RecurringScheduleRule } from '../types';
+import {
+  RecurringScheduleRule, isWorkshopOptionEnabled,
+  WorkshopFieldConfig, fieldsForCard, fieldSpansFullRow, coerceFieldValue
+} from '../types';
 import { generateSessionsForMonth } from '../utils/scheduleGenerator';
 import { checkStaffMemberAvailability } from '../utils/staffAvailabilityUtils';
+import { resolveStaffId, resolveStaffName, AssignmentSources } from '../utils/staffAssignments';
+import {
+  getStudioSpaces, checkSpaceAvailability, findSpaceConflictAcrossSlots,
+  StudioSpace, SpaceSources
+} from '../utils/spaceAvailability';
+import { findRuleConflict, getRuleSlots, formatSlotDate, RuleConflict } from '../utils/recurringConflicts';
+import { validateWorkshopForm } from '../utils/validation';
 import { 
   Upload, Trash2, Plus, AlertCircle, Sparkles, Image as ImageIcon, 
   Settings, FolderKanban, Check, Save, Eye, Bold, Italic, Link, AlignLeft, X,
   Search, ArrowUpDown, ChevronUp, ChevronDown, Layers, Calendar, User, Clock, RefreshCw
 } from 'lucide-react';
+import { DateInput } from './DateInput';
 
 export const AdminWorkshopFormSection: React.FC = () => {
   const { 
@@ -26,7 +37,13 @@ export const AdminWorkshopFormSection: React.FC = () => {
     setEditingWorkshopId,
     staff,
     todayDateStr,
-    events
+    events,
+    queue,
+    workshopSessions,
+    studioResources,
+    workshopOptions,
+    workshopFields,
+    appSettings
   } = useApp();
 
   // Load workshops from Dexie
@@ -37,6 +54,8 @@ export const AdminWorkshopFormSection: React.FC = () => {
 
   // Saving state to prevent duplicate submissions
   const [isSaving, setIsSaving] = useState(false);
+  // Field-keyed messages from the shared validation layer.
+  const [workshopErrors, setWorkshopErrors] = useState<Record<string, string>>({});
 
   // Load categories from Dexie
   const dbCategories = useLiveQuery(() => db.categories.toArray()) || [];
@@ -52,8 +71,11 @@ export const AdminWorkshopFormSection: React.FC = () => {
   const [price, setPrice] = useState(250);
   const [duration, setDuration] = useState('2 Hours');
   const [capacity, setCapacity] = useState(10);
-  const [instructor, setInstructor] = useState('Ali bin Khalid');
+  // The tutor is held as a stable staff ID; names are resolved from Staff Management.
+  const [tutorStaffId, setTutorStaffId] = useState('');
   const [room, setRoom] = useState('The Clay Station (Studio A)');
+  // Stable studio space id; `room` is only the label kept for display.
+  const [roomId, setRoomId] = useState('');
   const [status, setStatus] = useState<'Draft' | 'Published' | 'Archived'>('Published');
   const [skillLevel, setSkillLevel] = useState<'Beginner' | 'Intermediate' | 'Advanced' | 'All Levels'>('Beginner');
   const [image, setImage] = useState<string>('https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?auto=format&fit=crop&w=800&q=80');
@@ -65,6 +87,10 @@ export const AdminWorkshopFormSection: React.FC = () => {
   // Required Field in Error State
   const [ageRange, setAgeRange] = useState(''); // empty by default to trigger the error state
   const [errorTouched, setErrorTouched] = useState(true);
+
+  // Values for admin-created fields, keyed by stable fieldKey.
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, any>>({});
+  const [customTagInputs, setCustomTagInputs] = useState<Record<string, string>>({});
 
   // Sessions Repeatable List
   const [sessions, setSessions] = useState<any[]>([]);
@@ -118,8 +144,9 @@ export const AdminWorkshopFormSection: React.FC = () => {
     setPrice(250);
     setDuration('2 Hours');
     setCapacity(10);
-    setInstructor('Ali bin Khalid');
+    setTutorStaffId('');
     setRoom('The Clay Station (Studio A)');
+    setRoomId('');
     setStatus('Published');
     setSkillLevel('Beginner');
     setImage('https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?auto=format&fit=crop&w=800&q=80');
@@ -127,6 +154,8 @@ export const AdminWorkshopFormSection: React.FC = () => {
     setAgeRange('');
     setSessions([]);
     setRecurringSchedules([]);
+    setCustomFieldValues({});
+    setCustomTagInputs({});
     setErrorTouched(false);
   };
 
@@ -144,8 +173,10 @@ export const AdminWorkshopFormSection: React.FC = () => {
         setPrice(ws.price || 250);
         setDuration(ws.duration || '2 Hours');
         setCapacity(ws.capacity || 10);
-        setInstructor(ws.instructor || 'Ali bin Khalid');
+        // Legacy workshops stored only a tutor name — resolve it back to a staff ID.
+        setTutorStaffId(resolveStaffId(staff, ws.staffId, ws.instructor) || '');
         setRoom(ws.room || 'The Clay Station (Studio A)');
+        setRoomId(ws.roomId || '');
         setStatus(ws.status || 'Published');
         setSkillLevel(ws.skillLevel || 'Beginner');
         setImage(ws.image || 'https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?auto=format&fit=crop&w=800&q=80');
@@ -153,12 +184,122 @@ export const AdminWorkshopFormSection: React.FC = () => {
         setAgeRange(ws.ageRange || '');
         setSessions(ws.sessions || []);
         setRecurringSchedules(ws.recurringSchedules || []);
+        // Admin-created field values, kept even for fields later disabled.
+        setCustomFieldValues(ws.customFields || {});
         setErrorTouched(false);
       }
     } else {
       resetForm();
     }
-  }, [editingWorkshopId, workshops]);
+  }, [editingWorkshopId, workshops, staff]);
+
+  // Shared assignment sources for every availability check on this page.
+  const assignmentSources: AssignmentSources = useMemo(
+    () => ({ staff, workshopSessions, workshops, events: rawEvents || events || [], queue }),
+    [staff, workshopSessions, workshops, rawEvents, events, queue]
+  );
+
+  /**
+   * Option lists from Settings → Workshop Detail Lists. A value already saved on
+   * the workshop stays selectable even if the option was later disabled, so
+   * editing an existing workshop never silently changes it.
+   */
+  const optionValues = (type: string, currentValue?: string) => {
+    const list = (workshopOptions || [])
+      .filter(o => o.type === type)
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+    const enabled = list.filter(isWorkshopOptionEnabled).map(o => o.value);
+    if (currentValue && !enabled.includes(currentValue)) return [...enabled, currentValue];
+    return enabled;
+  };
+
+  const selectedTutor = useMemo(
+    () => staff.find(s => s.id === tutorStaffId) || null,
+    [staff, tutorStaffId]
+  );
+
+  // Studio rooms and tables come from the shared option list and capacity settings.
+  const capacityConfig = useMemo(
+    () => appSettings?.find(s => s.id === 'capacitySettings')?.value,
+    [appSettings]
+  );
+
+  // Rooms and table stations come from Settings → Capacity, never a fixed list.
+  const studioSpaces: StudioSpace[] = useMemo(
+    () => getStudioSpaces(studioResources),
+    [studioResources]
+  );
+
+  const spaceSources: SpaceSources = useMemo(
+    () => ({ workshopSessions, workshops, events: rawEvents || events || [], queue }),
+    [workshopSessions, workshops, rawEvents, events, queue]
+  );
+
+  const selectedSpace = useMemo(
+    () => studioSpaces.find(sp => sp.id === roomId) || null,
+    [studioSpaces, roomId]
+  );
+
+  const selectedSpaceLabel = selectedSpace?.name || '';
+
+
+
+  /** Exclusions so the workshop being edited never conflicts with itself. */
+  const editingExclusion = useMemo(() => ({
+    workshopId: editingWorkshopId ? String(editingWorkshopId) : undefined,
+    sessionIds: sessions.map(s => String(s.id))
+  }), [editingWorkshopId, sessions]);
+
+  /** Live warning for the workshop-level room against this workshop's own sessions. */
+  const roomWarning = useMemo(() => {
+    if (!selectedSpace) return '';
+    const slots = sessions
+      .filter(s => s.date && (s.time || s.startTime))
+      .map(s => ({
+        date: s.date,
+        startTime: s.time || s.startTime,
+        endTime: s.endTime,
+        duration: s.duration || duration
+      }));
+    if (slots.length === 0) {
+      if (selectedSpace.status === 'Active') return '';
+      return `${selectedSpace.name} is ${selectedSpace.status === 'Maintenance' ? 'under maintenance' : 'inactive'}.`;
+    }
+    const conflict = findSpaceConflictAcrossSlots(selectedSpace, slots, spaceSources, editingExclusion);
+    return conflict ? conflict.reason || conflict.label : '';
+  }, [selectedSpace, sessions, duration, spaceSources, editingExclusion]);
+
+  /**
+   * Runs the full recurring-rule check: every session each active rule will
+   * generate, for both the instructor and the studio space.
+   */
+  const findRecurringConflict = (
+    rules: RecurringScheduleRule[]
+  ): { rule: RecurringScheduleRule; conflict: RuleConflict } | null => {
+    for (const rule of rules) {
+      if (rule.status !== 'Active') continue;
+
+      const ruleStaffId = resolveStaffId(staff, rule.staffId, rule.instructor);
+      const ruleStaff = ruleStaffId ? staff.find(s => s.id === ruleStaffId) || null : null;
+      const ruleSpace = studioSpaces.find(sp => sp.id === (rule.roomId || roomId)) || null;
+
+      const conflict = findRuleConflict({
+        rule,
+        workshop: { duration },
+        staff: ruleStaff,
+        space: ruleSpace,
+        assignmentSources,
+        spaceSources,
+        assignmentExclusion: editingExclusion,
+        spaceExclusion: editingExclusion,
+        ownSessions: workshopSessions
+      });
+
+      if (conflict) return { rule, conflict };
+    }
+    return null;
+  };
 
   const handleAddSession = () => {
     const nextId = sessions.length > 0 ? Math.max(...sessions.map(s => s.id)) + 1 : 1;
@@ -197,6 +338,438 @@ export const AdminWorkshopFormSection: React.FC = () => {
     return dbCategories.filter(c => c.name.toLowerCase().includes(q));
   }, [dbCategories, categoryInput]);
 
+  /**
+   * Validates the selected tutor against their saved schedule and every existing
+   * assignment (workshops, events, birthdays, queue appointments, breaks, leave).
+   * Returns a blocking message, or null when the assignment is clear to save.
+   */
+  const findAssignmentConflict = async (): Promise<string | null> => {
+    const hasSessions = sessions && sessions.length > 0;
+    const activeRules = recurringSchedules.filter(r => r.status === 'Active');
+    if (!tutorStaffId && !hasSessions && activeRules.length === 0) return null;
+
+    // Read fresh rows so the check never runs against stale component state.
+    const [latestStaff, latestSessions, latestWorkshops, latestEvents, latestQueue, latestResources, latestSettings] =
+      await Promise.all([
+        db.staff.toArray(),
+        db.workshopSessions.toArray(),
+        db.workshops.toArray(),
+        db.events.toArray(),
+        db.queue.toArray(),
+        db.studioResources.toArray(),
+        db.appSettings.toArray()
+      ]);
+
+    const sources: AssignmentSources = {
+      staff: latestStaff,
+      workshopSessions: latestSessions,
+      workshops: latestWorkshops,
+      events: latestEvents,
+      queue: latestQueue
+    };
+    const freshSpaceSources: SpaceSources = {
+      workshopSessions: latestSessions,
+      workshops: latestWorkshops,
+      events: latestEvents,
+      queue: latestQueue
+    };
+    const freshSpaces = getStudioSpaces(latestResources);
+
+    // The sessions of the workshop being edited are not conflicts with themselves.
+    const exclude = {
+      workshopId: editingWorkshopId ? String(editingWorkshopId) : undefined,
+      sessionIds: sessions.map(s => String(s.id))
+    };
+
+    // 1. One-time sessions against the workshop tutor.
+    if (tutorStaffId && hasSessions) {
+      const member = latestStaff.find(s => s.id === tutorStaffId);
+      if (!member) {
+        return 'The selected tutor no longer exists in Staff Management. Please select another staff member.';
+      }
+
+      for (const sess of sessions) {
+        const sessTime = sess.time || sess.startTime;
+        if (!sess.date || !sessTime) continue;
+
+        const avail = checkStaffMemberAvailability({
+          staff: member,
+          date: sess.date,
+          startTime: sessTime,
+          endTime: sess.endTime,
+          duration: sess.duration || duration,
+          sources,
+          exclude
+        });
+
+        if (!avail.isAvailable) {
+          return avail.reason || `${member.name} is not available on ${sess.date} at ${sessTime}.`;
+        }
+      }
+    }
+
+    // 2. The workshop's own room, across its one-time sessions.
+    const workshopSpace = freshSpaces.find(sp => sp.id === roomId);
+    if (workshopSpace && hasSessions) {
+      const slots = sessions
+        .filter(s => s.date && (s.time || s.startTime))
+        .map(s => ({
+          date: s.date,
+          startTime: s.time || s.startTime,
+          endTime: s.endTime,
+          duration: s.duration || duration
+        }));
+      const spaceConflict = findSpaceConflictAcrossSlots(workshopSpace, slots, freshSpaceSources, exclude);
+      if (spaceConflict) {
+        return spaceConflict.reason || spaceConflict.label;
+      }
+    }
+
+    // 3. EVERY session each active recurring rule will generate — instructor and room.
+    for (const rule of activeRules) {
+      const ruleStaffId = resolveStaffId(latestStaff, rule.staffId, rule.instructor) || tutorStaffId;
+      const ruleStaff = ruleStaffId ? latestStaff.find(s => s.id === ruleStaffId) || null : null;
+      const ruleSpace = freshSpaces.find(sp => sp.id === (rule.roomId || roomId)) || null;
+
+      const conflict = findRuleConflict({
+        rule,
+        workshop: { duration },
+        staff: ruleStaff,
+        space: ruleSpace,
+        assignmentSources: sources,
+        spaceSources: freshSpaceSources,
+        assignmentExclusion: exclude,
+        spaceExclusion: exclude,
+        ownSessions: latestSessions
+      });
+
+      if (conflict) return conflict.message;
+    }
+
+    return null;
+  };
+
+  // ==========================================================
+  // DYNAMIC WORKSHOP CARD RENDERING
+  // Both cards are built from Settings → Workshop Detail Lists.
+  // Core fields bind to real workshop properties; admin-created
+  // fields store their value under their stable fieldKey.
+  // ==========================================================
+
+  /** Reads the value for a field, whether it is a core property or custom. */
+  const getFieldValue = (field: WorkshopFieldConfig): any => {
+    switch (field.boundTo) {
+      case 'title': return title;
+      case 'category': return category;
+      case 'hook': return hook;
+      case 'description': return description;
+      case 'fullDetails': return fullDetails;
+      case 'price': return price;
+      case 'duration': return duration;
+      case 'ageRange': return ageRange;
+      case 'skillLevel': return skillLevel;
+      case 'staffId': return tutorStaffId;
+      case 'roomId': return roomId;
+      case 'materials': return materials;
+      default: return customFieldValues[field.fieldKey] ?? '';
+    }
+  };
+
+  const setFieldValue = (field: WorkshopFieldConfig, raw: any) => {
+    // A core property keeps its own shape even when the field type changed.
+    const value = Array.isArray(raw) && field.boundTo !== 'materials' ? raw.join(', ') : raw;
+    switch (field.boundTo) {
+      case 'title': setTitle(value); break;
+      case 'category': setCategory(value); setCategoryInput(value); break;
+      case 'hook': setHook(value); break;
+      case 'description': setDescription(value); break;
+      case 'fullDetails': setFullDetails(value); break;
+      case 'price': setPrice(Number(value) || 0); break;
+      case 'duration': setDuration(value); break;
+      case 'ageRange': setAgeRange(value); if (String(value).trim()) setErrorTouched(false); break;
+      case 'skillLevel': setSkillLevel(value); break;
+      case 'staffId': setTutorStaffId(value); break;
+      case 'roomId': {
+        setRoomId(value);
+        const space = studioSpaces.find(sp => sp.id === value);
+        if (space) setRoom(space.name);
+        break;
+      }
+      case 'materials':
+        setMaterials(Array.isArray(value)
+          ? value
+          : String(value ?? '').split(',').map(v => v.trim()).filter(Boolean));
+        break;
+      default:
+        setCustomFieldValues(prev => ({ ...prev, [field.fieldKey]: value }));
+    }
+  };
+
+  /** Choices for a field: live records, its own options, or a shared list. */
+  const choicesFor = (field: WorkshopFieldConfig, current?: string): Array<{ value: string; label: string; disabled?: boolean }> => {
+    if (field.dataSource === 'staff') {
+      return staff
+        .filter(st => st.status === 'Active' || st.id === current)
+        .map(st => ({ value: st.id, label: st.name }));
+    }
+
+    if (field.dataSource === 'studio-resources') {
+      return studioSpaces.map(space => ({
+        value: space.id,
+        label: `${space.name}${space.status === 'Active' ? '' : ` — ${space.status}`}`,
+        disabled: space.status !== 'Active'
+      }));
+    }
+
+    // The Category field falls back to the shared categories list when it has
+    // no options of its own.
+    if (field.fieldKey === 'category' && (!field.options || field.options.length === 0)) {
+      return dbCategories.map(c => ({ value: c.name, label: c.name }));
+    }
+
+    const values = [...(field.options || [])];
+    if (current && !values.includes(current)) values.push(current);
+    return values.map(v => ({ value: v, label: v }));
+  };
+
+  /** Renders one configured field. */
+  const renderWorkshopField = (field: WorkshopFieldConfig) => {
+    const value = coerceFieldValue(getFieldValue(field), field.fieldType);
+    // Width follows the field type; it is not a configurable option.
+    const widthClass = fieldSpansFullRow(field.fieldType) ? 'sm:col-span-2' : '';
+    const showAgeError = field.boundTo === 'ageRange' && field.required && errorTouched && !ageRange;
+
+    const label = (
+      <label className="text-xs font-bold text-brand-charcoal/80">
+        {field.label}
+        {field.required && <span className="text-red-500 font-extrabold"> *</span>}
+      </label>
+    );
+
+    const inputClass = `w-full bg-brand-cream/35 border rounded-xl py-2.5 px-3 text-xs font-semibold text-brand-charcoal ${
+      showAgeError ? 'border-red-500' : 'border-brand-clay'
+    }`;
+
+    let control: React.ReactNode = null;
+
+    switch (field.fieldType) {
+      case 'long_text':
+        control = (
+          <textarea
+            rows={3}
+            placeholder={field.placeholder}
+            value={value || ''}
+            onChange={e => setFieldValue(field, e.target.value)}
+            className={inputClass}
+          />
+        );
+        break;
+
+      case 'rich_text':
+        control = (
+          <div>
+            <div className="flex items-center gap-1 bg-brand-sand/40 border border-brand-clay rounded-t-xl px-2 py-1.5">
+              <Bold className="h-3.5 w-3.5 text-brand-charcoal/50" />
+              <Italic className="h-3.5 w-3.5 text-brand-charcoal/50" />
+              <Link className="h-3.5 w-3.5 text-brand-charcoal/50" />
+              <AlignLeft className="h-3.5 w-3.5 text-brand-charcoal/50" />
+              <span className="ml-2 text-[10px] font-mono text-brand-charcoal/40">Pristine HTML Mode</span>
+            </div>
+            <textarea
+              rows={4}
+              placeholder={field.placeholder}
+              value={value || ''}
+              onChange={e => setFieldValue(field, e.target.value)}
+              className="w-full bg-brand-cream/35 border border-t-0 border-brand-clay rounded-b-xl p-3 text-xs font-semibold text-brand-charcoal"
+            />
+          </div>
+        );
+        break;
+
+      case 'number':
+        control = (
+          <input
+            type="number"
+            placeholder={field.placeholder}
+            value={value ?? ''}
+            onChange={e => setFieldValue(field, e.target.value)}
+            className={inputClass}
+          />
+        );
+        break;
+
+      case 'dropdown': {
+        const choices = choicesFor(field, value);
+        control = (
+          <select
+            value={value || ''}
+            onChange={e => setFieldValue(field, e.target.value)}
+            className={`${inputClass} cursor-pointer`}
+          >
+            <option value="">{field.placeholder || `Select ${field.label.toLowerCase()}...`}</option>
+            {choices.map(choice => (
+              <option key={choice.value} value={choice.value} disabled={choice.disabled}>
+                {choice.label}
+              </option>
+            ))}
+          </select>
+        );
+        break;
+      }
+
+      case 'multi_select': {
+        const selected: string[] = Array.isArray(value) ? value : (value ? String(value).split(',') : []);
+        control = (
+          <div className="flex flex-wrap gap-1.5">
+            {choicesFor(field).map(choice => {
+              const isOn = selected.includes(choice.value);
+              return (
+                <button
+                  key={choice.value}
+                  type="button"
+                  onClick={() => setFieldValue(field, isOn
+                    ? selected.filter(v => v !== choice.value)
+                    : [...selected, choice.value])}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border cursor-pointer ${
+                    isOn
+                      ? 'bg-brand-terracotta text-brand-cream border-brand-terracotta'
+                      : 'bg-white border-brand-clay text-brand-charcoal/70'
+                  }`}
+                >
+                  {choice.label}
+                </button>
+              );
+            })}
+          </div>
+        );
+        break;
+      }
+
+      case 'tags': {
+        const tags: string[] = Array.isArray(value) ? value : [];
+        const isMaterials = field.boundTo === 'materials';
+        return (
+          <div key={field.fieldId} className={`space-y-2 ${widthClass}`}>
+            {label}
+            <input
+              type="text"
+              placeholder={field.placeholder || 'Add a value and press Enter...'}
+              value={isMaterials ? materialInput : (customTagInputs[field.fieldKey] || '')}
+              onChange={e => isMaterials
+                ? setMaterialInput(e.target.value)
+                : setCustomTagInputs(prev => ({ ...prev, [field.fieldKey]: e.target.value }))}
+              onKeyDown={e => {
+                if (e.key !== 'Enter') return;
+                e.preventDefault();
+                const raw = isMaterials ? materialInput : (customTagInputs[field.fieldKey] || '');
+                const next = raw.trim();
+                if (!next || tags.includes(next)) return;
+                setFieldValue(field, [...tags, next]);
+                if (isMaterials) setMaterialInput('');
+                else setCustomTagInputs(prev => ({ ...prev, [field.fieldKey]: '' }));
+              }}
+              className={inputClass}
+            />
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {tags.map(tag => (
+                <span key={tag} className="inline-flex items-center gap-1 bg-brand-sand px-2.5 py-1 rounded-lg border border-brand-clay text-[11px] font-bold text-brand-charcoal">
+                  <span>{tag}</span>
+                  <X
+                    className="h-3 w-3 hover:text-brand-terracotta cursor-pointer shrink-0"
+                    onClick={() => setFieldValue(field, tags.filter(t => t !== tag))}
+                  />
+                </span>
+              ))}
+            </div>
+          </div>
+        );
+      }
+
+      case 'checkbox':
+        return (
+          <label key={field.fieldId} className={`flex items-center gap-2.5 ${widthClass} cursor-pointer`}>
+            <input
+              type="checkbox"
+              checked={!!value}
+              onChange={e => setFieldValue(field, e.target.checked)}
+              className="h-4 w-4 accent-brand-terracotta cursor-pointer"
+            />
+            <span className="text-xs font-bold text-brand-charcoal/80">
+              {field.label}{field.required && <span className="text-red-500"> *</span>}
+            </span>
+          </label>
+        );
+
+      case 'date':
+        control = (
+          <DateInput
+            value={value || ''}
+            onChange={e => setFieldValue(field, e.target.value)}
+            className={inputClass}
+          />
+        );
+        break;
+
+      case 'time':
+        control = (
+          <input
+            type="time"
+            lang="en-GB"
+            value={value || ''}
+            onChange={e => setFieldValue(field, e.target.value)}
+            className={inputClass}
+          />
+        );
+        break;
+
+      default:
+        control = (
+          <input
+            type="text"
+            placeholder={field.placeholder}
+            value={value || ''}
+            onChange={e => setFieldValue(field, e.target.value)}
+            className={inputClass}
+          />
+        );
+    }
+
+    return (
+      <div key={field.fieldId} className={`space-y-1 ${widthClass}`}>
+        {label}
+        {control}
+        {showAgeError && (
+          <span className="text-[10px] text-red-500 font-bold flex items-center gap-1 pt-0.5 leading-tight">
+            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+            <span>This field is required.</span>
+          </span>
+        )}
+      </div>
+    );
+  };
+
+  const curriculumFields = useMemo(
+    () => fieldsForCard(workshopFields, 'curriculum'),
+    [workshopFields]
+  );
+  const logisticsFields = useMemo(
+    () => fieldsForCard(workshopFields, 'logistics'),
+    [workshopFields]
+  );
+
+  /** Required-field validation generated from the configuration. */
+  const findMissingRequiredField = (): WorkshopFieldConfig | null => {
+    for (const field of [...curriculumFields, ...logisticsFields]) {
+      if (!field.required) continue;
+      const value = getFieldValue(field);
+      const empty = Array.isArray(value)
+        ? value.length === 0
+        : value === undefined || value === null || String(value).trim() === '';
+      if (empty) return field;
+    }
+    return null;
+  };
+
   // Saving / Publishing handler
   const handlePublish = async (e?: React.SyntheticEvent) => {
     if (e) e.preventDefault();
@@ -204,49 +777,44 @@ export const AdminWorkshopFormSection: React.FC = () => {
     setIsSaving(true);
     
     try {
+      // Shared rules first: title, category, price, capacity, age range and at
+      // least one session.
+      const baseErrors = validateWorkshopForm({
+        title, category: category || categoryInput, price, capacity, ageRange, sessions
+      });
+      setWorkshopErrors(baseErrors);
+      if (Object.keys(baseErrors).length > 0) {
+        if (baseErrors.ageRange) setErrorTouched(true);
+        alert(Object.values(baseErrors)[0]);
+        return;
+      }
+
+      // Then the configurable required fields, so a field made required in
+      // Settings blocks the save too.
+      const missing = findMissingRequiredField();
+      if (missing) {
+        if (missing.boundTo === 'ageRange') setErrorTouched(true);
+        alert(`"${missing.label}" is required. Please fill it in before publishing.`);
+        return;
+      }
+
       const finalAgeRange = ageRange.trim() || 'All Ages';
       const finalTitle = title.trim() || 'Untitled Workshop';
       const finalCategory = category.trim() || categoryInput.trim() || 'Pottery';
 
-      // Query fresh database records directly from Dexie to prevent stale state
-      const latestStaff = await db.staff.toArray();
-      const latestWorkshops = await db.workshops.toArray();
-      const latestEvents = await db.events.toArray();
-
-      // Validate Staff Conflicts across sessions and resolve staffId
-      const assignedStaffMember = latestStaff.find(st => st.name.trim().toLowerCase() === instructor.trim().toLowerCase() || st.id === instructor);
-      const staffId = assignedStaffMember ? assignedStaffMember.id : undefined;
-
-      // Check availability for all sessions if instructor is assigned
-      if (sessions && sessions.length > 0) {
-        for (const sess of sessions) {
-          const sessInstName = sess.instructor || instructor;
-          const sessStaff = latestStaff.find(st => st.name.trim().toLowerCase() === sessInstName.trim().toLowerCase() || st.id === sessInstName);
-          if (sessStaff && sess.date && (sess.time || sess.startTime)) {
-            const sessTime = sess.time || sess.startTime;
-            const avail = checkStaffMemberAvailability(
-              sessStaff,
-              sess.date,
-              sessTime,
-              sess.endTime,
-              duration,
-              [],
-              latestEvents,
-              [],
-              latestWorkshops,
-              sess.id ? String(sess.id) : undefined,
-              editingWorkshopId ? String(editingWorkshopId) : undefined
-            );
-
-            if (!avail.isAvailable) {
-              alert(
-                `Assignment Conflict Warning:\n${avail.reason || `${sessStaff.name} is not available.`}\n\nPlease adjust the session time or staff assignment if needed.`
-              );
-              // Allow publishing but notify user, or ask if they want to proceed
-            }
-          }
-        }
+      // Block the save while the tutor has a conflicting assignment.
+      const conflictMessage = await findAssignmentConflict();
+      if (conflictMessage) {
+        alert(
+          `Assignment blocked — this tutor is Busy.\n\n${conflictMessage}\n\nSelect another staff member or change the session time, then save again.`
+        );
+        return;
       }
+
+      // Query fresh staff records directly from Dexie to prevent stale state
+      const latestStaff = await db.staff.toArray();
+      const assignedStaffMember = latestStaff.find(st => st.id === tutorStaffId);
+      const staffId = assignedStaffMember?.id;
 
       const workshopData = {
         title: finalTitle,
@@ -260,29 +828,42 @@ export const AdminWorkshopFormSection: React.FC = () => {
         capacity: Number(capacity) || 10,
         spotsLeft: Number(capacity) || 10,
         image: image || 'https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?auto=format&fit=crop&w=800&q=80',
-        instructor: assignedStaffMember ? assignedStaffMember.name : (instructor || ''),
+        // Name is denormalized for display only; staffId is the assignment record.
+        instructor: assignedStaffMember ? assignedStaffMember.name : '',
         staffId,
-        room: room || 'The Clay Station (Studio A)',
+        room: selectedSpaceLabel || room || 'The Clay Station (Studio A)',
+        roomId: roomId || undefined,
         materials,
         skillLevel: skillLevel || 'Beginner',
         status: status || 'Published',
-        sessions: sessions.map((s, idx) => {
-          const sInst = s.instructor || instructor;
-          const sStaff = latestStaff.find(st => st.name.trim().toLowerCase() === sInst.trim().toLowerCase() || st.id === sInst);
-          return {
-            ...s,
-            id: s.id ? String(s.id) : `sess-${Date.now()}-${idx}`,
-            date: s.date || todayDateStr,
-            time: s.time || s.startTime || '10:00 AM',
-            startTime: s.time || s.startTime || '10:00 AM',
-            capacity: Number(s.capacity) || Number(capacity) || 10,
-            spotsLeft: s.spotsLeft !== undefined ? Number(s.spotsLeft) : (Number(s.capacity) || Number(capacity) || 10),
-            isFull: Boolean(s.isFull),
-            instructor: sStaff ? sStaff.name : sInst,
-            staffId: sStaff ? sStaff.id : staffId
-          };
-        }),
-        recurringSchedules
+        // Every session carries the workshop's tutor ID, so changing the tutor
+        // moves the assignment on both staff profiles.
+        sessions: sessions.map((s, idx) => ({
+          ...s,
+          id: s.id ? String(s.id) : `sess-${Date.now()}-${idx}`,
+          date: s.date || todayDateStr,
+          time: s.time || s.startTime || '10:00 AM',
+          startTime: s.time || s.startTime || '10:00 AM',
+          duration: s.duration || duration,
+          capacity: Number(s.capacity) || Number(capacity) || 10,
+          spotsLeft: s.spotsLeft !== undefined ? Number(s.spotsLeft) : (Number(s.capacity) || Number(capacity) || 10),
+          isFull: Boolean(s.isFull),
+          // A session may have its own instructor; otherwise it inherits the
+          // workshop tutor. Both the id and the resolved name are stored.
+          ...(() => {
+            const own = s.staffId ? latestStaff.find(st => st.id === s.staffId) : undefined;
+            const member = own || assignedStaffMember;
+            return { instructor: member ? member.name : '', staffId: member?.id };
+          })(),
+          // Stable studio-space and rule links, saved with the session.
+          roomId: s.roomId || roomId || undefined,
+          room: s.room || selectedSpaceLabel || room,
+          tableId: s.tableId || undefined,
+          ruleId: s.ruleId
+        })),
+        recurringSchedules,
+        // Values for admin-created fields, by stable key.
+        customFields: customFieldValues
       };
 
       // Ensure category is permanently saved to the categories table
@@ -326,10 +907,19 @@ export const AdminWorkshopFormSection: React.FC = () => {
       const finalTitle = title.trim() || 'Untitled Workshop Draft';
       const finalCategory = category.trim() || categoryInput.trim() || 'Pottery';
 
+      // Drafts are blocked on conflicts too — the sessions are still real assignments.
+      const conflictMessage = await findAssignmentConflict();
+      if (conflictMessage) {
+        alert(
+          `Assignment blocked — this tutor is Busy.\n\n${conflictMessage}\n\nSelect another staff member or change the session time, then save again.`
+        );
+        return;
+      }
+
       // Query fresh database records directly from Dexie
       const latestStaff = await db.staff.toArray();
-      const assignedStaffMember = latestStaff.find(st => st.name.trim().toLowerCase() === instructor.trim().toLowerCase() || st.id === instructor);
-      const staffId = assignedStaffMember ? assignedStaffMember.id : undefined;
+      const assignedStaffMember = latestStaff.find(st => st.id === tutorStaffId);
+      const staffId = assignedStaffMember?.id;
 
       const workshopData = {
         title: finalTitle,
@@ -343,29 +933,42 @@ export const AdminWorkshopFormSection: React.FC = () => {
         capacity: Number(capacity) || 10,
         spotsLeft: Number(capacity) || 10,
         image: image || 'https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?auto=format&fit=crop&w=800&q=80',
-        instructor: assignedStaffMember ? assignedStaffMember.name : (instructor || ''),
+        // Name is denormalized for display only; staffId is the assignment record.
+        instructor: assignedStaffMember ? assignedStaffMember.name : '',
         staffId,
-        room: room || 'The Clay Station (Studio A)',
+        room: selectedSpaceLabel || room || 'The Clay Station (Studio A)',
+        roomId: roomId || undefined,
         materials,
         skillLevel: skillLevel || 'Beginner',
         status: 'Draft' as const,
-        sessions: sessions.map((s, idx) => {
-          const sInst = s.instructor || instructor;
-          const sStaff = latestStaff.find(st => st.name.trim().toLowerCase() === sInst.trim().toLowerCase() || st.id === sInst);
-          return {
-            ...s,
-            id: s.id ? String(s.id) : `sess-${Date.now()}-${idx}`,
-            date: s.date || todayDateStr,
-            time: s.time || s.startTime || '10:00 AM',
-            startTime: s.time || s.startTime || '10:00 AM',
-            capacity: Number(s.capacity) || Number(capacity) || 10,
-            spotsLeft: s.spotsLeft !== undefined ? Number(s.spotsLeft) : (Number(s.capacity) || Number(capacity) || 10),
-            isFull: Boolean(s.isFull),
-            instructor: sStaff ? sStaff.name : sInst,
-            staffId: sStaff ? sStaff.id : staffId
-          };
-        }),
-        recurringSchedules
+        // Every session carries the workshop's tutor ID, so changing the tutor
+        // moves the assignment on both staff profiles.
+        sessions: sessions.map((s, idx) => ({
+          ...s,
+          id: s.id ? String(s.id) : `sess-${Date.now()}-${idx}`,
+          date: s.date || todayDateStr,
+          time: s.time || s.startTime || '10:00 AM',
+          startTime: s.time || s.startTime || '10:00 AM',
+          duration: s.duration || duration,
+          capacity: Number(s.capacity) || Number(capacity) || 10,
+          spotsLeft: s.spotsLeft !== undefined ? Number(s.spotsLeft) : (Number(s.capacity) || Number(capacity) || 10),
+          isFull: Boolean(s.isFull),
+          // A session may have its own instructor; otherwise it inherits the
+          // workshop tutor. Both the id and the resolved name are stored.
+          ...(() => {
+            const own = s.staffId ? latestStaff.find(st => st.id === s.staffId) : undefined;
+            const member = own || assignedStaffMember;
+            return { instructor: member ? member.name : '', staffId: member?.id };
+          })(),
+          // Stable studio-space and rule links, saved with the session.
+          roomId: s.roomId || roomId || undefined,
+          room: s.room || selectedSpaceLabel || room,
+          tableId: s.tableId || undefined,
+          ruleId: s.ruleId
+        })),
+        recurringSchedules,
+        // Values for admin-created fields, by stable key.
+        customFields: customFieldValues
       };
 
       if (finalCategory) {
@@ -518,123 +1121,10 @@ export const AdminWorkshopFormSection: React.FC = () => {
               <span>Workshop Curriculum basics</span>
             </h3>
 
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-brand-charcoal/80">Workshop Title</label>
-              <input
-                type="text"
-                required
-                placeholder="e.g. Traditional Arabic Calligraphy Glazing"
-                value={title}
-                onChange={e => setTitle(e.target.value)}
-                className="w-full bg-brand-cream/35 border border-brand-clay rounded-xl py-2.5 px-3 text-xs font-semibold text-brand-charcoal"
-              />
-              <span className="text-[10px] text-brand-charcoal/40 block">Pick a descriptive name. Avoid overly corporate jargon.</span>
-            </div>
 
+            {/* Rendered from Settings → Workshop Detail Lists. */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              
-              {/* CATEGORY COMBOBOX - PICK OR TYPE NEW */}
-              <div className="space-y-1 relative">
-                <label className="text-xs font-bold text-brand-charcoal/80">Category</label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    required
-                    placeholder="Select or type a category..."
-                    value={categoryInput}
-                    onFocus={() => setIsCategoryDropdownOpen(true)}
-                    onChange={(e) => {
-                      setCategoryInput(e.target.value);
-                      setCategory(e.target.value);
-                      setIsCategoryDropdownOpen(true);
-                    }}
-                    onBlur={() => {
-                      setTimeout(() => setIsCategoryDropdownOpen(false), 250);
-                    }}
-                    className="w-full bg-brand-cream/35 border border-brand-clay rounded-xl py-2.5 px-3 text-xs font-semibold text-brand-charcoal focus:outline-none focus:ring-1 focus:ring-brand-terracotta"
-                  />
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-brand-charcoal/40">
-                    {isCategoryDropdownOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                  </div>
-                </div>
-
-                {isCategoryDropdownOpen && (
-                  <div className="absolute left-0 right-0 mt-1 bg-white border border-brand-clay rounded-xl shadow-lg z-50 max-h-48 overflow-y-auto divide-y divide-brand-clay/30">
-                    {filteredCategories.map((cat) => (
-                      <button
-                        key={cat.id}
-                        type="button"
-                        onMouseDown={() => {
-                          setCategory(cat.name);
-                          setCategoryInput(cat.name);
-                        }}
-                        className="w-full text-left px-3 py-2 text-xs hover:bg-brand-sand font-semibold text-brand-charcoal flex justify-between items-center cursor-pointer"
-                      >
-                        <span>{cat.name}</span>
-                        {category === cat.name && <Check className="h-3.5 w-3.5 text-brand-terracotta animate-in zoom-in duration-100" />}
-                      </button>
-                    ))}
-
-                    {categoryInput.trim() && !filteredCategories.some(c => c.name.toLowerCase() === categoryInput.trim().toLowerCase()) && (
-                      <button
-                        type="button"
-                        onMouseDown={() => {
-                          const newCatName = categoryInput.trim();
-                          setCategory(newCatName);
-                          setCategoryInput(newCatName);
-                        }}
-                        className="w-full text-left px-3 py-2 text-xs hover:bg-brand-sand font-bold text-brand-terracotta flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <Plus className="h-3.5 w-3.5 stroke-[3]" />
-                        <span>Create "{categoryInput.trim()}"</span>
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-brand-charcoal/80">One-Line Hook (Subtext)</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Mold clay on the wheel and paint under the stars."
-                  value={hook}
-                  onChange={e => setHook(e.target.value)}
-                  className="w-full bg-brand-cream/35 border border-brand-clay rounded-xl py-2.5 px-3 text-xs font-semibold text-brand-charcoal"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-brand-charcoal/80">Short Catchy Description</label>
-              <textarea
-                placeholder="Brief summary shown on grids..."
-                value={description}
-                onChange={e => setDescription(e.target.value)}
-                className="w-full bg-brand-cream/35 border border-brand-clay rounded-xl p-3 text-xs font-semibold text-brand-charcoal"
-                rows={2}
-              />
-            </div>
-
-            {/* Mock Rich Text Area */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-brand-charcoal/80 block">Full Details curriculum (Rich Text)</label>
-              <div className="flex gap-1.5 p-2 bg-brand-sand border border-brand-clay rounded-t-xl">
-                <button type="button" className="p-1 hover:bg-brand-clay/30 rounded text-brand-charcoal"><Bold className="h-3.5 w-3.5" /></button>
-                <button type="button" className="p-1 hover:bg-brand-clay/30 rounded text-brand-charcoal"><Italic className="h-3.5 w-3.5" /></button>
-                <button type="button" className="p-1 hover:bg-brand-clay/30 rounded text-brand-charcoal"><Link className="h-3.5 w-3.5" /></button>
-                <button type="button" className="p-1 hover:bg-brand-clay/30 rounded text-brand-charcoal"><AlignLeft className="h-3.5 w-3.5" /></button>
-                <span className="w-px h-5 bg-brand-clay my-auto"></span>
-                <span className="text-[10px] font-bold text-brand-charcoal/40 my-auto ml-1 font-mono">Pristine HTML Mode</span>
-              </div>
-              <textarea
-                placeholder="Write full specifications of what students will accomplish week by week..."
-                value={fullDetails}
-                onChange={e => setFullDetails(e.target.value)}
-                className="w-full bg-brand-cream/35 border border-t-0 border-brand-clay rounded-b-xl p-3 text-xs font-semibold text-brand-charcoal"
-                rows={4}
-              />
+              {curriculumFields.map(renderWorkshopField)}
             </div>
 
           </div>
@@ -646,162 +1136,14 @@ export const AdminWorkshopFormSection: React.FC = () => {
               <span>Logistics & Metadata</span>
             </h3>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-brand-charcoal/80">Price in SAR</label>
-                <input
-                  type="number"
-                  required
-                  value={price}
-                  onChange={e => setPrice(parseInt(e.target.value) || 150)}
-                  className="w-full bg-brand-cream/35 border border-brand-clay rounded-xl py-2.5 px-3 text-xs font-semibold text-brand-charcoal font-mono"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-brand-charcoal/80">Duration</label>
-                <input
-                  type="text"
-                  required
-                  value={duration}
-                  onChange={e => setDuration(e.target.value)}
-                  className="w-full bg-brand-cream/35 border border-brand-clay rounded-xl py-2.5 px-3 text-xs font-semibold text-brand-charcoal"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-brand-charcoal/80">Age Range <span className="text-red-500 font-extrabold">*</span></label>
-                <input
-                  type="text"
-                  placeholder="e.g. 12+ years"
-                  value={ageRange}
-                  onChange={e => {
-                    setAgeRange(e.target.value);
-                    if (e.target.value.trim()) {
-                      setErrorTouched(false);
-                    }
-                  }}
-                  className={`w-full bg-brand-cream/35 rounded-xl py-2.5 px-3 text-xs font-semibold text-brand-charcoal border ${
-                    errorTouched && !ageRange 
-                      ? 'border-red-500 focus:ring-red-500' 
-                      : 'border-brand-clay'
-                  }`}
-                />
-                {errorTouched && !ageRange && (
-                  <span className="text-[10px] text-red-500 font-bold flex items-center gap-1 pt-0.5 leading-tight">
-                    <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                    <span>Age range is required.</span>
-                  </span>
-                )}
-              </div>
-
-              {/* SKILL LEVEL FIELD */}
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-brand-charcoal/80">Skill Level</label>
-                <select
-                  value={skillLevel}
-                  onChange={e => setSkillLevel(e.target.value as any)}
-                  className="w-full bg-brand-cream/35 border border-brand-clay rounded-xl py-2.5 px-3 text-xs font-semibold text-brand-charcoal cursor-pointer"
-                >
-                  <option value="Beginner">Beginner</option>
-                  <option value="Intermediate">Intermediate</option>
-                  <option value="Advanced">Advanced</option>
-                  <option value="All Levels">All Levels</option>
-                </select>
-              </div>
-
-            </div>
-
+            {/* Rendered from Settings → Workshop Detail Lists. */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-brand-charcoal/80">Tutor / Artist Specialist</label>
-                <select
-                  value={instructor}
-                  onChange={e => setInstructor(e.target.value)}
-                  disabled={isSaving}
-                  className="w-full bg-brand-cream/35 border border-brand-clay rounded-xl py-2.5 px-3 text-xs font-semibold text-brand-charcoal cursor-pointer disabled:opacity-50"
-                >
-                  <option value="">Select Tutor / Specialist...</option>
-                  {staff
-                    .filter(st => st.status === 'Active' || st.name === instructor)
-                    .map(st => {
-                      let statusLabel = 'Available';
-                      if (isWorkshopsLoading) {
-                        statusLabel = 'Checking availability…';
-                      } else {
-                        const propDate = sessions.length > 0 && sessions[0].date ? sessions[0].date : todayDateStr;
-                        const propStartTime = sessions.length > 0 && (sessions[0].time || sessions[0].startTime) ? (sessions[0].time || sessions[0].startTime) : '10:00 AM';
-                        const propDuration = duration || '2 Hours';
-
-                        const avail = checkStaffMemberAvailability(
-                          st,
-                          propDate,
-                          propStartTime,
-                          undefined,
-                          propDuration,
-                          [],
-                          rawEvents || events || [],
-                          [],
-                          workshops,
-                          undefined,
-                          editingWorkshopId ? String(editingWorkshopId) : undefined
-                        );
-
-                        if (!avail.isAvailable) {
-                          if (avail.status === 'On Leave') {
-                            statusLabel = 'On Leave';
-                          } else if (avail.status === 'Outside working hours') {
-                            statusLabel = 'Busy: Outside working hours';
-                          } else if (avail.conflictDetails) {
-                            statusLabel = `Busy: ${avail.conflictDetails}`;
-                          } else {
-                            statusLabel = `Busy: ${avail.reason || 'Not available'}`;
-                          }
-                        }
-                      }
-
-                      return (
-                        <option key={st.id} value={st.name}>
-                          {st.name} — {statusLabel}
-                        </option>
-                      );
-                    })}
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-brand-charcoal/80">Studio Room / Table Station</label>
-                <input
-                  type="text"
-                  value={room}
-                  onChange={e => setRoom(e.target.value)}
-                  className="w-full bg-brand-cream/35 border border-brand-clay rounded-xl py-2.5 px-3 text-xs font-semibold text-brand-charcoal"
-                />
-              </div>
+              {logisticsFields.map(renderWorkshopField)}
             </div>
 
-            {/* Tag Input for materials included */}
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-brand-charcoal/80">Materials Included (Press Enter key)</label>
-              <input
-                type="text"
-                placeholder="Add a material and press Enter..."
-                value={materialInput}
-                onChange={e => setMaterialInput(e.target.value)}
-                onKeyDown={handleAddMaterial}
-                className="w-full bg-brand-cream/35 border border-brand-clay rounded-xl py-2.5 px-3 text-xs font-semibold text-brand-charcoal"
-              />
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                {materials.map(mat => (
-                  <span key={mat} className="inline-flex items-center gap-1 bg-brand-sand px-2.5 py-1 rounded-lg border border-brand-clay text-[11px] font-bold text-brand-charcoal">
-                    <span>{mat}</span>
-                    <X className="h-3 w-3 hover:text-brand-terracotta cursor-pointer shrink-0" onClick={() => handleRemoveMaterial(mat)} />
-                  </span>
-                ))}
-              </div>
-            </div>
-
+            {roomWarning && (
+              <p className="text-[11px] font-bold text-red-600">{roomWarning}</p>
+            )}
           </div>
 
         </div>
@@ -900,7 +1242,8 @@ export const AdminWorkshopFormSection: React.FC = () => {
                       daysOfWeek: ['Sunday', 'Tuesday'],
                       startTime: '04:00 PM',
                       duration: duration || '2 Hours',
-                      instructor: instructor || 'Ali bin Khalid',
+                      instructor: selectedTutor?.name || '',
+                      staffId: tutorStaffId || undefined,
                       capacity: capacity || 10,
                       room: room || 'Studio A',
                       effectiveStartDate: todayDateStr,
@@ -1012,27 +1355,102 @@ export const AdminWorkshopFormSection: React.FC = () => {
                     <div>
                       <label className="text-[10px] font-bold text-brand-charcoal/70 block mb-0.5">Instructor (Availability Check)</label>
                       <select
-                        value={rule.instructor}
+                        value={resolveStaffId(staff, rule.staffId, rule.instructor) || ''}
                         onChange={e => {
+                          const nextId = e.target.value;
+                          const member = staff.find(s => s.id === nextId);
                           const updated = [...recurringSchedules];
-                          updated[idx].instructor = e.target.value;
+                          updated[idx] = {
+                            ...updated[idx],
+                            staffId: nextId || undefined,
+                            instructor: member?.name || ''
+                          };
                           setRecurringSchedules(updated);
                         }}
                         className="w-full bg-white border border-brand-clay rounded-lg p-1.5 text-xs font-semibold"
                       >
-                        {staff.map(st => {
-                          const avail = checkStaffMemberAvailability(
-                            st, 
-                            rule.effectiveStartDate || todayDateStr, 
-                            rule.startTime || '04:00 PM', 
-                            undefined, 
-                            rule.duration || duration,
-                            [], rawEvents || events || [], [], workshops
-                          );
-                          const availLabel = avail.isAvailable ? '✓ Available' : `✕ ${avail.status}`;
+                        <option value="">Select Instructor...</option>
+                        {/* Availability is evaluated against EVERY session this rule
+                            will generate, read from the shared session calendar. */}
+                        {staff
+                          .filter(st => st.status === 'Active' || st.id === rule.staffId)
+                          .map(st => {
+                            const ruleConflict = findRuleConflict({
+                              rule,
+                              workshop: { duration },
+                              staff: st,
+                              assignmentSources,
+                              spaceSources,
+                              assignmentExclusion: editingExclusion,
+                              spaceExclusion: editingExclusion,
+                              ownSessions: workshopSessions
+                            });
+                            const availLabel = ruleConflict
+                              ? `✕ Busy: ${formatSlotDate(ruleConflict.date)} ${ruleConflict.startTime}–${ruleConflict.endTime}`
+                              : '✓ Available';
+                            return (
+                              <option key={st.id} value={st.id}>
+                                {st.name} ({availLabel})
+                              </option>
+                            );
+                          })}
+                      </select>
+
+                      {/* Named conflict for the instructor currently on this rule */}
+                      {(() => {
+                        const ruleStaffId = resolveStaffId(staff, rule.staffId, rule.instructor);
+                        const ruleStaff = ruleStaffId ? staff.find(st => st.id === ruleStaffId) : null;
+                        if (!ruleStaff) return null;
+                        const conflict = findRuleConflict({
+                          rule,
+                          workshop: { duration },
+                          staff: ruleStaff,
+                          assignmentSources,
+                          spaceSources,
+                          assignmentExclusion: editingExclusion,
+                          spaceExclusion: editingExclusion,
+                          ownSessions: workshopSessions
+                        });
+                        if (!conflict) return null;
+                        return (
+                          <p className="text-[10px] font-bold text-red-600 mt-1 leading-snug">
+                            {conflict.message}
+                          </p>
+                        );
+                      })()}
+                    </div>
+
+                    {/* Studio room / table for this rule, with availability */}
+                    <div>
+                      <label className="text-[10px] font-bold text-brand-charcoal/70 block mb-0.5">Studio Room / Table (Availability Check)</label>
+                      <select
+                        value={rule.roomId || ''}
+                        onChange={e => {
+                          const nextId = e.target.value;
+                          const space = studioSpaces.find(sp => sp.id === nextId);
+                          const updated = [...recurringSchedules];
+                          updated[idx] = {
+                            ...updated[idx],
+                            roomId: nextId || undefined,
+                            room: space?.name || ''
+                          };
+                          setRecurringSchedules(updated);
+                        }}
+                        className="w-full bg-white border border-brand-clay rounded-lg p-1.5 text-xs font-semibold"
+                      >
+                        <option value="">Use the workshop's room</option>
+                        {studioSpaces.map(space => {
+                          const slots = getRuleSlots(rule, { duration });
+                          const conflict = slots.length > 0
+                            ? findSpaceConflictAcrossSlots(space, slots, spaceSources, editingExclusion)
+                            : (space.status !== 'Active'
+                                ? checkSpaceAvailability({
+                                    space, date: todayDateStr, startTime: rule.startTime || '10:00 AM', sources: spaceSources
+                                  })
+                                : null);
                           return (
-                            <option key={st.id} value={st.name}>
-                              {st.name} ({availLabel})
+                            <option key={space.id} value={space.id} disabled={!!conflict}>
+                              {conflict ? conflict.label : `${space.name} — Available`}
                             </option>
                           );
                         })}
@@ -1043,13 +1461,12 @@ export const AdminWorkshopFormSection: React.FC = () => {
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       <div>
                         <label className="text-[10px] font-bold text-brand-charcoal/70 block mb-0.5">Effective From</label>
-                        <input
-                          type="date"
+                        <DateInput
                           value={rule.effectiveStartDate}
                           onChange={e => {
-                            const updated = [...recurringSchedules];
-                            updated[idx].effectiveStartDate = e.target.value;
-                            setRecurringSchedules(updated);
+                          const updated = [...recurringSchedules];
+                          updated[idx].effectiveStartDate = e.target.value;
+                          setRecurringSchedules(updated);
                           }}
                           className="w-full bg-white border border-brand-clay rounded-lg p-1.5 font-semibold text-xs"
                         />
@@ -1057,13 +1474,12 @@ export const AdminWorkshopFormSection: React.FC = () => {
 
                       <div>
                         <label className="text-[10px] font-bold text-brand-charcoal/70 block mb-0.5">Effective Until (Optional)</label>
-                        <input
-                          type="date"
+                        <DateInput
                           value={rule.effectiveEndDate || ''}
                           onChange={e => {
-                            const updated = [...recurringSchedules];
-                            updated[idx].effectiveEndDate = e.target.value;
-                            setRecurringSchedules(updated);
+                          const updated = [...recurringSchedules];
+                          updated[idx].effectiveEndDate = e.target.value;
+                          setRecurringSchedules(updated);
                           }}
                           className="w-full bg-white border border-brand-clay rounded-lg p-1.5 font-semibold text-xs"
                         />
@@ -1079,6 +1495,17 @@ export const AdminWorkshopFormSection: React.FC = () => {
               <button
                 type="button"
                 onClick={() => {
+                  // Block generation while any active rule would produce a session
+                  // that clashes with the instructor or the studio space.
+                  const blocking = findRecurringConflict(recurringSchedules);
+                  if (blocking) {
+                    alert(
+                      `Session generation blocked — scheduling conflict.\n\n${blocking.conflict.message}\n\n` +
+                      `Select another instructor or room for this rule, or change its time, then generate again.`
+                    );
+                    return;
+                  }
+
                   const now = new Date();
                   const year = now.getFullYear();
                   const month = now.getMonth() + 1;
@@ -1086,7 +1513,10 @@ export const AdminWorkshopFormSection: React.FC = () => {
                     id: editingWorkshopId || 'temp-ws',
                     title: title || 'Workshop',
                     duration: duration || '2 Hours',
-                    instructor: instructor || 'Ali bin Khalid',
+                    instructor: selectedTutor?.name || '',
+                    staffId: tutorStaffId || undefined,
+                    room: selectedSpaceLabel || room,
+                    roomId: roomId || undefined,
                     capacity: capacity || 10,
                     recurringSchedules
                   } as any;
@@ -1094,12 +1524,21 @@ export const AdminWorkshopFormSection: React.FC = () => {
                   const generatedRecords = generateSessionsForMonth(mockWorkshop, year, month, []);
                   if (generatedRecords.length > 0) {
                     const mappedNew = generatedRecords.map((g, i) => ({
-                      id: Date.now() + i,
+                      id: `sess-gen-${Date.now()}-${i}`,
                       date: g.date,
                       time: g.startTime,
+                      endTime: g.endTime,
+                      duration: g.duration,
                       capacity: g.capacity,
                       spotsLeft: g.capacity,
-                      isFull: false
+                      isFull: false,
+                      // Keep the stable links the generator resolved.
+                      staffId: g.staffId,
+                      instructor: g.instructor,
+                      roomId: g.roomId,
+                      room: g.room,
+                      tableId: g.tableId,
+                      ruleId: g.ruleId
                     }));
                     setSessions([...sessions, ...mappedNew]);
                     alert(`Generated ${generatedRecords.length} sessions from monthly recurring schedule for ${year}-${month < 10 ? '0' + month : month}!`);
@@ -1141,12 +1580,11 @@ export const AdminWorkshopFormSection: React.FC = () => {
                 >
                   <div className="space-y-1.5 flex-1">
                     <div className="flex items-center gap-2">
-                      <input 
-                        type="date" 
+                      <DateInput
                         value={sess.date}
                         onChange={(e) => {
-                          const newDate = e.target.value;
-                          setSessions(sessions.map(s => s.id === sess.id ? { ...s, date: newDate } : s));
+                        const newDate = e.target.value;
+                        setSessions(sessions.map(s => s.id === sess.id ? { ...s, date: newDate } : s));
                         }}
                         className="bg-brand-cream border border-brand-clay p-1 rounded font-semibold text-xs text-brand-charcoal"
                       />
@@ -1161,28 +1599,105 @@ export const AdminWorkshopFormSection: React.FC = () => {
                       />
                     </div>
                     <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold text-brand-charcoal/50">Room:</span>
+                      <select
+                        value={sess.roomId || ''}
+                        onChange={(e) => {
+                          const nextId = e.target.value;
+                          const space = studioSpaces.find(sp => sp.id === nextId);
+                          setSessions(sessions.map(s => s.id === sess.id
+                            ? { ...s, roomId: nextId || undefined, room: space?.name || '' }
+                            : s));
+                        }}
+                        className="bg-brand-cream border border-brand-clay p-0.5 rounded font-semibold text-[10px] text-brand-charcoal max-w-[150px]"
+                      >
+                        <option value="">Workshop default</option>
+                        {studioSpaces.map(space => {
+                          // Checked for this session's own date and time.
+                          const slotStart = sess.time || sess.startTime;
+                          const check = (sess.date && slotStart)
+                            ? checkSpaceAvailability({
+                                space,
+                                date: sess.date,
+                                startTime: slotStart,
+                                endTime: sess.endTime,
+                                duration: sess.duration || duration,
+                                sources: spaceSources,
+                                exclude: editingExclusion
+                              })
+                            : null;
+                          const unavailable = check ? !check.isAvailable : space.status !== 'Active';
+                          return (
+                            <option key={space.id} value={space.id} disabled={unavailable}>
+                              {check ? check.label : `${space.name} — ${space.status === 'Active' ? 'Available' : space.status}`}
+                            </option>
+                          );
+                        })}
+                      </select>
+
+                      {/* This session's own instructor; blank uses the workshop tutor. */}
+                      <span className="text-[10px] font-bold text-brand-charcoal/50 ml-2">Instructor:</span>
+                      <select
+                        value={sess.staffId || ''}
+                        onChange={(e) => {
+                          const nextId = e.target.value;
+                          const member = staff.find(st => st.id === nextId);
+                          setSessions(sessions.map(s => s.id === sess.id
+                            ? { ...s, staffId: nextId || undefined, instructor: member?.name || '' }
+                            : s));
+                        }}
+                        className="bg-brand-cream border border-brand-clay p-0.5 rounded font-semibold text-[10px] text-brand-charcoal max-w-[150px]"
+                      >
+                        <option value="">Workshop default</option>
+                        {staff
+                          .filter(member => member.status === 'Active' || member.id === sess.staffId)
+                          .map(member => {
+                            // Checked against this session's own date and time.
+                            const slotStart = sess.time || sess.startTime;
+                            const avail = (sess.date && slotStart)
+                              ? checkStaffMemberAvailability({
+                                  staff: member,
+                                  date: sess.date,
+                                  startTime: slotStart,
+                                  endTime: sess.endTime,
+                                  duration: sess.duration || duration,
+                                  sources: assignmentSources,
+                                  exclude: editingExclusion
+                                })
+                              : null;
+                            const unavailable = avail ? !avail.isAvailable : false;
+                            return (
+                              <option key={member.id} value={member.id} disabled={unavailable}>
+                                {avail ? `${member.name} — ${avail.status}` : member.name}
+                              </option>
+                            );
+                          })}
+                      </select>
+
                       <span className="text-[10px] font-bold text-brand-charcoal/50">Capacity:</span>
                       <input 
                         type="number"
                         value={sess.capacity}
                         onChange={(e) => {
                           const cap = parseInt(e.target.value) || 10;
-                          setSessions(sessions.map(s => s.id === sess.id ? { ...s, capacity: cap, spotsLeft: Math.min(s.spotsLeft, cap) } : s));
+                          setSessions(sessions.map(s => {
+                            if (s.id !== sess.id) return s;
+                            // Seats already booked are preserved; chairs left is
+                            // derived from the new capacity, never hand-typed.
+                            const booked = Math.max(0, (Number(s.capacity) || 0) - (Number(s.spotsLeft) || 0));
+                            const left = Math.max(0, cap - booked);
+                            return { ...s, capacity: cap, spotsLeft: left, isFull: left === 0 };
+                          }));
                         }}
                         className="bg-brand-cream border border-brand-clay p-0.5 rounded font-bold text-xs text-brand-charcoal w-12 text-center"
                       />
                       <span className="font-bold text-brand-charcoal">chairs</span>
 
+                      {/* Read-only: chairs left follows capacity and bookings. */}
                       <span className="text-[10px] font-bold text-brand-charcoal/50 ml-2">Left:</span>
-                      <input 
-                        type="number"
-                        value={sess.spotsLeft}
-                        onChange={(e) => {
-                          const left = parseInt(e.target.value) || 0;
-                          setSessions(sessions.map(s => s.id === sess.id ? { ...s, spotsLeft: left, isFull: left === 0 } : s));
-                        }}
-                        className="bg-brand-cream border border-brand-clay p-0.5 rounded font-bold text-xs text-brand-charcoal w-12 text-center"
-                      />
+                      <span className="bg-brand-sand/40 border border-brand-clay/60 p-0.5 rounded font-bold text-xs text-brand-charcoal w-12 text-center">
+                        {sess.spotsLeft}
+                      </span>
                       
                       {sess.isFull ? (
                         <span className="text-[9px] bg-red-100 text-red-800 border border-red-200 px-1.5 py-0.5 rounded font-extrabold uppercase">
@@ -1404,9 +1919,9 @@ export const AdminWorkshopFormSection: React.FC = () => {
                         {ws.price} SAR
                       </td>
 
-                      {/* Instructor */}
+                      {/* Instructor — resolved from the assigned staff ID */}
                       <td className="py-3.5 px-4 font-semibold text-brand-charcoal/70">
-                        {ws.instructor}
+                        {resolveStaffName(staff, ws.staffId, ws.instructor) || '—'}
                       </td>
 
                       {/* Status badge & Quick Switcher */}

@@ -8,30 +8,46 @@ import { useApp } from '../context/AppContext';
 import { User, Mail, Phone, ArrowLeft, ArrowRight, ShieldCheck, LogIn, CheckCircle2, Lock } from 'lucide-react';
 import { validateSaudiPhone, normaliseSaudiPhone } from '../utils/phoneUtils';
 import { PhoneInput } from './PhoneInput';
+import {
+  validateCustomerForm, canonicalPhone, canonicalEmail, passwordChecklist
+} from '../utils/validation';
 
 export const CheckoutInfoSection: React.FC = () => {
-  const { pendingBooking, setPendingBooking, setCustomerTab, currentUser, setCurrentUser, workshops, loginCustomer, registerCustomer } = useApp();
+  const {
+    pendingBooking, setPendingBooking, setCustomerTab, currentUser, setCurrentUser,
+    workshops, loginCustomer, registerCustomer, publishedBirthdayPackages
+  } = useApp();
 
   const workshop = workshops.find(w => w.id === pendingBooking?.workshopId) || workshops[0];
+
+  // A birthday reservation is summarised from its own package record, not from a
+  // workshop that happens to be first in the list.
+  const birthday = pendingBooking?.birthdayDetails;
+  const birthdayPackage = birthday?.packageId
+    ? publishedBirthdayPackages.find(p => p.id === birthday.packageId)
+    : undefined;
 
   const [name, setName] = useState(pendingBooking?.customerName || currentUser?.name || '');
   const [email, setEmail] = useState(pendingBooking?.customerEmail || currentUser?.email || '');
   const [phone, setPhone] = useState(pendingBooking?.customerPhone || currentUser?.phone || '');
 
+  // Reconcile what the customer already entered with their account details:
+  // values carried from the booking form win, the account fills the gaps. This
+  // is what stops a birthday customer re-typing their name and phone.
   useEffect(() => {
-    if (currentUser) {
-      if (currentUser.name) setName(currentUser.name);
-      if (currentUser.email) setEmail(currentUser.email);
-      if (currentUser.phone) setPhone(currentUser.phone);
+    if (!currentUser) return;
 
-      if (pendingBooking) {
-        setPendingBooking({
-          ...pendingBooking,
-          customerName: pendingBooking.customerName || currentUser.name,
-          customerEmail: pendingBooking.customerEmail || currentUser.email,
-          customerPhone: pendingBooking.customerPhone || currentUser.phone,
-        });
-      }
+    setName(prev => prev || pendingBooking?.customerName || currentUser.name || '');
+    setEmail(prev => prev || pendingBooking?.customerEmail || currentUser.email || '');
+    setPhone(prev => prev || pendingBooking?.customerPhone || currentUser.phone || '');
+
+    if (pendingBooking) {
+      setPendingBooking({
+        ...pendingBooking,
+        customerName: pendingBooking.customerName || currentUser.name,
+        customerEmail: pendingBooking.customerEmail || currentUser.email,
+        customerPhone: pendingBooking.customerPhone || currentUser.phone,
+      });
     }
   }, [currentUser]);
   const [password, setPassword] = useState('');
@@ -44,16 +60,18 @@ export const CheckoutInfoSection: React.FC = () => {
   const [modalError, setModalError] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const validate = () => {
-    const errs: Record<string, string> = {};
-    if (!name.trim()) errs.name = 'Full name is required';
-    if (!email.trim() || !email.includes('@')) errs.email = 'Valid email is required';
-    if (!validateSaudiPhone(phone)) errs.phone = 'Enter a valid Saudi mobile number, such as 0501234567 or +966501234567';
-
-    if (!currentUser) {
-      if (!password || password.length < 6) errs.password = 'Password must be at least 6 characters long';
-      if (password !== confirmPassword) errs.confirmPassword = 'Passwords do not match';
-    }
+  const validate = async () => {
+    // A signed-in customer is editing their own details, so their own record
+    // must not be reported as a duplicate; a guest is creating a new account,
+    // where an existing phone or email genuinely is a clash.
+    const errs = await validateCustomerForm(
+      { name, email, phone, password, confirmPassword },
+      {
+        requirePassword: !currentUser,
+        excludeId: currentUser?.id,
+        allowExistingCustomer: !!currentUser
+      }
+    );
 
     setErrors(errs);
     return Object.keys(errs).length === 0;
@@ -62,15 +80,17 @@ export const CheckoutInfoSection: React.FC = () => {
   const handleContinue = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormGlobalError(null);
-    if (!validate()) return;
+    if (!(await validate())) return;
 
-    const normPhone = normaliseSaudiPhone(phone);
+    // One canonical stored format everywhere.
+    const normPhone = canonicalPhone(phone);
+    const normEmail = canonicalEmail(email);
 
     // If currentUser is not logged in, register account explicitly
     if (!currentUser) {
       const regRes = await registerCustomer({
         name: name.trim(),
-        email: email.trim(),
+        email: normEmail,
         phone: normPhone,
         password: password
       });
@@ -78,7 +98,7 @@ export const CheckoutInfoSection: React.FC = () => {
       if (!regRes.success) {
         if (regRes.error?.includes('already exists')) {
           setFormGlobalError('An account with these details already exists. Please sign in below to continue.');
-          setLoginEmail(email.trim());
+          setLoginEmail(normEmail);
           setIsLoginModalOpen(true);
         } else {
           setFormGlobalError(regRes.error || 'Registration failed.');
@@ -89,7 +109,7 @@ export const CheckoutInfoSection: React.FC = () => {
       setCurrentUser({
         ...currentUser,
         name: name.trim(),
-        email: email.trim(),
+        email: normEmail,
         phone: normPhone
       });
     }
@@ -99,7 +119,7 @@ export const CheckoutInfoSection: React.FC = () => {
       setPendingBooking({
         ...pendingBooking,
         customerName: name.trim(),
-        customerEmail: email.trim(),
+        customerEmail: normEmail,
         customerPhone: normPhone
       });
     }
@@ -255,12 +275,26 @@ export const CheckoutInfoSection: React.FC = () => {
                     <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-charcoal/40" />
                     <input
                       type="password"
-                      placeholder="•••••••• (min 6 characters)"
+                      placeholder="••••••••"
                       value={password}
                       onChange={e => { setPassword(e.target.value); if (errors.password) setErrors({...errors, password: ''}); }}
                       className="w-full bg-brand-sand/20 border border-brand-clay/80 rounded-2xl py-3 pl-10 pr-4 text-sm font-semibold text-brand-charcoal focus:ring-1 focus:ring-brand-terracotta focus:outline-none"
                     />
                   </div>
+                  {/* Live checklist, updating as they type. */}
+                  <ul className="space-y-0.5 mt-1.5">
+                    {passwordChecklist(password).map(item => (
+                      <li
+                        key={item.label}
+                        className={`text-[11px] font-semibold flex items-center gap-1.5 ${
+                          item.met ? 'text-brand-sage' : 'text-brand-charcoal/45'
+                        }`}
+                      >
+                        <span>{item.met ? '✓' : '•'}</span>
+                        <span>{item.label}</span>
+                      </li>
+                    ))}
+                  </ul>
                   {errors.password && <p className="text-xs text-red-500 mt-1 font-medium">{errors.password}</p>}
                 </div>
 
@@ -310,14 +344,20 @@ export const CheckoutInfoSection: React.FC = () => {
 
             <div className="flex gap-4">
               <img
-                src={workshop.image}
-                alt={workshop.title}
+                src={birthday ? (birthdayPackage?.image || workshop.image) : workshop.image}
+                alt={birthday ? (birthdayPackage?.name || 'Birthday package') : workshop.title}
                 className="w-20 h-20 rounded-2xl object-cover shrink-0 bg-brand-sand border border-brand-clay/40"
               />
               <div>
-                <span className="text-[10px] font-bold text-brand-sage uppercase tracking-wider block">{workshop.category}</span>
+                <span className="text-[10px] font-bold text-brand-sage uppercase tracking-wider block">
+                  {birthday ? 'Birthday Package' : workshop.category}
+                </span>
                 <h4 className="font-bold text-brand-charcoal text-sm leading-tight">{pendingBooking.workshopTitle}</h4>
-                <p className="text-xs text-brand-charcoal/70 mt-1">{workshop.duration} • {workshop.room.split('(')[0]}</p>
+                <p className="text-xs text-brand-charcoal/70 mt-1">
+                  {birthday
+                    ? `${birthdayPackage?.duration || ''}${birthdayPackage?.ageInformation ? ` • ${birthdayPackage.ageInformation}` : ''}`
+                    : `${workshop.duration} • ${workshop.room.split('(')[0]}`}
+                </p>
               </div>
             </div>
 
@@ -331,17 +371,25 @@ export const CheckoutInfoSection: React.FC = () => {
                 <span className="font-bold text-brand-charcoal">{pendingBooking.time}</span>
               </div>
               <div className="flex justify-between">
-                <span>Participants:</span>
+                <span>{birthday ? 'Guests:' : 'Participants:'}</span>
                 <span className="font-bold text-brand-charcoal">{pendingBooking.participants} {pendingBooking.participants === 1 ? 'person' : 'people'}</span>
               </div>
               <div className="flex justify-between">
-                <span>Price per person:</span>
-                <span className="font-bold text-brand-charcoal">{workshop.price} SAR</span>
+                <span>{birthday ? (birthdayPackage?.pricingLabel || 'Per child') : 'Price per person'}:</span>
+                <span className="font-bold text-brand-charcoal">
+                  {birthday ? (birthdayPackage?.price ?? 0) : workshop.price} SAR
+                </span>
               </div>
+              {birthday?.birthdayPersonName && (
+                <div className="flex justify-between">
+                  <span>Birthday person:</span>
+                  <span className="font-bold text-brand-charcoal">{birthday.birthdayPersonName}</span>
+                </div>
+              )}
             </div>
 
             <div className="border-t border-brand-clay/60 pt-3 flex justify-between items-center text-brand-charcoal">
-              <span className="font-bold text-sm">Total Due:</span>
+              <span className="font-bold text-sm">{birthday ? 'Deposit Due:' : 'Total Due:'}</span>
               <span className="font-serif text-xl font-bold text-brand-terracotta">{pendingBooking.totalPrice} SAR</span>
             </div>
           </div>

@@ -5,8 +5,10 @@
 
 import { Workshop, RecurringScheduleRule, WorkshopSessionRecord, SessionException } from '../types';
 import { getRiyadhNow, getRiyadhDateString } from './dateUtils';
+import { WEEKDAY_NAMES } from './calendarConfig';
 
-const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+// Shared English Gregorian weekday names.
+const DAY_NAMES = WEEKDAY_NAMES;
 
 /**
  * Generate sessions for a specific workshop and given month/year based on its recurring rules.
@@ -56,9 +58,23 @@ export function generateSessionsForMonth(
         ? exception.instructor
         : (rule.instructor || workshop.instructor);
 
+      // The staff ID travels with the generated session so the assignment resolves
+      // to the same staff record everywhere.
+      const staffId = (exception && exception.type === 'modify' && exception.staffId)
+        ? exception.staffId
+        : (rule.staffId || workshop.staffId);
+
       const capacity = (exception && exception.type === 'modify' && exception.capacity)
         ? exception.capacity
         : (rule.capacity || workshop.capacity);
+
+      // Studio space follows the rule, falling back to the workshop's own space.
+      const roomId = (exception && exception.type === 'modify' && exception.roomId)
+        ? exception.roomId
+        : (rule.roomId || workshop.roomId);
+      const tableId = (exception && exception.type === 'modify' && exception.tableId)
+        ? exception.tableId
+        : (rule.tableId || workshop.tableId);
 
       // Deterministic key for duplicate prevention: workshopId + date + startTime
       const normalizedTime = startTime.trim().toUpperCase();
@@ -80,6 +96,12 @@ export function generateSessionsForMonth(
           endTime: rule.endTime,
           duration: rule.duration || workshop.duration,
           instructor: instructor,
+          staffId: staffId,
+          roomId: roomId,
+          room: rule.room || workshop.room,
+          tableId: tableId,
+          // Links the session back to the rule that produced it.
+          ruleId: rule.id,
           capacity: capacity,
           status: 'Published'
         });

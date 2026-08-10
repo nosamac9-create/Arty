@@ -10,10 +10,13 @@ import {
   MapPin, Clock, Edit2, ShieldAlert, Receipt, CheckCircle, ChevronRight, Bell, AlertTriangle
 } from 'lucide-react';
 import { Booking, Workshop } from '../types';
+import { resolveBookingInstructor } from '../utils/queueUtils';
+import { DateInput } from './DateInput';
 
 export const AdminBookingsSection: React.FC = () => {
   const { 
-    bookings, workshops, cancelBooking, updateBookingStatus, queue, updateQueueStatus
+    bookings, workshops, cancelBooking, updateBookingStatus, queue, updateQueueStatus,
+    staff, workshopSessions
   } = useApp();
 
   // Search/Filters State
@@ -58,7 +61,8 @@ export const AdminBookingsSection: React.FC = () => {
         customerName: q.name,
         customerEmail: '-',
         customerPhone: q.phone,
-        workshopId: '',
+        workshopId: q.workshopId || '',
+        sessionId: q.sessionId,
         workshopTitle: q.type === 'Without Instructor' ? 'Walk-in — No Instructor' : q.activity,
         date: q.date,
         time: q.checkInTime,
@@ -222,6 +226,31 @@ export const AdminBookingsSection: React.FC = () => {
 
     return result;
   }, [unifiedBookings, search, sourceFilter, statusFilter, paymentFilter, dateFilterMode, customDate, sortField, sortAsc, tick]);
+
+  // ---- Pagination over the FILTERED list ----
+  const BOOKINGS_PER_PAGE = 10;
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const totalPages = Math.max(1, Math.ceil(processedBookings.length / BOOKINGS_PER_PAGE));
+
+  // Any change to search, filters or sorting starts again at page one.
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, sourceFilter, statusFilter, paymentFilter, dateFilterMode, customDate, sortField, sortAsc]);
+
+  // Stay in range when the result set shrinks (e.g. a filter removes rows).
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
+
+  /** Only this page's rows are rendered — the rest are never mounted. */
+  const paginatedBookings = useMemo(() => {
+    const start = (currentPage - 1) * BOOKINGS_PER_PAGE;
+    return processedBookings.slice(start, start + BOOKINGS_PER_PAGE);
+  }, [processedBookings, currentPage]);
+
+  const rangeStart = processedBookings.length === 0 ? 0 : (currentPage - 1) * BOOKINGS_PER_PAGE + 1;
+  const rangeEnd = Math.min(currentPage * BOOKINGS_PER_PAGE, processedBookings.length);
 
   const activeBookingDetail = useMemo(() => {
     return unifiedBookings.find(b => b.id === selectedBookingId) || unifiedBookings[0] || null;
@@ -586,12 +615,11 @@ export const AdminBookingsSection: React.FC = () => {
             
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-extrabold text-brand-charcoal/60 uppercase tracking-widest">Picker:</span>
-              <input
-                type="date"
+              <DateInput
                 value={customDate}
                 onChange={e => {
-                  setCustomDate(e.target.value);
-                  setDateFilterMode('Custom');
+                setCustomDate(e.target.value);
+                setDateFilterMode('Custom');
                 }}
                 className="bg-white border border-brand-clay/60 rounded-xl py-1.5 px-3 text-xs font-semibold text-brand-charcoal cursor-pointer focus:outline-none focus:border-brand-terracotta"
               />
@@ -645,7 +673,7 @@ export const AdminBookingsSection: React.FC = () => {
                     </td>
                   </tr>
                 ) : (
-                  processedBookings.map((b) => {
+                  paginatedBookings.map((b) => {
                     const isSelected = selectedBookingId === b.id;
                     const isLate = isActivelyPending(b);
                     return (
@@ -732,12 +760,44 @@ export const AdminBookingsSection: React.FC = () => {
             </table>
           </div>
 
-          {/* Pagination Footer */}
-          <div className="p-4 border-t border-brand-clay/60 flex justify-between items-center bg-brand-cream/10">
-            <span className="text-xs text-brand-charcoal/50 font-medium">Page 1 of 1 (10 entries per page)</span>
-            <div className="flex gap-2">
-              <button disabled className="px-3 py-1 rounded bg-brand-sand/50 text-brand-charcoal/40 text-xs font-bold cursor-not-allowed">Previous</button>
-              <button disabled className="px-3 py-1 rounded bg-brand-sand/50 text-brand-charcoal/40 text-xs font-bold cursor-not-allowed">Next</button>
+          {/* Pagination Footer — driven by the filtered result set */}
+          <div className="p-4 border-t border-brand-clay/60 flex flex-col sm:flex-row justify-between items-center gap-3 bg-brand-cream/10">
+            <span className="text-xs text-brand-charcoal/60 font-semibold">
+              {processedBookings.length === 0
+                ? 'No entries'
+                : `Showing ${rangeStart}\u2013${rangeEnd} of ${processedBookings.length}`}
+            </span>
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage <= 1}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
+                  currentPage <= 1
+                    ? 'bg-brand-sand/50 text-brand-charcoal/35 border-brand-clay/40 cursor-not-allowed'
+                    : 'bg-white text-brand-charcoal border-brand-clay hover:bg-brand-sand cursor-pointer'
+                }`}
+              >
+                Previous
+              </button>
+
+              <span className="text-xs font-bold text-brand-charcoal/70">
+                Page {currentPage} of {totalPages}
+              </span>
+
+              <button
+                type="button"
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage >= totalPages}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
+                  currentPage >= totalPages
+                    ? 'bg-brand-sand/50 text-brand-charcoal/35 border-brand-clay/40 cursor-not-allowed'
+                    : 'bg-white text-brand-charcoal border-brand-clay hover:bg-brand-sand cursor-pointer'
+                }`}
+              >
+                Next
+              </button>
             </div>
           </div>
 
@@ -774,6 +834,14 @@ export const AdminBookingsSection: React.FC = () => {
                 <div className="flex justify-between">
                   <span className="font-semibold text-brand-charcoal/50">Workshop Type</span>
                   <span className="font-bold">{activeBookingDetail.workshopTitle}</span>
+                </div>
+                {/* Tutor resolved through the booked session, so it matches the
+                    Live Queue, the workshop session and the staff calendar. */}
+                <div className="flex justify-between">
+                  <span className="font-semibold text-brand-charcoal/50">Tutor</span>
+                  <span className="font-bold">
+                    {resolveBookingInstructor(activeBookingDetail as Booking, { staff, workshopSessions }).name}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="font-semibold text-brand-charcoal/50">Scheduled Slot</span>

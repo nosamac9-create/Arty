@@ -10,6 +10,7 @@ import {
   TrendingUp, TrendingDown, Clock, Cake, Bell, CheckCircle2, Phone, Mail, ChevronRight, Sparkles, Filter
 } from 'lucide-react';
 import { Booking, PotteryPiece } from '../types';
+import { getActivitiesForDate, categorizeBooking } from '../utils/activityUtils';
 
 export const AdminDashboardSection: React.FC = () => {
   const { 
@@ -20,12 +21,27 @@ export const AdminDashboardSection: React.FC = () => {
     setAdminTab, 
     todayDateStr, 
     getRelativeRiyadhDateStr, 
-    updatePieceStatus, 
-    updatePiece 
+    updatePieceStatus,
+    updatePiece,
+    setSelectedEventBookingId
   } = useApp();
 
   const tomorrowDateStr = useMemo(() => getRelativeRiyadhDateStr(1), [getRelativeRiyadhDateStr]);
   const currentRiyadhMonth = useMemo(() => todayDateStr.slice(0, 7), [todayDateStr]);
+
+  /**
+   * Opens the right details view for a booking:
+   * birthday packages and events open in Events & Socials on that exact
+   * reservation, workshops open in the Bookings page.
+   */
+  const openBookingDetails = (booking: Booking) => {
+    if (categorizeBooking(booking, workshops) === 'Events/Birthdays') {
+      setSelectedEventBookingId(booking.id);
+      setAdminTab('events-admin');
+      return;
+    }
+    setAdminTab('bookings');
+  };
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -34,15 +50,18 @@ export const AdminDashboardSection: React.FC = () => {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // 1. TODAY'S BOOKINGS
-  const todaysBookings = useMemo(() => {
-    return bookings
-      .filter(b => b.date === todayDateStr && b.status !== 'Cancelled')
-      .sort((a, b) => a.time.localeCompare(b.time));
-  }, [bookings, todayDateStr]);
+  // 1. TODAY'S BOOKINGS — one merged view over the shared booking and queue
+  // records, so website bookings, admin bookings and walk-ins all appear, and a
+  // booking that also has a queue entry appears once. Both lists come from live
+  // queries and todayDateStr ticks in Riyadh time, so this stays current without
+  // a restart.
+  const todaysBookings = useMemo(
+    () => getActivitiesForDate({ bookings, queue, workshops }, todayDateStr),
+    [bookings, queue, workshops, todayDateStr]
+  );
 
   const todaysTotalParticipants = useMemo(() => {
-    return todaysBookings.reduce((sum, b) => sum + b.participants, 0);
+    return todaysBookings.reduce((sum, a) => sum + a.participants, 0);
   }, [todaysBookings]);
 
   // 2. TOMORROW'S BOOKINGS
@@ -270,7 +289,7 @@ export const AdminDashboardSection: React.FC = () => {
             <div>
               <h2 className="font-display font-bold text-lg text-brand-charcoal">Today's Bookings</h2>
               <p className="text-xs text-brand-charcoal/60">
-                Scheduled workshops, special events, and birthday package reservations for today ({todayDateStr}).
+                Workshops, events, birthday packages and studio walk-ins scheduled for today ({todayDateStr}).
               </p>
             </div>
           </div>
@@ -286,7 +305,7 @@ export const AdminDashboardSection: React.FC = () => {
 
         {todaysBookings.length === 0 ? (
           <div className="p-8 text-center text-xs text-brand-charcoal/50 italic bg-brand-cream/30 rounded-2xl border border-dashed border-brand-clay">
-            No active bookings scheduled for today ({todayDateStr}).
+            No active bookings or walk-ins for today ({todayDateStr}).
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -305,42 +324,58 @@ export const AdminDashboardSection: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-brand-clay/30 font-medium">
-                {todaysBookings.map(b => (
-                  <tr key={b.id} className="hover:bg-brand-sand/15 transition-colors">
-                    <td className="py-3 px-3 font-mono font-bold text-brand-terracotta">{b.time}</td>
-                    <td className="py-3 px-3 font-bold text-brand-charcoal">{b.customerName}</td>
-                    <td className="py-3 px-3 font-mono text-brand-charcoal/80">{b.customerPhone}</td>
+                {todaysBookings.map(a => (
+                  <tr key={a.id} className="hover:bg-brand-sand/15 transition-colors">
+                    <td className="py-3 px-3 font-mono font-bold text-brand-terracotta">{a.time}</td>
+                    <td className="py-3 px-3 font-bold text-brand-charcoal">{a.customerName}</td>
+                    <td className="py-3 px-3 font-mono text-brand-charcoal/80">{a.customerPhone}</td>
                     <td className="py-3 px-3">
                       <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold border ${
-                        b.workshopId === 'birthday-party-event' || b.workshopTitle.toLowerCase().includes('birthday') ? 'bg-pink-50 text-pink-800 border-pink-200' :
-                        b.workshopTitle.toLowerCase().includes('event') ? 'bg-purple-50 text-purple-800 border-purple-200' :
+                        a.category === 'Events/Birthdays' ? 'bg-pink-50 text-pink-800 border-pink-200' :
+                        a.category === 'Self-Guided' ? 'bg-purple-50 text-purple-800 border-purple-200' :
                         'bg-blue-50 text-blue-800 border-blue-200'
                       }`}>
-                        {b.workshopId === 'birthday-party-event' || b.workshopTitle.toLowerCase().includes('birthday') ? 'Birthday Package' :
-                         b.workshopTitle.toLowerCase().includes('event') ? 'Event' : 'Workshop'}
+                        {a.category}
+                      </span>
+                      <span className="ml-1.5 inline-flex px-2 py-0.5 rounded text-[10px] font-bold border bg-brand-sand/50 text-brand-charcoal/70 border-brand-clay/50">
+                        {a.source}
                       </span>
                     </td>
-                    <td className="py-3 px-3 font-bold text-brand-charcoal">{b.workshopTitle}</td>
-                    <td className="py-3 px-3 font-mono">{b.participants} guest(s)</td>
+                    <td className="py-3 px-3 font-bold text-brand-charcoal">{a.title}</td>
+                    <td className="py-3 px-3 font-mono">{a.participants} guest(s)</td>
                     <td className="py-3 px-3">
-                      <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold border ${
-                        b.paymentStatus === 'Paid' || b.paymentStatus === 'Deposit Paid' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
-                        'bg-red-50 text-red-800 border-red-200'
-                      }`}>
-                        {b.paymentStatus}
-                      </span>
+                      {a.paymentStatus ? (
+                        <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold border ${
+                          a.paymentStatus === 'Paid' || a.paymentStatus === 'Deposit Paid' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
+                          'bg-red-50 text-red-800 border-red-200'
+                        }`}>
+                          {a.paymentStatus}
+                        </span>
+                      ) : (
+                        <span className="text-brand-charcoal/40">—</span>
+                      )}
                     </td>
                     <td className="py-3 px-3">
                       <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold border ${
-                        b.status === 'Checked In' || b.status === 'Completed' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
-                        'bg-amber-50 text-amber-800 border-amber-200'
+                        a.status === 'Checked In' || a.status === 'Completed' || a.status === 'In Progress'
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                          : 'bg-amber-50 text-amber-800 border-amber-200'
                       }`}>
-                        {b.status}
+                        {a.status}
                       </span>
                     </td>
                     <td className="py-3 px-3 text-right">
                       <button
-                        onClick={() => setAdminTab('bookings')}
+                        onClick={() => {
+                          // Birthday and event bookings open in Events & Socials,
+                          // on the same shared booking record.
+                          if (a.category === 'Events/Birthdays' && a.bookingId) {
+                            setSelectedEventBookingId(a.bookingId);
+                            setAdminTab('events-admin');
+                            return;
+                          }
+                          setAdminTab(a.bookingId ? 'bookings' : 'queue');
+                        }}
                         className="bg-brand-sand border border-brand-clay/60 text-brand-charcoal px-2.5 py-1 rounded-lg text-xs font-bold hover:bg-brand-clay/40 transition-all cursor-pointer"
                       >
                         View Details
@@ -427,7 +462,7 @@ export const AdminDashboardSection: React.FC = () => {
                     </td>
                     <td className="py-3 px-3 text-right">
                       <button
-                        onClick={() => setAdminTab('bookings')}
+                        onClick={() => openBookingDetails(b)}
                         className="bg-brand-sand border border-brand-clay/60 text-brand-charcoal px-2.5 py-1 rounded-lg text-xs font-bold hover:bg-brand-clay/40 transition-all cursor-pointer"
                       >
                         View Details
@@ -513,7 +548,7 @@ export const AdminDashboardSection: React.FC = () => {
                     </td>
                     <td className="py-3 px-3 text-right">
                       <button
-                        onClick={() => setAdminTab('bookings')}
+                        onClick={() => openBookingDetails(b)}
                         className="bg-brand-sand border border-brand-clay/60 text-brand-charcoal px-2.5 py-1 rounded-lg text-xs font-bold hover:bg-brand-clay/40 transition-all cursor-pointer"
                       >
                         View Details

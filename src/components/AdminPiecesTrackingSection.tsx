@@ -10,11 +10,18 @@ import {
   MapPin, User, Calendar, RefreshCw, ClipboardList, Clock, Sparkles,
   Camera, Hash, Upload
 } from 'lucide-react';
-import { PotteryPiece } from '../types';
+import { PotteryPiece, isStageEnabled } from '../types';
 import { PhoneInput } from './PhoneInput';
+import { DateInput } from './DateInput';
+import { formatDateTime } from '../utils/calendarConfig';
+import { hasWebsiteAccount } from '../utils/accountUtils';
 
 export const AdminPiecesTrackingSection: React.FC = () => {
-  const { pieces, updatePieceStatus, addPiece, updatePiece, workshops, bookings } = useApp();
+  const {
+    pieces, updatePieceStatus, addPiece, updatePiece, workshops, bookings,
+    // Shared records — no local copies of customers or staff.
+    customers, queue, staff, resolveCustomer, pipelineStages
+  } = useApp();
 
   // Views and Filters state
   const [viewMode, setViewMode] = useState<'Board' | 'Table'>('Board');
@@ -56,7 +63,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
   const [customPhotoUrl, setCustomPhotoUrl] = useState('');
   const [selectedPresetPhoto, setSelectedPresetPhoto] = useState('Mug');
   const [dateCreatedInput, setDateCreatedInput] = useState(() => new Date().toISOString().split('T')[0]);
-  const [assignedStaffInput, setAssignedStaffInput] = useState('Lina');
+  const [assignedStaffInput, setAssignedStaffInput] = useState('');
   const [initialStatus, setInitialStatus] = useState<PotteryPiece['status']>('Created');
   const [storageLocationInput, setStorageLocationInput] = useState('Shelf A-1');
   const [expectedCompletionInput, setExpectedCompletionInput] = useState(() => {
@@ -71,9 +78,15 @@ export const AdminPiecesTrackingSection: React.FC = () => {
   });
   const [manualNotes, setManualNotes] = useState('');
 
+  // Mark-as-Broken Modal State
+  const [brokenTargetId, setBrokenTargetId] = useState<string | null>(null);
+  const [brokenPerformer, setBrokenPerformer] = useState('');
+  const [brokenReason, setBrokenReason] = useState('');
+  const [brokenError, setBrokenError] = useState('');
+
   // Backward Move Confirmation Modal State
   const [backwardMoveTarget, setBackwardMoveTarget] = useState<{ pieceId: string; currentStatus: PotteryPiece['status']; targetStatus: PotteryPiece['status'] } | null>(null);
-  const [backwardPerformer, setBackwardPerformer] = useState('Lina Al-Sudais');
+  const [backwardPerformer, setBackwardPerformer] = useState('');
   const [backwardReason, setBackwardReason] = useState('');
 
   // Preset design photos mapping
@@ -95,35 +108,137 @@ export const AdminPiecesTrackingSection: React.FC = () => {
     }, 5000);
   };
 
-  // Extract unique customers from existing bookings
-  const uniqueCustomers = useMemo(() => {
-    const customersMap = new Map<string, { name: string; phone: string; email: string }>();
-    (bookings || []).forEach(b => {
-      if (b.customerPhone) {
-        customersMap.set(b.customerPhone, {
-          name: b.customerName,
-          phone: b.customerPhone,
-          email: b.customerEmail || ''
-        });
-      }
-    });
-    return Array.from(customersMap.values());
-  }, [bookings]);
+  /**
+   * National digits for a phone number, so "0501234567", "501234567" and
+   * "+966 50 123 4567" all reduce to the same comparable key.
+   */
+  const phoneKey = (phone?: string) => {
+    let digits = String(phone || '').replace(/\D/g, '');
+    if (digits.startsWith('966')) digits = digits.slice(3);
+    if (digits.startsWith('0')) digits = digits.slice(1);
+    return digits;
+  };
 
-  // Customer match filtering for typing autocomplete
+  /**
+   * True when the query looks like a phone number. Without this, a query such as
+   * "CUST-2" would digit-match every stored phone containing a "2".
+   */
+  const isPhoneQuery = (raw: string) => {
+    const trimmed = raw.trim();
+    if (!trimmed) return false;
+    if (!/^[+\d\s()\-.]+$/.test(trimmed)) return false;
+    return phoneKey(trimmed).length >= 3;
+  };
+
+  /**
+   * Every customer the studio knows about — the shared customers table plus
+   * anyone who appears only on a booking or a queue visit. A website account is
+   * never required to link a piece to a customer.
+   */
+  const uniqueCustomers = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; phone: string; email: string; origin: string; hasAccount: boolean }>();
+
+    const keyFor = (phone?: string, email?: string, name?: string) =>
+      phoneKey(phone) || String(email || '').trim().toLowerCase() || String(name || '').trim().toLowerCase();
+
+    // 1. Stored customer records (website accounts, admin-created, imported).
+    (customers || []).forEach(c => {
+      const key = keyFor(c.phone, c.email, c.name);
+      if (!key) return;
+      map.set(key, {
+        id: c.id,
+        name: c.name || 'Guest',
+        phone: c.phone || '',
+        email: c.email || '',
+        origin: hasWebsiteAccount(c) ? 'Website account' : 'Studio customer',
+        hasAccount: hasWebsiteAccount(c)
+      });
+    });
+
+    // 2. Anyone who only exists on a booking.
+    (bookings || []).forEach(b => {
+      const key = keyFor(b.customerPhone, b.customerEmail, b.customerName);
+      if (!key || map.has(key)) return;
+      map.set(key, {
+        id: b.id,
+        name: b.customerName || 'Guest',
+        phone: b.customerPhone || '',
+        email: b.customerEmail && b.customerEmail !== '-' ? b.customerEmail : '',
+        origin: b.source === 'Website' ? 'Website booking' : `${b.source} booking`,
+        hasAccount: false
+      });
+    });
+
+    // 3. Walk-ins that only exist in the Live Queue.
+    (queue || []).forEach(q => {
+      const key = keyFor(q.phone, undefined, q.name);
+      if (!key || map.has(key)) return;
+      map.set(key, {
+        id: q.id,
+        name: q.name || 'Guest',
+        phone: q.phone || '',
+        email: '',
+        origin: 'Live Queue walk-in',
+        hasAccount: false
+      });
+    });
+
+    return Array.from(map.values());
+  }, [customers, bookings, queue]);
+
+  // Customer match filtering for typing autocomplete — name, phone, id or email.
   const filteredCustResults = useMemo(() => {
-    if (!custSearch.trim()) return [];
-    const q = custSearch.toLowerCase();
-    return uniqueCustomers.filter(c => 
-      (c.name || '').toLowerCase().includes(q) || 
-      (c.phone || '').includes(q)
-    );
+    const raw = custSearch.trim();
+    if (!raw) return [];
+    const q = raw.toLowerCase();
+    const phoneSearch = isPhoneQuery(raw);
+    const digits = phoneKey(raw);
+
+    return uniqueCustomers.filter(c =>
+      (c.name || '').toLowerCase().includes(q) ||
+      (c.id || '').toLowerCase().includes(q) ||
+      (c.email || '').toLowerCase().includes(q) ||
+      (phoneSearch && phoneKey(c.phone).includes(digits))
+    ).slice(0, 25);
   }, [uniqueCustomers, custSearch]);
 
+  /**
+   * Active staff for new assignments, plus the staff already on the piece being
+   * edited so historical assignments are never lost from the record.
+   */
+  const assignableStaff = useMemo(
+    () => (staff || []).filter(s => s.status === 'Active'),
+    [staff]
+  );
+
   // Kanban Columns definitions
-  const COLUMNS: PotteryPiece['status'][] = [
-    'Created', 'Drying', 'In Processing', 'Glazing', 'Firing', 'Ready for Collection', 'Collected'
-  ];
+  /**
+   * Stages come from Settings → Piece Pipeline Stages. Renaming, reordering or
+   * disabling a stage there is reflected here immediately — there is no local
+   * status list.
+   */
+  const orderedStages = useMemo(
+    () => [...pipelineStages].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+    [pipelineStages]
+  );
+
+  /** Board columns follow the configured order. */
+  const COLUMNS = useMemo(
+    () => orderedStages.map(stage => stage.name as PotteryPiece['status']),
+    [orderedStages]
+  );
+
+  /**
+   * Statuses selectable for a NEW update. Disabled stages are excluded, but a
+   * piece already sitting in one keeps it — history is never rewritten.
+   */
+  const selectableStatuses = useMemo(
+    () => orderedStages.filter(isStageEnabled).map(stage => stage.name as PotteryPiece['status']),
+    [orderedStages]
+  );
+
+  const stageColor = (name: string) =>
+    orderedStages.find(stage => stage.name === name)?.color;
 
   const handleCameraCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -159,7 +274,20 @@ export const AdminPiecesTrackingSection: React.FC = () => {
     const oldStatus = piece.status;
     if (oldStatus === targetStatus) return;
 
-    const stages = ['Created', 'Drying', 'In Processing', 'Glazing', 'Firing', 'Ready for Collection', 'Collected'];
+    // Broken is not a lifecycle step — it needs a staff member and a damage note.
+    if (targetStatus === 'Broken') {
+      setBrokenTargetId(pieceId);
+      setBrokenPerformer('');
+      setBrokenReason('');
+      return;
+    }
+
+    // Progression order comes from the configured pipeline, so a reordered or
+    // renamed stage is still classified correctly. 'Broken' is handled above and
+    // is deliberately excluded from the linear progression.
+    const stages = orderedStages
+      .map(stage => stage.name)
+      .filter(name => name !== 'Broken');
     const oldIdx = stages.indexOf(oldStatus);
     const newIdx = stages.indexOf(targetStatus);
 
@@ -169,7 +297,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
         currentStatus: oldStatus,
         targetStatus
       });
-      setBackwardPerformer('Lina Al-Sudais');
+      setBackwardPerformer('');
       setBackwardReason('');
     } else {
       handleUpdatePieceStatus(pieceId, targetStatus, 'Staff');
@@ -185,6 +313,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
       case 'Firing': return 'text-orange-600 border-orange-500 bg-orange-50';
       case 'Ready for Collection': return 'text-emerald-700 border-emerald-500 bg-emerald-50';
       case 'Collected': return 'text-gray-600 border-gray-400 bg-gray-50';
+      case 'Broken': return 'text-red-700 border-red-500 bg-red-50';
       default: return 'text-brand-charcoal border-brand-clay bg-brand-sand';
     }
   };
@@ -231,15 +360,35 @@ export const AdminPiecesTrackingSection: React.FC = () => {
   const processedPieces = useMemo(() => {
     let result = [...pieces];
 
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      result = result.filter(p => 
-        (p.id || '').toLowerCase().includes(q) || 
-        (p.pieceCode && p.pieceCode.toLowerCase().includes(q)) ||
-        (p.name || '').toLowerCase().includes(q) || 
-        (p.customerName || '').toLowerCase().includes(q) ||
-        (p.customerPhone || '').includes(q)
-      );
+    // Search the shared piece records: trimmed, case-insensitive, and matching
+    // phone numbers regardless of formatting. Runs alongside the other filters.
+    const rawSearch = search.trim();
+    if (rawSearch) {
+      const q = rawSearch.toLowerCase();
+      const phoneSearch = isPhoneQuery(rawSearch);
+      const digits = phoneKey(rawSearch);
+
+      result = result.filter(p => {
+        const fields = [
+          p.id,
+          p.pieceCode,
+          p.name,
+          p.customerName,
+          p.customerId,
+          p.assignedStaff,
+          p.workshopName,
+          p.bookingId,
+          p.status,
+          p.storageLocation
+        ];
+
+        if (fields.some(f => f && String(f).toLowerCase().includes(q))) return true;
+
+        // Phone match on national digits, so "0501234567" finds "+966 50 123 4567".
+        if (phoneSearch && phoneKey(p.customerPhone).includes(digits)) return true;
+
+        return false;
+      });
     }
 
     if (overdueOnly) {
@@ -329,11 +478,21 @@ export const AdminPiecesTrackingSection: React.FC = () => {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-brand-charcoal/40" />
             <input
               type="text"
-              placeholder="Search piece code, customer, phone..."
+              placeholder="Search code, customer, phone, ID, staff, workshop, status..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full bg-brand-cream/40 border border-brand-clay/60 rounded-xl py-2 pl-9 pr-3 text-xs font-semibold text-brand-charcoal"
+              className="w-full bg-brand-cream/40 border border-brand-clay/60 rounded-xl py-2 pl-9 pr-8 text-xs font-semibold text-brand-charcoal"
             />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                title="Clear search"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-brand-charcoal/40 hover:text-brand-terracotta cursor-pointer"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
 
           {/* Toggles */}
@@ -381,15 +540,13 @@ export const AdminPiecesTrackingSection: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-1.5 justify-center">
-            <input
-              type="date"
+            <DateInput
               value={startDate}
               onChange={e => setStartDate(e.target.value)}
               className="bg-white border border-brand-clay/60 rounded-lg px-2 py-1 text-[11px] font-semibold text-brand-charcoal focus:outline-none focus:border-brand-terracotta"
             />
             <span className="text-[11px] font-bold text-brand-charcoal/50">to</span>
-            <input
-              type="date"
+            <DateInput
               value={endDate}
               onChange={e => setEndDate(e.target.value)}
               className="bg-white border border-brand-clay/60 rounded-lg px-2 py-1 text-[11px] font-semibold text-brand-charcoal focus:outline-none focus:border-brand-terracotta"
@@ -422,6 +579,34 @@ export const AdminPiecesTrackingSection: React.FC = () => {
 
       </div>
 
+      {/* No results for the current search / filter combination */}
+      {processedPieces.length === 0 && (
+        <div className="bg-white border border-dashed border-brand-clay rounded-2xl p-10 text-center space-y-2">
+          <Search className="h-6 w-6 text-brand-charcoal/30 mx-auto" />
+          <p className="text-sm font-bold text-brand-charcoal">No pottery pieces match your search</p>
+          <p className="text-xs text-brand-charcoal/60">
+            {search.trim()
+              ? <>Nothing found for “<span className="font-bold">{search.trim()}</span>”. Try a piece code, customer name, phone, customer ID, assigned staff, workshop or status.</>
+              : 'No pieces match the current filters.'}
+          </p>
+          {(search.trim() || overdueOnly || awaitingCollectionOnly || startDate || endDate) && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearch('');
+                setOverdueOnly(false);
+                setAwaitingCollectionOnly(false);
+                setStartDate('');
+                setEndDate('');
+              }}
+              className="mt-1 px-4 py-2 bg-brand-sand hover:bg-brand-clay/40 text-brand-charcoal rounded-xl text-xs font-bold cursor-pointer"
+            >
+              Clear search & filters
+            </button>
+          )}
+        </div>
+      )}
+
       {/* VIEW PANEL: KANBAN BOARD */}
       {viewMode === 'Board' ? (
         <div className="flex flex-row flex-nowrap gap-4 overflow-x-auto pb-4 w-full select-none no-scrollbar items-start">
@@ -434,9 +619,18 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                 className="flex flex-col shrink-0 w-[260px] bg-brand-cream/35 border border-brand-clay rounded-2xl p-3 h-[620px]"
               >
                 
-                {/* Column header title */}
-                <div className={`p-2.5 h-11 rounded-xl border flex items-center justify-between font-bold text-xs shrink-0 ${getColumnColorClass(col)}`}>
-                  <span className="truncate pr-1 uppercase tracking-wider text-[10px] self-center">{col}</span>
+                {/* Column header title. A stage renamed or added in Settings still
+                    shows its configured colour via the left accent. */}
+                <div
+                  className={`p-2.5 h-11 rounded-xl border flex items-center justify-between font-bold text-xs shrink-0 ${getColumnColorClass(col)}`}
+                  style={stageColor(col) ? { borderLeft: `4px solid ${stageColor(col)}` } : undefined}
+                >
+                  <span className="truncate pr-1 uppercase tracking-wider text-[10px] self-center">
+                    {col}
+                    {!selectableStatuses.includes(col) && (
+                      <span className="ml-1 normal-case text-brand-charcoal/40">(disabled)</span>
+                    )}
+                  </span>
                   <span className="bg-brand-cream rounded-full h-5 w-5 flex items-center justify-center text-[10px] text-brand-charcoal/80 border border-brand-clay/40 shrink-0 self-center">
                     {columnPieces.length}
                   </span>
@@ -603,11 +797,33 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                   <span className="text-[9px] font-bold text-brand-sage uppercase tracking-wider block">Assigned Pottery Staff</span>
                   <div className="flex items-center gap-2">
                     <div className="h-6 w-6 rounded-full bg-brand-terracotta text-brand-cream flex items-center justify-center font-bold text-[10px]">
-                      {selectedPiece.assignedStaff?.charAt(0) || 'L'}
+                      {selectedPiece.assignedStaff?.charAt(0) || '?'}
                     </div>
-                    <span className="text-xs font-bold text-brand-charcoal">{selectedPiece.assignedStaff || 'Lina'}</span>
+                    <span className="text-xs font-bold text-brand-charcoal">{selectedPiece.assignedStaff || 'Unassigned'}</span>
                   </div>
+                  {/* Historical assignment kept even if that staff member is no longer active */}
+                  {selectedPiece.assignedStaff && !assignableStaff.some(s => s.name === selectedPiece.assignedStaff) && (
+                    <p className="text-[9px] font-semibold text-brand-charcoal/50 italic">
+                      No longer an active staff member — kept for history.
+                    </p>
+                  )}
                 </div>
+
+                {/* Broken damage note — internal only, never sent to the customer */}
+                {selectedPiece.status === 'Broken' && (
+                  <div className="space-y-1 bg-red-50 border border-red-200 rounded-xl p-2.5">
+                    <span className="text-[9px] font-bold text-red-700 uppercase tracking-wider block flex items-center gap-1">
+                      <AlertCircle className="h-3 w-3" />
+                      <span>Broken — Internal Note</span>
+                    </span>
+                    <p className="text-[11px] font-semibold text-red-900">
+                      {selectedPiece.damageNote || 'No damage note recorded.'}
+                    </p>
+                    <p className="text-[9px] font-semibold text-red-700/70">
+                      The customer was asked to contact the café. This note is not shared with them.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Right Column: Metadata Fields */}
@@ -633,8 +849,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                       <span>Expected-Ready Date</span>
                       <span className="text-[9px] text-brand-terracotta">Syncs to My Pieces</span>
                     </label>
-                    <input
-                      type="date"
+                    <DateInput
                       value={editExpectedReadyDate}
                       onChange={e => setEditExpectedReadyDate(e.target.value)}
                       className="w-full bg-white border border-brand-clay/80 rounded-xl p-2 font-bold text-brand-charcoal"
@@ -681,6 +896,30 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                   </button>
                 </div>
 
+                {/* Status history — staff member and Riyadh date/time per change */}
+                <div className="space-y-1.5 pt-1">
+                  <span className="font-bold text-brand-charcoal/50 block">Status History</span>
+                  <div className="max-h-32 overflow-y-auto space-y-1.5 bg-brand-cream/40 border border-brand-clay/50 rounded-xl p-2.5">
+                    {(selectedPiece.history || []).length === 0 ? (
+                      <p className="text-[10px] font-semibold text-brand-charcoal/40 italic">No history recorded yet.</p>
+                    ) : (
+                      [...(selectedPiece.history || [])].reverse().map((h, idx) => (
+                        <div key={`${h.timestamp}-${idx}`} className="text-[10px] font-semibold text-brand-charcoal/80 border-b border-brand-clay/25 last:border-b-0 pb-1 last:pb-0">
+                          <div className="flex justify-between gap-2">
+                            <span className={`font-bold ${h.status === 'Broken' ? 'text-red-700' : 'text-brand-charcoal'}`}>{h.status}</span>
+                            <span className="font-mono text-brand-charcoal/50">
+                              {h.riyadhTime || formatDateTime(h.timestamp)}
+                            </span>
+                          </div>
+                          <p className="text-brand-charcoal/60">
+                            by {h.user}{h.reason ? ` — ${h.reason}` : ''}
+                          </p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
                 {/* Status selector directly within the detail dialog */}
                 <div className="space-y-1.5 pt-1">
                   <label className="font-bold text-brand-charcoal/50 block">Advance Lifecycle State</label>
@@ -689,9 +928,14 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                     onChange={e => onAttemptStatusChange(selectedPiece.id, e.target.value as any)}
                     className="w-full bg-brand-cream border border-brand-clay rounded-xl p-2 font-bold text-brand-charcoal cursor-pointer"
                   >
-                    {COLUMNS.map(col => (
-                      <option key={col} value={col}>{col}</option>
-                    ))}
+                    {/* Disabled stages are not selectable, but the piece's own
+                        current stage stays listed so its status is never lost. */}
+                    {COLUMNS.filter(col => selectableStatuses.includes(col) || col === selectedPiece.status)
+                      .map(col => (
+                        <option key={col} value={col}>
+                          {col}{!selectableStatuses.includes(col) ? ' (disabled)' : ''}
+                        </option>
+                      ))}
                   </select>
                 </div>
 
@@ -722,6 +966,16 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                 <ClipboardList className="h-4 w-4" />
                 <span>Mark Collected / Picked Up</span>
               </button>
+
+              {selectedPiece.status !== 'Broken' && (
+                <button
+                  onClick={() => onAttemptStatusChange(selectedPiece.id, 'Broken')}
+                  className="col-span-2 cursor-pointer bg-red-50 hover:bg-red-100 border border-red-300 text-red-700 font-bold text-xs py-3 rounded-xl transition-all flex items-center justify-center gap-1.5"
+                >
+                  <AlertCircle className="h-4 w-4" />
+                  <span>Mark as Broken</span>
+                </button>
+              )}
             </div>
 
           </div>
@@ -729,6 +983,101 @@ export const AdminPiecesTrackingSection: React.FC = () => {
       )}
 
       {/* Backward Move Confirmation Modal */}
+      {/* ================= MARK AS BROKEN MODAL ================= */}
+      {brokenTargetId && (() => {
+        const target = pieces.find(p => p.id === brokenTargetId);
+        if (!target) return null;
+
+        return (
+          <div className="fixed inset-0 bg-brand-charcoal/60 backdrop-blur-xs z-60 flex items-center justify-center p-4">
+            <div className="bg-white border border-brand-clay rounded-3xl p-6 shadow-2xl max-w-md w-full space-y-4 text-left animate-in zoom-in-95 duration-150">
+
+              <div className="flex items-start gap-3 border-b border-brand-clay/60 pb-3">
+                <div className="h-10 w-10 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center shrink-0">
+                  <AlertCircle className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-display text-base font-bold text-brand-charcoal">Mark Piece as Broken</h3>
+                  <p className="text-[11px] font-semibold text-brand-charcoal/60">
+                    {target.pieceCode || target.id} · {target.customerName}
+                  </p>
+                </div>
+              </div>
+
+              <p className="text-[11px] font-semibold text-brand-charcoal/70 bg-brand-cream/60 border border-brand-clay/50 rounded-xl p-2.5">
+                The customer is notified that there is an important update and asked to contact the café.
+                Your internal note stays in the console and is never sent to them.
+                The piece is not marked collected or cancelled.
+              </p>
+
+              <div className="space-y-3.5 text-xs">
+                <div className="space-y-1">
+                  <label className="font-bold text-brand-charcoal/60 block">Staff member recording this *</label>
+                  <select
+                    value={brokenPerformer}
+                    onChange={e => { setBrokenPerformer(e.target.value); setBrokenError(''); }}
+                    className="w-full bg-brand-cream border border-brand-clay rounded-xl p-2.5 font-bold text-brand-charcoal cursor-pointer"
+                  >
+                    <option value="">Select staff member...</option>
+                    {assignableStaff.map(s => (
+                      <option key={s.id} value={s.name}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-brand-charcoal/60 block">Internal reason / damage note</label>
+                  <textarea
+                    value={brokenReason}
+                    onChange={e => setBrokenReason(e.target.value)}
+                    rows={3}
+                    placeholder="E.g. Cracked during kiln firing — handle separated at the join."
+                    className="w-full bg-brand-cream border border-brand-clay rounded-xl p-2.5 font-semibold text-brand-charcoal"
+                  />
+                </div>
+
+                {brokenError && (
+                  <p className="text-[11px] font-bold text-red-600 bg-red-50 border border-red-200 rounded-xl p-2.5">
+                    {brokenError}
+                  </p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <button
+                  onClick={() => { setBrokenTargetId(null); setBrokenError(''); }}
+                  className="bg-brand-sand/60 hover:bg-brand-sand text-brand-charcoal font-bold text-xs py-3 rounded-xl cursor-pointer transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    if (!brokenPerformer) {
+                      setBrokenError('Select the staff member recording this.');
+                      return;
+                    }
+                    await handleUpdatePieceStatus(
+                      brokenTargetId,
+                      'Broken',
+                      brokenPerformer,
+                      brokenReason.trim() || 'Piece reported broken'
+                    );
+                    setBrokenTargetId(null);
+                    setBrokenPerformer('');
+                    setBrokenReason('');
+                    setBrokenError('');
+                    setSelectedPieceId(null);
+                  }}
+                  className="bg-red-600 hover:bg-red-700 text-brand-cream font-bold text-xs py-3 rounded-xl cursor-pointer transition-colors shadow-sm"
+                >
+                  Confirm Broken
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {backwardMoveTarget && (
         <div className="fixed inset-0 bg-brand-charcoal/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white border border-brand-clay rounded-3xl p-6 shadow-2xl max-w-md w-full text-left space-y-5 animate-in zoom-in-95 duration-150">
@@ -752,13 +1101,16 @@ export const AdminPiecesTrackingSection: React.FC = () => {
             <div className="space-y-3.5 text-xs">
               <div className="space-y-1">
                 <label className="font-bold text-brand-charcoal/60 block">Who is performing this reversal?</label>
-                <input
-                  type="text"
+                <select
                   value={backwardPerformer}
                   onChange={e => setBackwardPerformer(e.target.value)}
-                  className="w-full bg-brand-cream border border-brand-clay rounded-xl p-2.5 font-bold text-brand-charcoal"
-                  placeholder="E.g. Lina Al-Sudais"
-                />
+                  className="w-full bg-brand-cream border border-brand-clay rounded-xl p-2.5 font-bold text-brand-charcoal cursor-pointer"
+                >
+                  <option value="">Select staff member...</option>
+                  {assignableStaff.map(s => (
+                    <option key={s.id} value={s.name}>{s.name}</option>
+                  ))}
+                </select>
               </div>
 
               <div className="space-y-1">
@@ -852,7 +1204,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                     <div className="absolute left-0 right-0 mt-1 bg-white border border-brand-clay rounded-xl shadow-lg z-50 max-h-40 overflow-y-auto divide-y divide-brand-clay/20">
                       {filteredCustResults.map(c => (
                         <button
-                          key={c.phone}
+                          key={`${c.id}-${c.phone}`}
                           type="button"
                           onClick={() => {
                             setSelectedCust(c);
@@ -862,15 +1214,30 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                             setManualEmail(c.email);
                             setIsNewCust(false);
                           }}
-                          className="w-full text-left p-2.5 hover:bg-brand-sand/35 font-semibold text-xs flex justify-between items-center cursor-pointer"
+                          className="w-full text-left p-2.5 hover:bg-brand-sand/35 font-semibold text-xs flex justify-between items-center gap-2 cursor-pointer"
                         >
-                          <div>
-                            <p className="font-bold text-brand-charcoal">{c.name}</p>
-                            <p className="text-[10px] text-brand-charcoal/50">{c.phone}</p>
+                          <div className="min-w-0">
+                            <p className="font-bold text-brand-charcoal truncate">{c.name}</p>
+                            <p className="text-[10px] text-brand-charcoal/50 truncate">
+                              {c.phone}{c.email ? ` · ${c.email}` : ''} · {c.id}
+                            </p>
                           </div>
-                          <span className="text-[9px] font-bold bg-brand-sand/50 text-brand-sage px-1.5 py-0.5 rounded uppercase">Stored</span>
+                          {/* No website account is required to link a piece */}
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase shrink-0 ${
+                            c.hasAccount
+                              ? 'bg-brand-sand/50 text-brand-sage'
+                              : 'bg-purple-50 text-purple-700'
+                          }`}>
+                            {c.origin}
+                          </span>
                         </button>
                       ))}
+
+                      {filteredCustResults.length === 0 && (
+                        <p className="p-2.5 text-[11px] font-semibold text-brand-charcoal/50 italic">
+                          No matching customer. Use "Add as new customer" below.
+                        </p>
+                      )}
 
                       <button
                         type="button"
@@ -1018,8 +1385,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <label className="font-bold text-brand-charcoal/60 block">7. Date Logged</label>
-                    <input
-                      type="date"
+                    <DateInput
                       value={dateCreatedInput}
                       onChange={e => setDateCreatedInput(e.target.value)}
                       className="w-full bg-white border border-brand-clay rounded-xl p-2.5 font-bold text-brand-charcoal cursor-pointer"
@@ -1028,8 +1394,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
 
                   <div className="space-y-1.5">
                     <label className="font-bold text-brand-charcoal/80 block text-brand-terracotta">8. Expected Ready Date *</label>
-                    <input
-                      type="date"
+                    <DateInput
                       required
                       value={expectedReadyDateInput}
                       onChange={e => setExpectedReadyDateInput(e.target.value)}
@@ -1053,16 +1418,24 @@ export const AdminPiecesTrackingSection: React.FC = () => {
 
                   <div className="space-y-1.5">
                     <label className="font-bold text-brand-charcoal/60 block">10. Assigned Staff</label>
+                    {/* Reads live from Staff Management; inactive staff are not offered. */}
                     <select
                       value={assignedStaffInput}
                       onChange={e => setAssignedStaffInput(e.target.value)}
                       className="w-full bg-white border border-brand-clay rounded-xl p-2.5 font-bold text-brand-charcoal cursor-pointer"
                     >
-                      <option value="Lina">Lina (Studio Manager)</option>
-                      <option value="Ali Khalid">Ali Khalid (Instructor)</option>
-                      <option value="Aisha Al-Jahdali">Aisha Al-Jahdali (Instructor)</option>
-                      <option value="Sami">Sami (Barista & Staff)</option>
+                      <option value="">Select staff member...</option>
+                      {assignableStaff.map(s => (
+                        <option key={s.id} value={s.name}>
+                          {s.name}{s.position ? ` (${s.position})` : ''}
+                        </option>
+                      ))}
                     </select>
+                    {assignableStaff.length === 0 && (
+                      <p className="text-[11px] font-semibold text-amber-700">
+                        No active staff members. Add one in Staff Management.
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -1106,7 +1479,17 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                   }
 
                   const selectedWorkshop = workshops.find(w => w.id === relatedWorkshopId);
+
+                  // Resolve against the one shared customers table: an existing
+                  // customer is reused (matched on normalized phone), never copied.
+                  const { customer: linkedCustomer } = await resolveCustomer({
+                    name: manualName.trim(),
+                    phone: manualPhone.trim(),
+                    email: manualEmail.trim()
+                  });
+
                   const newPieceData = {
+                    customerId: linkedCustomer.id,
                     pieceCode: pieceCodeInput.trim(),
                     name: pieceNameInput.trim() || `${pieceType} Piece`,
                     workshopName: selectedWorkshop ? selectedWorkshop.title : 'Freestyle Handbuilding',

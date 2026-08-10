@@ -75,7 +75,13 @@ export function parsePhoneComponents(fullPhone: string): { countryCode: string; 
  * Validates a phone number based on country code and national digits
  */
 export function validatePhone(countryCode: string, nationalNumber: string | number): { isValid: boolean; error?: string } {
-  const digits = parseArabicDigits(String(nationalNumber || '')).trim().replace(/[\s()-]/g, '');
+  // Allowed formatting is stripped first — including a leading '+' and a typed
+  // country code — so a valid number written in full does not read as "not
+  // digits only".
+  const digits = parseArabicDigits(String(nationalNumber || ''))
+    .trim()
+    .replace(/[\s()\-.]/g, '')
+    .replace(/^\+/, '');
 
   // Reject letters or emojis/symbols
   if (/[^\d]/.test(digits)) {

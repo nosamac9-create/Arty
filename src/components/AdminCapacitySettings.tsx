@@ -7,11 +7,48 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { db } from '../db';
 import { StudioTableConfig, CapacitySettingsConfig } from '../types';
-import { Save, AlertTriangle, Plus, Trash2, Check, Shield } from 'lucide-react';
+import { Save, AlertTriangle, Plus, Trash2, Check, Shield, LayoutGrid } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 
 export const AdminCapacitySettings: React.FC = () => {
-  const { updateSetting } = useApp();
+  const {
+    updateSetting,
+    studioResources,
+    addStudioResource,
+    updateStudioResource,
+    removeStudioResource
+  } = useApp();
+
+  const [resourceToast, setResourceToast] = useState<string | null>(null);
+  const showResourceToast = (msg: string) => {
+    setResourceToast(msg);
+    setTimeout(() => setResourceToast(null), 3500);
+  };
+
+  const handleAddResource = async () => {
+    const roomCount = studioResources.filter(r => r.type === 'Studio Room').length;
+    await addStudioResource({
+      name: `Studio Room ${roomCount + 1}`,
+      type: 'Studio Room',
+      seats: 10,
+      location: '',
+      notes: '',
+      status: 'Active',
+      order: studioResources.length
+    });
+    showResourceToast('Resource added. It is now selectable on the Workshop pages.');
+  };
+
+  const handleSetResourceStatus = async (id: string, status: 'Active' | 'Inactive' | 'Maintenance', name: string) => {
+    await updateStudioResource(id, { status });
+    showResourceToast(`"${name}" set to ${status}.`);
+  };
+
+  const handleRemoveResource = async (id: string, name: string) => {
+    if (!window.confirm(`Remove "${name}"? If it is used by existing sessions it will be set to Inactive instead.`)) return;
+    const result = await removeStudioResource(id);
+    showResourceToast(result.message || `"${name}" removed.`);
+  };
   const rawAppSettings = useLiveQuery(() => db.appSettings.toArray()) || [];
   const rawQueue = useLiveQuery(() => db.queue.toArray()) || [];
 
@@ -297,6 +334,170 @@ export const AdminCapacitySettings: React.FC = () => {
           </button>
         </div>
       </form>
+
+      {/* ================================================================= */}
+      {/* STUDIO ROOMS & TABLE STATIONS                                      */}
+      {/* The shared resource records the workshop pages assign from.        */}
+      {/* ================================================================= */}
+      <div className="pt-8 mt-8 border-t border-brand-clay/40 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h3 className="font-display text-lg font-extrabold text-brand-charcoal flex items-center gap-2">
+              <LayoutGrid className="h-5 w-5 text-brand-terracotta" />
+              <span>Studio Rooms &amp; Table Stations</span>
+            </h3>
+            <p className="text-xs text-brand-charcoal/70 mt-1">
+              These are the resources the Workshop pages assign sessions to. Only <strong>Active</strong> resources
+              can take a new assignment; Inactive and Maintenance resources stay visible for historical sessions.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleAddResource}
+            className="px-4 py-2.5 bg-brand-terracotta hover:bg-brand-terracotta/90 text-brand-cream rounded-xl text-xs font-bold shadow-sm flex items-center gap-2 cursor-pointer shrink-0"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Add Resource</span>
+          </button>
+        </div>
+
+        {resourceToast && (
+          <div className="p-3 bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs font-bold rounded-xl flex items-center gap-2">
+            <Check className="h-4 w-4 text-emerald-600" />
+            <span>{resourceToast}</span>
+          </div>
+        )}
+
+        <div className="overflow-x-auto border border-brand-clay rounded-2xl bg-white">
+          <table className="w-full text-xs text-left">
+            <thead className="bg-brand-sand/40 text-brand-charcoal/60 uppercase tracking-wider font-bold">
+              <tr>
+                <th className="p-3">Display Name</th>
+                <th className="p-3">Type</th>
+                <th className="p-3 text-center">Seats</th>
+                <th className="p-3">Location / Notes</th>
+                <th className="p-3">Status</th>
+                <th className="p-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-brand-clay/30">
+              {studioResources.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="p-6 text-center text-brand-charcoal/50 italic">
+                    No rooms or table stations yet. Add one so it appears in the Workshop assignment dropdowns.
+                  </td>
+                </tr>
+              ) : (
+                studioResources.map(resource => (
+                  <tr
+                    key={resource.id}
+                    className={`hover:bg-brand-sand/15 ${resource.status !== 'Active' ? 'opacity-70' : ''}`}
+                  >
+                    <td className="p-2.5">
+                      <input
+                        type="text"
+                        value={resource.name}
+                        onChange={e => updateStudioResource(resource.id, { name: e.target.value })}
+                        className="w-full bg-brand-cream/40 border border-brand-clay rounded-lg p-2 font-bold text-brand-charcoal"
+                      />
+                      <span className="text-[9px] font-mono text-brand-charcoal/35 block mt-0.5 pl-1">
+                        {resource.id}
+                      </span>
+                    </td>
+
+                    <td className="p-2.5">
+                      <select
+                        value={resource.type}
+                        onChange={e => updateStudioResource(resource.id, { type: e.target.value as any })}
+                        className="w-full bg-brand-cream/40 border border-brand-clay rounded-lg p-2 font-semibold text-brand-charcoal cursor-pointer"
+                      >
+                        <option value="Studio Room">Studio Room</option>
+                        <option value="Table Station">Table Station</option>
+                      </select>
+                    </td>
+
+                    <td className="p-2.5">
+                      <input
+                        type="number"
+                        min={1}
+                        value={resource.seats}
+                        onChange={e => updateStudioResource(resource.id, { seats: Number(e.target.value) || 1 })}
+                        className="w-16 bg-brand-cream/40 border border-brand-clay rounded-lg p-2 font-bold text-center text-brand-charcoal"
+                      />
+                    </td>
+
+                    <td className="p-2.5">
+                      <input
+                        type="text"
+                        placeholder="Optional location or notes"
+                        value={resource.location || ''}
+                        onChange={e => updateStudioResource(resource.id, { location: e.target.value })}
+                        className="w-full bg-brand-cream/40 border border-brand-clay rounded-lg p-2 font-semibold text-brand-charcoal"
+                      />
+                    </td>
+
+                    <td className="p-2.5">
+                      <select
+                        value={resource.status}
+                        onChange={e => updateStudioResource(resource.id, { status: e.target.value as any })}
+                        className={`w-full border rounded-lg p-2 font-bold cursor-pointer ${
+                          resource.status === 'Active'
+                            ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                            : resource.status === 'Maintenance'
+                              ? 'bg-amber-50 border-amber-200 text-amber-800'
+                              : 'bg-gray-100 border-gray-200 text-gray-600'
+                        }`}
+                      >
+                        <option value="Active">Active</option>
+                        <option value="Inactive">Inactive</option>
+                        <option value="Maintenance">Maintenance</option>
+                      </select>
+                    </td>
+
+                    <td className="p-2.5 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        {resource.status === 'Active' ? (
+                          <button
+                            type="button"
+                            onClick={() => handleSetResourceStatus(resource.id, 'Inactive', resource.name)}
+                            className="px-2.5 py-1.5 rounded-lg border border-brand-clay/60 text-brand-charcoal/70 hover:bg-brand-sand text-[11px] font-bold cursor-pointer"
+                          >
+                            Disable
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleSetResourceStatus(resource.id, 'Active', resource.name)}
+                            className="px-2.5 py-1.5 rounded-lg border border-emerald-300 text-emerald-700 hover:bg-emerald-50 text-[11px] font-bold cursor-pointer"
+                          >
+                            Reactivate
+                          </button>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveResource(resource.id, resource.name)}
+                          title="Remove — resources used by existing sessions are set to Inactive instead"
+                          className="p-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 cursor-pointer"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <p className="text-[11px] text-brand-charcoal/55">
+          Changes save immediately to the shared resource record, so the Workshop Monthly Schedule and Session
+          Calendar pick them up without a refresh.
+        </p>
+      </div>
+
     </div>
   );
 };

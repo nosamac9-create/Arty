@@ -13,14 +13,32 @@ import {
 } from 'lucide-react';
 import { COUNTRIES, parsePhoneComponents, validatePhone, normalisePhone, normaliseSaudiPhone } from '../utils/phoneUtils';
 import { PhoneInput } from './PhoneInput';
+import { validateCustomerForm, canonicalPhone, canonicalEmail } from '../utils/validation';
+import {
+  ACTIVITY_CATEGORIES, ActivityCategory, getCustomerActivityCategories
+} from '../utils/activityUtils';
+import { hasWebsiteAccount, matchesAccountType, getAccountType } from '../utils/accountUtils';
+
+/** Badge colour per activity category. */
+const categoryBadgeClass = (category: ActivityCategory) => {
+  switch (category) {
+    case 'Events/Birthdays':
+      return 'bg-pink-50 text-pink-800 border-pink-200';
+    case 'Self-Guided':
+      return 'bg-purple-50 text-purple-800 border-purple-200';
+    default:
+      return 'bg-blue-50 text-blue-800 border-blue-200';
+  }
+};
 
 export const AdminCustomersSection: React.FC = () => {
   const { 
-    customers, 
-    bookings, 
-    queue, 
-    pieces, 
-    addCustomer, 
+    customers,
+    bookings,
+    queue,
+    pieces,
+    workshops,
+    addCustomer,
     updateCustomer, 
     todayDateStr,
     setAdminTab,
@@ -60,6 +78,11 @@ export const AdminCustomersSection: React.FC = () => {
   // Duplicate warning state
   const [duplicateMatch, setDuplicateMatch] = useState<CustomerAccount | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
+  // Field-keyed messages from the shared validation layer.
+  const [createFieldErrors, setCreateFieldErrors] = useState<Record<string, string>>({});
+  const clearCreateFieldError = (key: string) =>
+    setCreateFieldErrors(prev => (prev[key] ? { ...prev, [key]: '' } : prev));
+  const [editFieldErrors, setEditFieldErrors] = useState<Record<string, string>>({});
   const [editError, setEditError] = useState<string | null>(null);
 
   // Profile view active sub-tab
@@ -104,7 +127,9 @@ export const AdminCustomersSection: React.FC = () => {
       const cleanE = sanitizeEmail(b.customerEmail);
       const key = normP || (cleanE ? cleanE.toLowerCase() : '') || (b.customerName ? b.customerName.toLowerCase() : '');
       if (key && !listMap.has(key)) {
-        const generatedId = `CUST-${Math.floor(10000 + Math.random() * 90000)}`;
+        // Derived from the key, so the id stays the same across re-renders.
+        // A random id here made rows remount and broke row selection.
+        const generatedId = `GUEST-${key}`;
         listMap.set(key, {
           id: generatedId,
           name: b.customerName || 'Guest',
@@ -122,7 +147,7 @@ export const AdminCustomersSection: React.FC = () => {
       const normP = getNormalizedPhone(q.phone);
       const key = normP || (q.name ? q.name.toLowerCase() : '');
       if (key && !listMap.has(key)) {
-        const generatedId = `CUST-${Math.floor(10000 + Math.random() * 90000)}`;
+        const generatedId = `GUEST-${key}`;
         listMap.set(key, {
           id: generatedId,
           name: q.name || 'Guest',
@@ -139,6 +164,17 @@ export const AdminCustomersSection: React.FC = () => {
   }, [customers, bookings, queue, todayDateStr]);
 
   // Derived metrics map for each customer
+  // Activity categories per customer, derived from their real booking and queue
+  // history. This is what the Source column and filter represent — it is not the
+  // account type, and not a stored registration source.
+  const customerCategoriesMap = useMemo(() => {
+    const map = new Map<string, ActivityCategory[]>();
+    allDerivedCustomers.forEach(c => {
+      map.set(c.id, getCustomerActivityCategories(c, { bookings, queue, workshops }));
+    });
+    return map;
+  }, [allDerivedCustomers, bookings, queue, workshops]);
+
   const customerMetricsMap = useMemo(() => {
     const map = new Map<string, {
       totalVisits: number;
@@ -355,16 +391,17 @@ export const AdminCustomersSection: React.FC = () => {
         }
       }
 
-      // Source Filter
-      if (sourceFilter !== 'All' && c.source !== sourceFilter) {
-        return false;
+      // Source Filter — derived activity categories, not a registration source
+      if (sourceFilter !== 'All') {
+        const categories = customerCategoriesMap.get(c.id) || [];
+        if (!categories.includes(sourceFilter as ActivityCategory)) {
+          return false;
+        }
       }
 
-      // Account Type Filter (Registered has password, Guest does not)
-      if (accountTypeFilter === 'Registered' && !c.password && !c.hasAccount) {
-        return false;
-      }
-      if (accountTypeFilter === 'Guest' && (c.password || c.hasAccount)) {
+      // Account Type Filter — decided purely by the authentication link.
+      // Source text, email presence, bookings and payments play no part.
+      if (!matchesAccountType(c, accountTypeFilter)) {
         return false;
       }
 
@@ -380,7 +417,7 @@ export const AdminCustomersSection: React.FC = () => {
 
       return true;
     });
-  }, [allDerivedCustomers, customerMetricsMap, searchQuery, sourceFilter, accountTypeFilter, hasUpcomingFilter, hasUnpaidFilter]);
+  }, [allDerivedCustomers, customerMetricsMap, customerCategoriesMap, searchQuery, sourceFilter, accountTypeFilter, hasUpcomingFilter, hasUnpaidFilter]);
 
   // Reset page to 1 whenever filters or search query changes
   useEffect(() => {
@@ -409,33 +446,28 @@ export const AdminCustomersSection: React.FC = () => {
     e.preventDefault();
     setCreateError(null);
 
-    if (!createName.trim()) {
-      setCreateError('Full customer name is required.');
+    const rawPhone = `${createCountryCode}${createNationalPhone}`;
+
+    // The shared layer owns the rules, including the duplicate checks against
+    // the customers table.
+    const fieldErrors = await validateCustomerForm(
+      { name: createName, phone: rawPhone, email: createEmail },
+      { requireEmail: false }
+    );
+    setCreateFieldErrors(fieldErrors);
+    if (Object.keys(fieldErrors).length > 0) {
+      // Surface the existing record alongside the message.
+      const clash = allDerivedCustomers.find(c => {
+        const key = getNormalizedPhone(c.phone);
+        if (key && key === getNormalizedPhone(rawPhone)) return true;
+        return !!createEmail.trim() && canonicalEmail(c.email) === canonicalEmail(createEmail);
+      });
+      if (clash) setDuplicateMatch(clash);
       return;
     }
 
-    const phoneValidation = validatePhone(createCountryCode, createNationalPhone);
-    if (!phoneValidation.isValid) {
-      setCreateError(phoneValidation.error || 'Please enter a valid phone number.');
-      return;
-    }
-
-    const normPhone = normalisePhone(createCountryCode, createNationalPhone);
-    const normEmail = createEmail.trim().toLowerCase();
-
-    // Check for duplicate customer records by phone or email
-    const duplicate = allDerivedCustomers.find(c => {
-      const cNormP = getNormalizedPhone(c.phone);
-      if (normPhone && cNormP && normPhone === cNormP) return true;
-      if (normEmail && c.email && c.email.toLowerCase() === normEmail) return true;
-      return false;
-    });
-
-    if (duplicate && !duplicateMatch) {
-      // Show warning modal
-      setDuplicateMatch(duplicate);
-      return;
-    }
+    const normPhone = canonicalPhone(rawPhone);
+    const normEmail = canonicalEmail(createEmail);
 
     // Proceed with creation
     const newCustData: Omit<CustomerAccount, 'id' | 'createdAt'> = {
@@ -478,30 +510,17 @@ export const AdminCustomersSection: React.FC = () => {
     if (!customerToEdit) return;
     setEditError(null);
 
-    if (!customerToEdit.name.trim()) {
-      setEditError('Customer name is required.');
-      return;
-    }
+    // Same shared rules as every other customer-writing form. `excludeId`
+    // stops the record being reported as a duplicate of itself.
+    const fieldErrors = await validateCustomerForm(
+      { name: customerToEdit.name, phone: customerToEdit.phone, email: customerToEdit.email },
+      { excludeId: customerToEdit.id, requireEmail: false }
+    );
+    setEditFieldErrors(fieldErrors);
+    if (Object.keys(fieldErrors).length > 0) return;
 
-    const { countryCode, nationalNumber } = parsePhoneComponents(customerToEdit.phone);
-    const phoneVal = validatePhone(countryCode, nationalNumber);
-    if (!phoneVal.isValid) {
-      setEditError(phoneVal.error || 'Valid phone number is required.');
-      return;
-    }
-
-    const normPhone = normalisePhone(countryCode, nationalNumber);
-    const normEmail = customerToEdit.email.trim().toLowerCase();
-
-    // Conflict check with another customer
-    const conflict = allDerivedCustomers.find(c => c.id !== customerToEdit.id && (
-      getNormalizedPhone(c.phone) === normPhone || (normEmail && c.email.toLowerCase() === normEmail)
-    ));
-
-    if (conflict) {
-      setEditError(`A different customer (${conflict.name} - ${conflict.id}) already uses this phone number or email.`);
-      return;
-    }
+    const normPhone = canonicalPhone(customerToEdit.phone);
+    const normEmail = canonicalEmail(customerToEdit.email);
 
     const updates: Partial<CustomerAccount> = {
       name: customerToEdit.name.trim(),
@@ -568,9 +587,14 @@ export const AdminCustomersSection: React.FC = () => {
                     <span className="font-mono text-xs font-bold px-2.5 py-1 rounded-lg bg-brand-sand text-brand-terracotta border border-brand-clay/60">
                       {selectedCustomer.id}
                     </span>
-                    <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-50 text-amber-900 border border-amber-200">
-                      Source: {selectedCustomer.source || 'Manual Admin Entry'}
-                    </span>
+                    {(customerCategoriesMap.get(selectedCustomer.id) || []).map(cat => (
+                      <span
+                        key={cat}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${categoryBadgeClass(cat)}`}
+                      >
+                        {cat}
+                      </span>
+                    ))}
                   </div>
                   <div className="flex flex-wrap items-center gap-4 text-xs font-medium text-brand-charcoal/70">
                     <span className="flex items-center gap-1.5">
@@ -714,7 +738,7 @@ export const AdminCustomersSection: React.FC = () => {
                 <div className="p-4 rounded-xl bg-brand-sand/30 border border-brand-clay/50 text-xs space-y-2">
                   <p className="font-bold text-brand-charcoal">Account Integration Status</p>
                   <p className="text-brand-charcoal/70">
-                    {selectedCustomer.password || selectedCustomer.hasAccount 
+                    {hasWebsiteAccount(selectedCustomer)
                       ? '✅ Linked to an active website account (Customer can log in).'
                       : 'ℹ️ Guest / Walk-in profile (No online login created yet). If this customer creates a website account later with matching phone/email, it will connect automatically.'}
                   </p>
@@ -1102,10 +1126,9 @@ export const AdminCustomersSection: React.FC = () => {
                 className="bg-brand-cream/50 border border-brand-clay/70 rounded-xl px-3 py-2 text-xs font-bold text-brand-charcoal"
               >
                 <option value="All">All Sources</option>
-                <option value="Website Booking">Website Booking</option>
-                <option value="Live Queue">Live Queue</option>
-                <option value="Manual Admin Entry">Manual Admin Entry</option>
-                <option value="Imported">Imported</option>
+                {ACTIVITY_CATEGORIES.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
               </select>
 
               {/* Account Type Filter */}
@@ -1115,8 +1138,8 @@ export const AdminCustomersSection: React.FC = () => {
                 className="bg-brand-cream/50 border border-brand-clay/70 rounded-xl px-3 py-2 text-xs font-bold text-brand-charcoal"
               >
                 <option value="All">All Account Types</option>
-                <option value="Registered">Registered Account</option>
-                <option value="Guest">Guest / Walk-in</option>
+                <option value="Registered">Registered</option>
+                <option value="Guest">Walk-In / Guest</option>
               </select>
             </div>
 
@@ -1163,6 +1186,7 @@ export const AdminCustomersSection: React.FC = () => {
                         <th className="py-3 px-4">Phone Number</th>
                         <th className="py-3 px-4">Email Address</th>
                         <th className="py-3 px-4">Source</th>
+                        <th className="py-3 px-4">Account Type</th>
                         <th className="py-3 px-4">Visits</th>
                         <th className="py-3 px-4">Bookings</th>
                         <th className="py-3 px-4">Total Spent</th>
@@ -1183,8 +1207,29 @@ export const AdminCustomersSection: React.FC = () => {
                               {c.email || <span className="text-brand-charcoal/40 italic">—</span>}
                             </td>
                             <td className="py-3 px-4">
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-brand-sand border border-brand-clay/60 text-brand-charcoal">
-                                {c.source || 'Manual Admin Entry'}
+                              <div className="flex flex-wrap gap-1">
+                                {(customerCategoriesMap.get(c.id) || []).length === 0 ? (
+                                  <span className="text-brand-charcoal/40 italic text-[10px]">No activity yet</span>
+                                ) : (
+                                  (customerCategoriesMap.get(c.id) || []).map(cat => (
+                                    <span
+                                      key={cat}
+                                      className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border ${categoryBadgeClass(cat)}`}
+                                    >
+                                      {cat}
+                                    </span>
+                                  ))
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4">
+                              {/* Reflects the authentication link only */}
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border ${
+                                hasWebsiteAccount(c)
+                                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                  : 'bg-gray-100 text-gray-700 border-gray-200'
+                              }`}>
+                                {getAccountType(c) === 'Registered' ? 'Registered' : 'Walk-In / Guest'}
                               </span>
                             </td>
                             <td className="py-3 px-4 font-bold text-center">{metrics ? metrics.totalVisits : 0}</td>
@@ -1298,12 +1343,24 @@ export const AdminCustomersSection: React.FC = () => {
                   <button
                     type="button"
                     onClick={async () => {
-                      // Force creation of separate customer
-                      const normPhone = normalisePhone(createCountryCode, createNationalPhone);
+                      // Goes through the same shared rules as the form, so this
+                      // button can no longer create the duplicate the panel is
+                      // warning about.
+                      const rawPhone = `${createCountryCode}${createNationalPhone}`;
+                      const fieldErrors = await validateCustomerForm(
+                        { name: createName, phone: rawPhone, email: createEmail },
+                        { requireEmail: false }
+                      );
+                      if (Object.keys(fieldErrors).length > 0) {
+                        setCreateFieldErrors(fieldErrors);
+                        setCreateError(Object.values(fieldErrors)[0]);
+                        setDuplicateMatch(null);
+                        return;
+                      }
                       const res = await addCustomer({
                         name: createName.trim(),
-                        phone: normPhone,
-                        email: createEmail.trim().toLowerCase() || `cust-${Math.floor(1000 + Math.random() * 9000)}@guest.artycafe.sa`,
+                        phone: canonicalPhone(rawPhone),
+                        email: canonicalEmail(createEmail) || `cust-${Math.floor(1000 + Math.random() * 9000)}@guest.artycafe.sa`,
                         source: createSource || 'Admin Created',
                         status: createStatus || 'Active',
                         notes: createNotes.trim(),
@@ -1336,19 +1393,26 @@ export const AdminCustomersSection: React.FC = () => {
                     required
                     placeholder="E.g. Noura Al-Amri"
                     value={createName}
-                    onChange={(e) => setCreateName(e.target.value)}
+                    onChange={(e) => { setCreateName(e.target.value); clearCreateFieldError('name'); }}
                     className="w-full bg-brand-cream/40 border border-brand-clay rounded-xl p-2.5 font-bold text-brand-charcoal"
                   />
+                  {createFieldErrors.name && (
+                    <p className="text-[11px] text-red-500 font-bold">{createFieldErrors.name}</p>
+                  )}
                 </div>
 
                 <div className="space-y-1">
                   <label className="font-bold text-brand-charcoal block">Phone Number * (+966 default)</label>
                   <PhoneInput
-                    countryCode={createCountryCode}
-                    nationalNumber={createNationalPhone}
-                    onChange={(code, nat) => {
-                      setCreateCountryCode(code);
-                      setCreateNationalPhone(nat);
+                    value={normalisePhone(createCountryCode, createNationalPhone)}
+                    error={createFieldErrors.phone}
+                    onChange={(full) => {
+                      // PhoneInput reports one already-normalised number; split it
+                      // back into the two pieces this form keeps.
+                      const parts = parsePhoneComponents(full);
+                      setCreateCountryCode(parts.countryCode);
+                      setCreateNationalPhone(parts.nationalNumber);
+                      clearCreateFieldError('phone');
                     }}
                   />
                 </div>
@@ -1359,26 +1423,21 @@ export const AdminCustomersSection: React.FC = () => {
                     type="email"
                     placeholder="e.g. noura@example.sa"
                     value={createEmail}
-                    onChange={(e) => setCreateEmail(e.target.value)}
+                    onChange={(e) => { setCreateEmail(e.target.value); clearCreateFieldError('email'); }}
                     className="w-full bg-brand-cream/40 border border-brand-clay rounded-xl p-2.5 font-semibold text-brand-charcoal"
                   />
+                  {createFieldErrors.email && (
+                    <p className="text-[11px] text-red-500 font-bold">{createFieldErrors.email}</p>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <label className="font-bold text-brand-charcoal block">Customer Source</label>
-                    <select
-                      value={createSource}
-                      onChange={(e) => setCreateSource(e.target.value as any)}
-                      className="w-full bg-brand-cream/40 border border-brand-clay rounded-xl p-2.5 font-semibold text-brand-charcoal"
-                    >
-                      <option value="Admin Created">Admin Created</option>
-                      <option value="Walk-in">Walk-in</option>
-                      <option value="Website Registration">Website Registration</option>
-                      <option value="Workshop Booking">Workshop Booking</option>
-                      <option value="Event Booking">Event Booking</option>
-                      <option value="Birthday Package">Birthday Package</option>
-                    </select>
+                    <label className="font-bold text-brand-charcoal block">Source (Activity)</label>
+                    <p className="text-[11px] font-semibold text-brand-charcoal/60 bg-brand-cream/40 border border-brand-clay rounded-xl p-2.5">
+                      Set automatically from the customer's bookings and queue visits
+                      (Workshops, Events/Birthdays, Self-Guided).
+                    </p>
                   </div>
 
                   <div className="space-y-1">
@@ -1463,16 +1522,19 @@ export const AdminCustomersSection: React.FC = () => {
                   onChange={(e) => setCustomerToEdit({ ...customerToEdit, name: e.target.value })}
                   className="w-full bg-brand-cream/40 border border-brand-clay rounded-xl p-2.5 font-bold text-brand-charcoal"
                 />
+                {editFieldErrors.name && (
+                  <p className="text-[11px] text-red-500 font-bold">{editFieldErrors.name}</p>
+                )}
               </div>
 
               <div className="space-y-1">
                 <label className="font-bold text-brand-charcoal block">Phone Number *</label>
                 <PhoneInput
-                  countryCode={parsePhoneComponents(customerToEdit.phone).countryCode}
-                  nationalNumber={parsePhoneComponents(customerToEdit.phone).nationalNumber}
-                  onChange={(code, nat) => {
-                    const norm = normalisePhone(code, nat);
-                    setCustomerToEdit({ ...customerToEdit, phone: norm });
+                  value={customerToEdit.phone}
+                  error={editFieldErrors.phone}
+                  onChange={(full) => {
+                    setCustomerToEdit({ ...customerToEdit, phone: full });
+                    setEditFieldErrors(prev => (prev.phone ? { ...prev, phone: '' } : prev));
                   }}
                 />
               </div>
@@ -1485,20 +1547,24 @@ export const AdminCustomersSection: React.FC = () => {
                   onChange={(e) => setCustomerToEdit({ ...customerToEdit, email: e.target.value })}
                   className="w-full bg-brand-cream/40 border border-brand-clay rounded-xl p-2.5 font-semibold text-brand-charcoal"
                 />
+                {editFieldErrors.email && (
+                  <p className="text-[11px] text-red-500 font-bold">{editFieldErrors.email}</p>
+                )}
               </div>
 
               <div className="space-y-1">
-                <label className="font-bold text-brand-charcoal block">Source</label>
-                <select
-                  value={customerToEdit.source || 'Manual Admin Entry'}
-                  onChange={(e) => setCustomerToEdit({ ...customerToEdit, source: e.target.value as any })}
-                  className="w-full bg-brand-cream/40 border border-brand-clay rounded-xl p-2.5 font-semibold text-brand-charcoal"
-                >
-                  <option value="Manual Admin Entry">Manual Admin Entry</option>
-                  <option value="Website Booking">Website Booking</option>
-                  <option value="Live Queue">Live Queue</option>
-                  <option value="Imported">Imported</option>
-                </select>
+                <label className="font-bold text-brand-charcoal block">Source (Activity)</label>
+                <div className="flex flex-wrap gap-1.5 bg-brand-cream/40 border border-brand-clay rounded-xl p-2.5">
+                  {(customerCategoriesMap.get(customerToEdit.id) || []).length === 0 ? (
+                    <span className="text-[11px] font-semibold text-brand-charcoal/50 italic">No activity yet</span>
+                  ) : (
+                    (customerCategoriesMap.get(customerToEdit.id) || []).map(cat => (
+                      <span key={cat} className={`px-2 py-0.5 rounded text-[10px] font-bold border ${categoryBadgeClass(cat)}`}>
+                        {cat}
+                      </span>
+                    ))
+                  )}
+                </div>
               </div>
 
               <div className="space-y-1">

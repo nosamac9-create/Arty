@@ -5,35 +5,32 @@
 
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
-import { StaffMember, StaffWeeklyShift, StaffTimeOff } from '../types';
-import { 
-  Users, UserPlus, Calendar, Clock, CheckCircle2, AlertCircle, XCircle, 
-  Search, Filter, Edit3, Trash2, CalendarDays, Award, Phone, Mail, 
+import { StaffMember, StaffTimeOff, StaffScheduleDayEntry, StaffWeeklyShift } from '../types';
+import {
+  Users, UserPlus, Calendar, Clock, CheckCircle2, AlertCircle, XCircle,
+  Search, Filter, Edit3, Trash2, CalendarDays, Award, Phone, Mail,
   ChevronLeft, ChevronRight, Briefcase, Plus, UserCheck, Shield, Sparkles
 } from 'lucide-react';
-import { checkStaffMemberAvailability, minutesToTimeString, timeToMinutes, getEndTimeMinutes } from '../utils/staffAvailabilityUtils';
+import { checkStaffMemberAvailability } from '../utils/staffAvailabilityUtils';
+import { buildStaffAssignmentMap } from '../utils/staffAssignments';
+import { validateStaffForm, staffStorageFields } from '../utils/validation';
+import { WEEKDAYS, toDaySchedule, createShift, countScheduledDays } from '../utils/staffScheduleUtils';
 import { getRiyadhDateString } from '../utils/dateUtils';
-
-const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-
-const DEFAULT_SHIFT: StaffWeeklyShift = {
-  isWorking: true,
-  startTime: '10:00 AM',
-  endTime: '06:00 PM',
-  breakStart: '01:00 PM',
-  breakEnd: '02:00 PM'
-};
+import { DateInput } from './DateInput';
 
 export const AdminStaffSection: React.FC = () => {
-  const { 
-    staff, 
-    workshops, 
-    bookings, 
-    queue, 
-    events, 
-    todayDateStr, 
+  const {
+    staff,
+    workshops,
+    workshopSessions,
+    bookings,
+    queue,
+    events,
+    todayDateStr,
     formattedTodayDate,
-    setAdminTab
+    setAdminTab,
+    addStaffMember,
+    updateStaffMember
   } = useApp();
 
   // Navigation / View Tabs inside Staff Section
@@ -45,14 +42,16 @@ export const AdminStaffSection: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
-  // Modals & Active selections
-  const [selectedStaff, setSelectedStaff] = useState<StaffMember | null>(null);
+  // Modals & Active selections (staff is always re-read from the live roster by id)
+  const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showAddEditModal, setShowAddEditModal] = useState(false);
   const [showTimeOffModal, setShowTimeOffModal] = useState(false);
 
   // Form state for Add/Edit Staff
   const [editStaffId, setEditStaffId] = useState<string | null>(null);
+  // Field-keyed messages from the shared validation layer.
+  const [staffErrors, setStaffErrors] = useState<Record<string, string>>({});
   const [formData, setFormData] = useState<Partial<StaffMember>>({
     name: '',
     position: 'Instructor',
@@ -75,6 +74,12 @@ export const AdminStaffSection: React.FC = () => {
     status: 'Approved'
   });
 
+  // Always resolve the open profile from the live roster so edits show immediately.
+  const selectedStaff = useMemo(
+    () => (selectedStaffId ? staff.find(s => s.id === selectedStaffId) || null : null),
+    [staff, selectedStaffId]
+  );
+
   // Filtered staff roster
   const filteredStaff = useMemo(() => {
     return staff.filter(member => {
@@ -89,80 +94,21 @@ export const AdminStaffSection: React.FC = () => {
     });
   }, [staff, searchQuery, statusFilter]);
 
-  // Derived assignments across workshops, events, etc.
-  const staffAssignments = useMemo(() => {
-    const map = new Map<string, Array<{
-      id: string;
-      title: string;
-      date: string;
-      startTime: string;
-      endTime: string;
-      type: 'Workshop Session' | 'Event' | 'Queue Duty';
-      location: string;
-    }>>();
+  // Shared assignment records — same source used by the availability checker.
+  const assignmentSources = useMemo(
+    () => ({ staff, workshopSessions, workshops, events, queue }),
+    [staff, workshopSessions, workshops, events, queue]
+  );
 
-    staff.forEach(s => map.set(s.id, []));
-
-    // Scan workshops sessions
-    workshops.forEach(ws => {
-      if (ws.sessions && Array.isArray(ws.sessions)) {
-        ws.sessions.forEach(sess => {
-          if (sess.status === 'Cancelled' || sess.status === 'Unavailable' || (sess as any).status === 'Archived') return;
-          const sName = (sess.instructor || ws.instructor || '').trim().toLowerCase();
-          const sStaffId = sess.staffId || ws.staffId;
-          const matchStaff = staff.find(st => st.id === sStaffId || st.name.trim().toLowerCase() === sName);
-          if (matchStaff) {
-            const list = map.get(matchStaff.id) || [];
-            const startTime = 'startTime' in sess && sess.startTime ? sess.startTime : ((sess as any).time || '10:00 AM');
-            const endMins = (sess as any).endTime ? timeToMinutes((sess as any).endTime) : getEndTimeMinutes(startTime, ws.duration || '2 Hours');
-            const endTime = (sess as any).endTime || minutesToTimeString(endMins);
-
-            list.push({
-              id: `ws-${ws.id}-${sess.id}`,
-              title: ws.title,
-              date: sess.date,
-              startTime,
-              endTime,
-              type: 'Workshop Session',
-              location: ws.room || 'Studio A'
-            });
-            map.set(matchStaff.id, list);
-          }
-        });
-      }
-    });
-
-    // Scan Events
-    events.forEach(evt => {
-      if (evt.status === 'Cancelled' || evt.status === 'Archived') return;
-      const hostName = (evt.host || '').trim().toLowerCase();
-      const hostStaffId = evt.staffId;
-      const matchStaff = staff.find(st => st.id === hostStaffId || st.name.trim().toLowerCase() === hostName);
-      if (matchStaff) {
-        const list = map.get(matchStaff.id) || [];
-        const startTime = evt.startTime || '10:00 AM';
-        const endMins = getEndTimeMinutes(startTime, evt.duration || '2 Hours');
-        const endTime = minutesToTimeString(endMins);
-
-        list.push({
-          id: `evt-${evt.id}`,
-          title: evt.title,
-          date: evt.date,
-          startTime,
-          endTime,
-          type: 'Event',
-          location: evt.location || 'The Terrace'
-        });
-        map.set(matchStaff.id, list);
-      }
-    });
-
-    return map;
-  }, [staff, workshops, events]);
+  const staffAssignments = useMemo(
+    () => buildStaffAssignmentMap(assignmentSources),
+    [assignmentSources]
+  );
 
   // Handle open Add Modal
   const handleOpenAdd = () => {
     setEditStaffId(null);
+    setStaffErrors({});
     setFormData({
       name: '',
       position: 'Instructor',
@@ -182,6 +128,7 @@ export const AdminStaffSection: React.FC = () => {
   // Handle open Edit Modal
   const handleOpenEdit = (member: StaffMember) => {
     setEditStaffId(member.id);
+    setStaffErrors({});
     setFormData({ ...member });
     setShowAddEditModal(true);
   };
@@ -189,37 +136,82 @@ export const AdminStaffSection: React.FC = () => {
   // Save Staff Record
   const handleSaveStaff = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name?.trim()) return;
+
+    // The same shared rules the Staff Registry uses, so both surfaces agree.
+    const fieldErrors = await validateStaffForm(
+      { name: formData.name, position: formData.position, phone: formData.phone, email: formData.email },
+      editStaffId || undefined
+    );
+    setStaffErrors(fieldErrors);
+    if (Object.keys(fieldErrors).length > 0) return;
+
+    const canonical = staffStorageFields({ phone: formData.phone, email: formData.email });
 
     if (editStaffId) {
-      // Edit existing in Dexie
-      const { db } = await import('../db');
-      await db.staff.update(editStaffId, {
+      // Persist the edited record (including the schedule) to the shared data layer.
+      await updateStaffMember(editStaffId, {
         ...formData,
-        updatedAt: new Date().toISOString()
+        ...canonical,
+        weeklySchedule: formData.weeklySchedule || {}
       });
     } else {
-      // Add new to Dexie
-      const { db } = await import('../db');
-      const newId = `staff-${Date.now()}`;
-      await db.staff.add({
-        id: newId,
+      await addStaffMember({
         name: formData.name || 'New Staff',
         position: formData.position || 'Instructor',
-        phone: formData.phone || '',
+        phone: canonical.phone,
+        normalizedPhone: canonical.normalizedPhone,
         countryCode: formData.countryCode || '+966',
-        email: formData.email || '',
+        email: canonical.email,
         status: formData.status || 'Active',
-        skills: formData.skills || ['Wheel Throwing'],
+        skills: formData.skills || [],
+        // New staff members have no working hours until an admin adds them.
         weeklySchedule: formData.weeklySchedule || {},
         notes: formData.notes || '',
         canAssignWorkshops: formData.canAssignWorkshops ?? true,
         canAssignPieces: formData.canAssignPieces ?? true,
         createdAt: todayDateStr
-      } as StaffMember);
+      } as Omit<StaffMember, 'id'>);
     }
 
     setShowAddEditModal(false);
+    setStaffErrors({});
+  };
+
+  // ---- Weekly schedule editing (multiple shifts per day supported) ----
+  const updateDaySchedule = (day: string, mutate: (current: { isWorking: boolean; shifts: StaffWeeklyShift[] }) => { isWorking: boolean; shifts: StaffWeeklyShift[] } | null) => {
+    const schedule: Record<string, StaffScheduleDayEntry> = { ...(formData.weeklySchedule || {}) };
+    const next = mutate(toDaySchedule(schedule[day]));
+    if (next === null || next.shifts.length === 0) {
+      delete schedule[day];
+    } else {
+      schedule[day] = next;
+    }
+    setFormData({ ...formData, weeklySchedule: schedule });
+  };
+
+  const handleAddShift = (day: string) => {
+    updateDaySchedule(day, current => ({
+      isWorking: true,
+      shifts: [...current.shifts, createShift({ startTime: '10:00 AM', endTime: '02:00 PM' })]
+    }));
+  };
+
+  const handleUpdateShift = (day: string, index: number, updates: Partial<StaffWeeklyShift>) => {
+    updateDaySchedule(day, current => ({
+      isWorking: true,
+      shifts: current.shifts.map((s, i) => (i === index ? { ...s, ...updates } : s))
+    }));
+  };
+
+  const handleRemoveShift = (day: string, index: number) => {
+    updateDaySchedule(day, current => ({
+      isWorking: true,
+      shifts: current.shifts.filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleClearDay = (day: string) => {
+    updateDaySchedule(day, () => null);
   };
 
   // Add Time Off
@@ -227,21 +219,14 @@ export const AdminStaffSection: React.FC = () => {
     e.preventDefault();
     if (!selectedStaff) return;
 
-    const { db } = await import('../db');
     const newTimeOff: StaffTimeOff = {
       id: `to-${Date.now()}`,
       ...timeOffData
     };
 
-    const updatedTimeOff = [...(selectedStaff.timeOff || []), newTimeOff];
-    await db.staff.update(selectedStaff.id, {
-      timeOff: updatedTimeOff,
+    await updateStaffMember(selectedStaff.id, {
+      timeOff: [...(selectedStaff.timeOff || []), newTimeOff],
       status: timeOffData.startDate <= todayDateStr && timeOffData.endDate >= todayDateStr ? 'On Leave' : selectedStaff.status
-    });
-
-    setSelectedStaff({
-      ...selectedStaff,
-      timeOff: updatedTimeOff
     });
 
     setShowTimeOffModal(false);
@@ -336,14 +321,14 @@ export const AdminStaffSection: React.FC = () => {
       {activeTab === 'roster' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredStaff.map(member => {
-            const avail = checkStaffMemberAvailability(
-              member, 
-              todayDateStr, 
-              '04:00 PM', 
-              '06:00 PM', 
-              '2.0 Hours', 
-              [], events, [], workshops
-            );
+            const avail = checkStaffMemberAvailability({
+              staff: member,
+              date: todayDateStr,
+              startTime: '04:00 PM',
+              endTime: '06:00 PM',
+              duration: '2.0 Hours',
+              sources: assignmentSources
+            });
 
             const assignments = staffAssignments.get(member.id) || [];
             const upcomingCount = assignments.filter(a => a.date >= todayDateStr).length;
@@ -404,6 +389,12 @@ export const AdminStaffSection: React.FC = () => {
                       <Briefcase className="h-3.5 w-3.5 text-brand-terracotta shrink-0" />
                       <span>{upcomingCount} Upcoming Assignments</span>
                     </div>
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-3.5 w-3.5 text-brand-terracotta shrink-0" />
+                      <span className={avail.isAvailable ? 'text-emerald-700 font-semibold' : 'text-amber-700 font-semibold'}>
+                        {avail.isAvailable ? 'Available this afternoon' : avail.status}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
@@ -411,7 +402,7 @@ export const AdminStaffSection: React.FC = () => {
                 <div className="pt-3 border-t border-brand-clay/50 flex items-center justify-between gap-2">
                   <button
                     onClick={() => {
-                      setSelectedStaff(member);
+                      setSelectedStaffId(member.id);
                       setShowDetailModal(true);
                     }}
                     className="px-3 py-1.5 bg-brand-sand/50 hover:bg-brand-sand text-brand-charcoal rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
@@ -449,8 +440,7 @@ export const AdminStaffSection: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
-              <input
-                type="date"
+              <DateInput
                 value={calendarDate}
                 onChange={e => setCalendarDate(e.target.value)}
                 className="bg-brand-cream/50 border border-brand-clay rounded-xl px-2.5 py-1 text-xs font-semibold text-brand-charcoal"
@@ -486,14 +476,17 @@ export const AdminStaffSection: React.FC = () => {
               if (calendarView === 'day') {
                 filteredAssignments = assignments.filter(a => a.date === calendarDate);
               } else if (calendarView === 'week') {
-                const cur = new Date(calendarDate);
-                const day = cur.getDay();
+                // Parse as a local date so the week window is not shifted by UTC.
+                const [y, m, d] = calendarDate.split('-').map(Number);
+                const cur = new Date(y, (m || 1) - 1, d || 1);
                 const sun = new Date(cur);
-                sun.setDate(cur.getDate() - day);
+                sun.setDate(cur.getDate() - cur.getDay());
                 const sat = new Date(sun);
                 sat.setDate(sun.getDate() + 6);
-                const sunStr = sun.toISOString().split('T')[0];
-                const satStr = sat.toISOString().split('T')[0];
+                const toStr = (dt: Date) =>
+                  `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+                const sunStr = toStr(sun);
+                const satStr = toStr(sat);
                 filteredAssignments = assignments.filter(a => a.date >= sunStr && a.date <= satStr);
               } else if (calendarView === 'month') {
                 const prefix = calendarDate.substring(0, 7);
@@ -574,33 +567,40 @@ export const AdminStaffSection: React.FC = () => {
             </div>
 
             {/* Assigned Workshops & Events */}
-            <div>
-              <h3 className="text-xs font-bold text-brand-charcoal uppercase tracking-wider mb-2 flex items-center justify-between">
-                <span>Assigned Workshops & Events</span>
-                <span className="text-[10px] text-brand-terracotta font-semibold">
-                  {(staffAssignments.get(selectedStaff.id) || []).length} assigned
-                </span>
-              </h3>
-              <div className="space-y-2 max-h-48 overflow-y-auto border border-brand-clay/60 rounded-xl p-3 bg-brand-cream/20">
-                {(staffAssignments.get(selectedStaff.id) || []).length === 0 ? (
-                  <p className="text-xs text-brand-charcoal/50 italic py-2 text-center">No workshops or events assigned to this staff member.</p>
-                ) : (
-                  (staffAssignments.get(selectedStaff.id) || []).map(a => (
-                    <div key={a.id} className="p-2.5 bg-white rounded-lg border border-brand-clay/40 flex items-center justify-between text-xs">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-brand-charcoal">{a.title}</span>
-                          <span className="px-1.5 py-0.5 text-[9px] font-bold bg-brand-sand text-brand-charcoal rounded">{a.type}</span>
+            {(() => {
+              const allAssignments = staffAssignments.get(selectedStaff.id) || [];
+              const upcoming = allAssignments.filter(a => a.date >= todayDateStr);
+
+              return (
+                <div>
+                  <h3 className="text-xs font-bold text-brand-charcoal uppercase tracking-wider mb-2 flex items-center justify-between">
+                    <span>Upcoming Assignments</span>
+                    <span className="text-[10px] text-brand-terracotta font-semibold">
+                      {upcoming.length} upcoming · {allAssignments.length} total
+                    </span>
+                  </h3>
+                  <div className="space-y-2 max-h-48 overflow-y-auto border border-brand-clay/60 rounded-xl p-3 bg-brand-cream/20">
+                    {upcoming.length === 0 ? (
+                      <p className="text-xs text-brand-charcoal/50 italic py-2 text-center">No upcoming workshops or events assigned to this staff member.</p>
+                    ) : (
+                      upcoming.map(a => (
+                        <div key={a.id} className="p-2.5 bg-white rounded-lg border border-brand-clay/40 flex items-center justify-between text-xs">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-brand-charcoal">{a.title}</span>
+                              <span className="px-1.5 py-0.5 text-[9px] font-bold bg-brand-sand text-brand-charcoal rounded">{a.type}</span>
+                            </div>
+                            <p className="text-[11px] text-brand-charcoal/70 mt-0.5">
+                              {a.date} • {a.startTime} – {a.endTime} ({a.location})
+                            </p>
+                          </div>
                         </div>
-                        <p className="text-[11px] text-brand-charcoal/70 mt-0.5">
-                          {a.date} • {a.startTime} – {a.endTime} ({a.location})
-                        </p>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Weekly Schedule Matrix */}
             <div>
@@ -619,12 +619,16 @@ export const AdminStaffSection: React.FC = () => {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 border border-brand-clay/60 rounded-xl p-3 bg-brand-sand/10">
                 {WEEKDAYS.map(day => {
-                  const shift = selectedStaff.weeklySchedule?.[day];
+                  const shifts = toDaySchedule(selectedStaff.weeklySchedule?.[day]).shifts;
                   return (
-                    <div key={day} className="flex items-center justify-between text-xs p-1.5 border-b border-brand-clay/30 last:border-b-0">
-                      <span className="font-bold text-brand-charcoal w-24">{day}</span>
-                      {shift?.isWorking ? (
-                        <span className="font-semibold text-emerald-800">{shift.startTime} – {shift.endTime}</span>
+                    <div key={day} className="flex items-start justify-between text-xs p-1.5 border-b border-brand-clay/30 last:border-b-0 gap-2">
+                      <span className="font-bold text-brand-charcoal w-24 shrink-0">{day}</span>
+                      {shifts.length > 0 ? (
+                        <span className="font-semibold text-emerald-800 text-right">
+                          {shifts.map((s, i) => (
+                            <span key={s.id || i} className="block">{s.startTime} – {s.endTime}</span>
+                          ))}
+                        </span>
                       ) : (
                         <span className="font-semibold text-gray-400 italic">Off</span>
                       )}
@@ -670,10 +674,14 @@ export const AdminStaffSection: React.FC = () => {
                   type="text"
                   required
                   value={formData.name}
-                  onChange={e => setFormData({ ...formData, name: e.target.value })}
+                  onChange={e => {
+                    setFormData({ ...formData, name: e.target.value });
+                    setStaffErrors(prev => (prev.name ? { ...prev, name: '' } : prev));
+                  }}
                   placeholder="e.g. Sara Al-Malki"
                   className="w-full bg-brand-cream/50 border border-brand-clay rounded-xl p-2.5"
                 />
+                {staffErrors.name && <p className="text-[11px] text-red-500 font-bold mt-1">{staffErrors.name}</p>}
               </div>
 
               <div>
@@ -682,10 +690,14 @@ export const AdminStaffSection: React.FC = () => {
                   type="text"
                   required
                   value={formData.position}
-                  onChange={e => setFormData({ ...formData, position: e.target.value })}
+                  onChange={e => {
+                    setFormData({ ...formData, position: e.target.value });
+                    setStaffErrors(prev => (prev.position ? { ...prev, position: '' } : prev));
+                  }}
                   placeholder="e.g. Master Instructor"
                   className="w-full bg-brand-cream/50 border border-brand-clay rounded-xl p-2.5"
                 />
+                {staffErrors.position && <p className="text-[11px] text-red-500 font-bold mt-1">{staffErrors.position}</p>}
               </div>
 
               <div>
@@ -694,10 +706,14 @@ export const AdminStaffSection: React.FC = () => {
                   type="text"
                   required
                   value={formData.phone}
-                  onChange={e => setFormData({ ...formData, phone: e.target.value })}
+                  onChange={e => {
+                    setFormData({ ...formData, phone: e.target.value });
+                    setStaffErrors(prev => (prev.phone ? { ...prev, phone: '' } : prev));
+                  }}
                   placeholder="50 123 4567"
                   className="w-full bg-brand-cream/50 border border-brand-clay rounded-xl p-2.5"
                 />
+                {staffErrors.phone && <p className="text-[11px] text-red-500 font-bold mt-1">{staffErrors.phone}</p>}
               </div>
 
               <div>
@@ -706,10 +722,14 @@ export const AdminStaffSection: React.FC = () => {
                   type="email"
                   required
                   value={formData.email}
-                  onChange={e => setFormData({ ...formData, email: e.target.value })}
+                  onChange={e => {
+                    setFormData({ ...formData, email: e.target.value });
+                    setStaffErrors(prev => (prev.email ? { ...prev, email: '' } : prev));
+                  }}
                   placeholder="staff@artycafe.com"
                   className="w-full bg-brand-cream/50 border border-brand-clay rounded-xl p-2.5"
                 />
+                {staffErrors.email && <p className="text-[11px] text-red-500 font-bold mt-1">{staffErrors.email}</p>}
               </div>
 
               <div>
@@ -745,88 +765,95 @@ export const AdminStaffSection: React.FC = () => {
                   Weekly Schedule & Working Hours
                 </label>
                 <span className="text-[10px] text-brand-charcoal/60">
-                  {Object.values(formData.weeklySchedule || {}).filter((s: any) => s?.isWorking).length > 0
-                    ? `${Object.values(formData.weeklySchedule || {}).filter((s: any) => s?.isWorking).length} days configured`
+                  {countScheduledDays(formData.weeklySchedule) > 0
+                    ? `${countScheduledDays(formData.weeklySchedule)} days configured`
                     : 'No working hours set (Empty schedule)'}
                 </span>
               </div>
 
-              <div className="space-y-2 max-h-60 overflow-y-auto border border-brand-clay/60 rounded-xl p-3 bg-brand-cream/30">
+              <p className="text-[10px] text-brand-charcoal/50">
+                Add a shift for each working day. A day can hold more than one shift (e.g. a morning and an evening shift).
+                Days with no shift count as non-working and block assignments.
+              </p>
+
+              <div className="space-y-2 max-h-72 overflow-y-auto border border-brand-clay/60 rounded-xl p-3 bg-brand-cream/30">
                 {WEEKDAYS.map(day => {
-                  const shift = formData.weeklySchedule?.[day];
-                  const isWorking = !!shift?.isWorking;
+                  const shifts = toDaySchedule(formData.weeklySchedule?.[day]).shifts;
 
                   return (
-                    <div key={day} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2 bg-white rounded-lg border border-brand-clay/40 text-xs">
-                      <div className="flex items-center gap-2 min-w-[120px]">
-                        <input
-                          type="checkbox"
-                          id={`working-${day}`}
-                          checked={isWorking}
-                          onChange={e => {
-                            const checked = e.target.checked;
-                            const updated = { ...(formData.weeklySchedule || {}) };
-                            if (checked) {
-                              updated[day] = {
-                                isWorking: true,
-                                startTime: shift?.startTime || '10:00 AM',
-                                endTime: shift?.endTime || '06:00 PM',
-                                breakStart: shift?.breakStart || '01:00 PM',
-                                breakEnd: shift?.breakEnd || '02:00 PM'
-                              };
-                            } else {
-                              if (updated[day]) {
-                                updated[day] = { ...updated[day]!, isWorking: false };
-                              }
-                            }
-                            setFormData({ ...formData, weeklySchedule: updated });
-                          }}
-                          className="h-4 w-4 accent-brand-terracotta cursor-pointer"
-                        />
-                        <label htmlFor={`working-${day}`} className="font-bold text-brand-charcoal cursor-pointer">
-                          {day}
-                        </label>
-                      </div>
-
-                      {isWorking ? (
-                        <div className="flex items-center gap-2 flex-1 justify-end">
-                          <input
-                            type="text"
-                            value={shift?.startTime || '10:00 AM'}
-                            onChange={e => {
-                              const updated = { ...(formData.weeklySchedule || {}) };
-                              updated[day] = { ...updated[day]!, startTime: e.target.value };
-                              setFormData({ ...formData, weeklySchedule: updated });
-                            }}
-                            placeholder="Start (e.g. 10:00 AM)"
-                            className="w-24 bg-brand-cream/50 border border-brand-clay rounded-lg px-2 py-1 text-xs font-semibold"
-                          />
-                          <span className="text-brand-charcoal/60 font-bold">–</span>
-                          <input
-                            type="text"
-                            value={shift?.endTime || '06:00 PM'}
-                            onChange={e => {
-                              const updated = { ...(formData.weeklySchedule || {}) };
-                              updated[day] = { ...updated[day]!, endTime: e.target.value };
-                              setFormData({ ...formData, weeklySchedule: updated });
-                            }}
-                            placeholder="End (e.g. 06:00 PM)"
-                            className="w-24 bg-brand-cream/50 border border-brand-clay rounded-lg px-2 py-1 text-xs font-semibold"
-                          />
+                    <div key={day} className="p-2 bg-white rounded-lg border border-brand-clay/40 text-xs space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-bold text-brand-charcoal">{day}</span>
+                        <div className="flex items-center gap-2">
                           <button
                             type="button"
-                            onClick={() => {
-                              const updated = { ...(formData.weeklySchedule || {}) };
-                              delete updated[day];
-                              setFormData({ ...formData, weeklySchedule: updated });
-                            }}
-                            className="text-[10px] text-red-600 hover:underline px-1 font-bold"
+                            onClick={() => handleAddShift(day)}
+                            className="text-[10px] font-bold text-brand-terracotta hover:underline flex items-center gap-1 cursor-pointer"
                           >
-                            Remove
+                            <Plus className="h-3 w-3" />
+                            <span>Add Shift</span>
                           </button>
+                          {shifts.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => handleClearDay(day)}
+                              className="text-[10px] text-red-600 hover:underline font-bold cursor-pointer"
+                            >
+                              Clear Day
+                            </button>
+                          )}
                         </div>
+                      </div>
+
+                      {shifts.length === 0 ? (
+                        <span className="text-[11px] text-gray-400 italic font-semibold">Off (No shift scheduled)</span>
                       ) : (
-                        <span className="text-[11px] text-gray-400 italic font-semibold">Off (No Shift)</span>
+                        <div className="space-y-1.5">
+                          {shifts.map((shift, idx) => (
+                            <div key={shift.id || idx} className="flex flex-wrap items-center gap-2">
+                              <input
+                                type="text"
+                                value={shift.startTime}
+                                onChange={e => handleUpdateShift(day, idx, { startTime: e.target.value })}
+                                placeholder="Start (e.g. 10:00 AM)"
+                                className="w-24 bg-brand-cream/50 border border-brand-clay rounded-lg px-2 py-1 text-xs font-semibold"
+                              />
+                              <span className="text-brand-charcoal/60 font-bold">–</span>
+                              <input
+                                type="text"
+                                value={shift.endTime}
+                                onChange={e => handleUpdateShift(day, idx, { endTime: e.target.value })}
+                                placeholder="End (e.g. 02:00 PM)"
+                                className="w-24 bg-brand-cream/50 border border-brand-clay rounded-lg px-2 py-1 text-xs font-semibold"
+                              />
+
+                              <span className="text-[10px] font-bold text-brand-charcoal/50">Break</span>
+                              <input
+                                type="text"
+                                value={shift.breakStart || ''}
+                                onChange={e => handleUpdateShift(day, idx, { breakStart: e.target.value })}
+                                placeholder="optional"
+                                className="w-20 bg-brand-cream/50 border border-brand-clay rounded-lg px-2 py-1 text-xs font-semibold"
+                              />
+                              <span className="text-brand-charcoal/60 font-bold">–</span>
+                              <input
+                                type="text"
+                                value={shift.breakEnd || ''}
+                                onChange={e => handleUpdateShift(day, idx, { breakEnd: e.target.value })}
+                                placeholder="optional"
+                                className="w-20 bg-brand-cream/50 border border-brand-clay rounded-lg px-2 py-1 text-xs font-semibold"
+                              />
+
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveShift(day, idx)}
+                                className="text-[10px] text-red-600 hover:underline px-1 font-bold cursor-pointer"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
                   );
@@ -865,8 +892,7 @@ export const AdminStaffSection: React.FC = () => {
             <div className="space-y-3 text-xs font-semibold text-brand-charcoal">
               <div>
                 <label className="block mb-1 font-bold">Start Date</label>
-                <input
-                  type="date"
+                <DateInput
                   required
                   value={timeOffData.startDate}
                   onChange={e => setTimeOffData({ ...timeOffData, startDate: e.target.value })}
@@ -876,8 +902,7 @@ export const AdminStaffSection: React.FC = () => {
 
               <div>
                 <label className="block mb-1 font-bold">End Date</label>
-                <input
-                  type="date"
+                <DateInput
                   required
                   value={timeOffData.endDate}
                   onChange={e => setTimeOffData({ ...timeOffData, endDate: e.target.value })}
