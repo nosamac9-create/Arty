@@ -8,6 +8,7 @@ import { useApp, getRiyadhNow } from '../context/AppContext';
 import { Calendar, Users, Hash, AlertCircle, Trash2, CalendarX, Compass, HelpCircle } from 'lucide-react';
 import { Booking } from '../types';
 import { resolveBookingInstructor } from '../utils/queueUtils';
+import { normalizeCustomerPhone } from '../utils/customerIdentity';
 
 export const MyBookingsSection: React.FC = () => {
   const { bookings, cancelBooking, setCustomerTab, workshops, currentUser, setAuthScreen, staff, workshopSessions } = useApp();
@@ -25,9 +26,14 @@ export const MyBookingsSection: React.FC = () => {
       return { Upcoming: [], Past: [] };
     }
 
-    const userBookings = (bookings || []).filter(b => 
+    // The customer id is the reliable link — it is what the row-level policy
+    // matches on. Email and phone stay as a fallback for older rows saved
+    // before the link existed.
+    const userBookings = (bookings || []).filter(b =>
+      (currentUser.id && b.customerId === currentUser.id) ||
       (currentUser.email && b.customerEmail?.toLowerCase() === currentUser.email.toLowerCase()) ||
-      (currentUser.phone && b.customerPhone?.replace(/\s+/g, '') === currentUser.phone.replace(/\s+/g, ''))
+      (currentUser.phone &&
+        normalizeCustomerPhone(b.customerPhone) === normalizeCustomerPhone(currentUser.phone))
     );
 
     userBookings.forEach(b => {

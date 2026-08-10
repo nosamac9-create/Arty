@@ -18,7 +18,8 @@
  * 966501234567 or +966 50 123 4567.
  */
 
-import { db, ArtyCafeDatabase } from '../db';
+import { ArtyCafeDatabase } from '../db';
+import { sdb } from '../lib/supabaseDb';
 import { CustomerAccount, StaffMember, WorkshopSessionRecord } from '../types';
 import { normalizeCustomerPhone, customerPhoneKey } from './customerIdentity';
 import { getSessionSeatUsage } from './queueUtils';
@@ -32,11 +33,18 @@ export interface ValidationResult {
 /**
  * The database these checks read.
  *
- * Defaults to the live one; the System Health suite passes a temporary
- * database so its fixtures never touch the real tables. Behaviour for every
- * caller in the app is unchanged.
+ * Stage 2 points the default at Supabase, so duplicate and capacity checks run
+ * against Postgres — the same records every other reader sees. The System
+ * Health suite still passes its own throwaway database, which is why this stays
+ * injectable.
  */
-export type ValidationDb = Pick<ArtyCafeDatabase, 'customers' | 'staff' | 'workshops' | 'workshopSessions' | 'bookings' | 'queue'>;
+export type ValidationDb =
+  Pick<ArtyCafeDatabase, 'customers' | 'staff' | 'workshops' | 'workshopSessions' | 'bookings' | 'queue'>
+  | typeof sdb;
+
+/** The live source: Postgres via the shared façade. */
+const db = sdb as unknown as ValidationDb;
+
 
 export const OK: ValidationResult = { valid: true };
 const fail = (error: string): ValidationResult => ({ valid: false, error });

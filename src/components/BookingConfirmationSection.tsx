@@ -9,7 +9,7 @@ import { Sparkles, Calendar, Receipt, Copy, Check, ChevronRight, MapPin, Gift } 
 import confetti from 'canvas-confetti';
 
 export const BookingConfirmationSection: React.FC = () => {
-  const { lastBookingCreated, setCustomerTab, workshops } = useApp();
+  const { lastBookingCreated, setCustomerTab, workshops, bookingError } = useApp();
   const [copied, setCopied] = useState(false);
 
   // Trigger celebration confetti on mount
@@ -61,6 +61,28 @@ export const BookingConfirmationSection: React.FC = () => {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  // The write happens after this screen appears. If it failed, say so rather
+  // than showing a confirmation for a booking that does not exist.
+  if (bookingError) {
+    return (
+      <div className="mx-auto max-w-xl px-4 py-16 text-center space-y-4">
+        <div className="mx-auto h-14 w-14 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center text-2xl font-bold">!</div>
+        <h2 className="font-display text-2xl font-bold text-brand-charcoal">Your booking did not go through</h2>
+        <p className="text-sm text-brand-charcoal/70 leading-relaxed">{bookingError}</p>
+        <p className="text-xs text-brand-charcoal/55">
+          Nothing has been reserved and you have not been charged. Please try again,
+          or call the studio on +966 12 654 3210.
+        </p>
+        <button
+          onClick={() => setCustomerTab('workshops')}
+          className="mt-2 inline-flex items-center gap-2 rounded-xl bg-brand-terracotta px-6 py-3 text-sm font-bold text-brand-cream cursor-pointer"
+        >
+          Back to Workshops
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-xl px-4 py-12 animate-in zoom-in-95 duration-300 text-left">

@@ -5,7 +5,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { db } from '../db';
 import {
   RecurringScheduleRule, isWorkshopOptionEnabled,
   WorkshopFieldConfig, fieldsForCard, fieldSpansFullRow, coerceFieldValue
@@ -19,6 +18,7 @@ import {
 } from '../utils/spaceAvailability';
 import { findRuleConflict, getRuleSlots, formatSlotDate, RuleConflict } from '../utils/recurringConflicts';
 import { validateWorkshopForm } from '../utils/validation';
+import { getSessionSeatUsage } from '../utils/queueUtils';
 import { 
   Upload, Trash2, Plus, AlertCircle, Sparkles, Image as ImageIcon, 
   Settings, FolderKanban, Check, Save, Eye, Bold, Italic, Link, AlignLeft, X,
@@ -39,6 +39,10 @@ export const AdminWorkshopFormSection: React.FC = () => {
     events,
     queue,
     workshopSessions,
+    bookings,
+    // The merged list: each workshop carries its sessions from the
+    // workshop_sessions table.
+    workshops: workshopsWithSessions,
     studioResources,
     workshopOptions,
     workshopFields,
@@ -49,11 +53,17 @@ export const AdminWorkshopFormSection: React.FC = () => {
     // Raw queries so the loading skeleton still distinguishes "not yet read"
     // from "no workshops".
     rawWorkshops,
-    rawEvents
+    rawEvents,
+    // Fresh reads for conflict checks and tutor resolution.
+    getFreshAssignmentSources,
+    getFreshStaff
   } = useApp();
 
+  // `rawWorkshops === undefined` is purely the loading signal. The list the
+  // page renders is the merged one, so the Sessions column and the Sessions
+  // Calendar see the real sessions rather than an absent nested array.
   const isWorkshopsLoading = rawWorkshops === undefined;
-  const workshops = rawWorkshops || [];
+  const workshops = workshopsWithSessions;
 
   // Saving state to prevent duplicate submissions
   const [isSaving, setIsSaving] = useState(false);
@@ -184,7 +194,19 @@ export const AdminWorkshopFormSection: React.FC = () => {
         setImage(ws.image || 'https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?auto=format&fit=crop&w=800&q=80');
         setMaterials(ws.materials || []);
         setAgeRange(ws.ageRange || '');
-        setSessions(ws.sessions || []);
+        // Sessions store no seat counter: what is left is derived from the
+        // live bookings and walk-ins. Compute it as they load so the calendar
+        // shows real numbers instead of an absent field.
+        setSessions((ws.sessions || []).map((sess: any) => {
+          const usage = getSessionSeatUsage(sess, { workshops, bookings, queue });
+          return {
+            ...sess,
+            time: sess.time || sess.startTime,
+            capacity: usage.capacity,
+            spotsLeft: usage.remainingCapacity,
+            isFull: usage.remainingCapacity <= 0
+          };
+        }));
         setRecurringSchedules(ws.recurringSchedules || []);
         // Admin-created field values, kept even for fields later disabled.
         setCustomFieldValues(ws.customFields || {});
@@ -351,16 +373,16 @@ export const AdminWorkshopFormSection: React.FC = () => {
     if (!tutorStaffId && !hasSessions && activeRules.length === 0) return null;
 
     // Read fresh rows so the check never runs against stale component state.
-    const [latestStaff, latestSessions, latestWorkshops, latestEvents, latestQueue, latestResources, latestSettings] =
-      await Promise.all([
-        db.staff.toArray(),
-        db.workshopSessions.toArray(),
-        db.workshops.toArray(),
-        db.events.toArray(),
-        db.queue.toArray(),
-        db.studioResources.toArray(),
-        db.appSettings.toArray()
-      ]);
+    // The fetch itself lives in the data layer.
+    const {
+      staff: latestStaff,
+      workshopSessions: latestSessions,
+      workshops: latestWorkshops,
+      events: latestEvents,
+      queue: latestQueue,
+      studioResources: latestResources,
+      appSettings: latestSettings
+    } = await getFreshAssignmentSources();
 
     const sources: AssignmentSources = {
       staff: latestStaff,
@@ -814,7 +836,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
       }
 
       // Query fresh staff records directly from Dexie to prevent stale state
-      const latestStaff = await db.staff.toArray();
+      const latestStaff = await getFreshStaff();
       const assignedStaffMember = latestStaff.find(st => st.id === tutorStaffId);
       const staffId = assignedStaffMember?.id;
 
@@ -911,7 +933,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
       }
 
       // Query fresh database records directly from Dexie
-      const latestStaff = await db.staff.toArray();
+      const latestStaff = await getFreshStaff();
       const assignedStaffMember = latestStaff.find(st => st.id === tutorStaffId);
       const staffId = assignedStaffMember?.id;
 
@@ -1957,21 +1979,31 @@ export const AdminWorkshopFormSection: React.FC = () => {
                               <span>Scheduled Timetable Slots for "{ws.title}"</span>
                             </h5>
                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                              {ws.sessions.map((sess: any, sIdx: number) => (
-                                <div key={sess.id || sIdx} className="p-2.5 bg-brand-sand/30 border border-brand-clay/40 rounded-lg flex items-center justify-between text-xs">
-                                  <div>
-                                    <p className="font-bold text-brand-charcoal">{sess.date}</p>
-                                    <p className="text-[11px] text-brand-charcoal/70">{sess.time}</p>
+                              {ws.sessions.map((sess: any, sIdx: number) => {
+                                // Seats left are counted from the live bookings
+                                // and walk-ins, by the same helper the customer
+                                // site and the Live Queue use. A session row
+                                // stores no spotsLeft of its own.
+                                const usage = getSessionSeatUsage(sess, {
+                                  workshops, bookings, queue
+                                });
+                                const isFull = usage.remainingCapacity <= 0;
+                                return (
+                                  <div key={sess.id || sIdx} className="p-2.5 bg-brand-sand/30 border border-brand-clay/40 rounded-lg flex items-center justify-between text-xs">
+                                    <div>
+                                      <p className="font-bold text-brand-charcoal">{sess.date}</p>
+                                      <p className="text-[11px] text-brand-charcoal/70">{sess.time || sess.startTime}</p>
+                                    </div>
+                                    <div className="text-right">
+                                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                                        isFull ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
+                                      }`}>
+                                        {isFull ? 'Full' : `${usage.remainingCapacity} / ${usage.capacity} Left`}
+                                      </span>
+                                    </div>
                                   </div>
-                                  <div className="text-right">
-                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                                      sess.isFull ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
-                                    }`}>
-                                      {sess.isFull ? 'Full' : `${sess.spotsLeft} / ${sess.capacity} Left`}
-                                    </span>
-                                  </div>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           </div>
                         </td>

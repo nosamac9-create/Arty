@@ -4,8 +4,8 @@
  *
  * The single Supabase client for the app.
  *
- * Stage 1b: Supabase Auth owns credentials. Application data (workshops,
- * bookings, queue, pieces, …) is still served by Dexie and moves in Stage 2.
+ * Supabase Auth owns credentials and, from Stage 2, Postgres owns the
+ * application data as well.
  *
  * Only the anon key is ever used here. The service_role key must never appear
  * in frontend code — it bypasses Row Level Security.
@@ -13,27 +13,98 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+/**
+ * Read from Vite's env when bundled, and from process.env when this module is
+ * loaded outside Vite (Node scripts, the test runner). Reading `import.meta`
+ * unguarded threw at import time there, taking down every module that imports
+ * the client.
+ */
+// Written as the literal `import.meta.env.VITE_...` because that exact text is
+// what Vite substitutes at build time. Any indirection — optional chaining, a
+// dynamic key — defeats the replacement and leaves it undefined in the browser.
+const viteEnv: Record<string, string | undefined> = (() => {
+  try {
+    return {
+      VITE_SUPABASE_URL: import.meta.env.VITE_SUPABASE_URL,
+      VITE_SUPABASE_ANON_KEY: import.meta.env.VITE_SUPABASE_ANON_KEY
+    };
+  } catch {
+    return {};   // not running under Vite (Node scripts, the test runner)
+  }
+})();
+
+function readEnv(name: string): string | undefined {
+  if (viteEnv[name]) return viteEnv[name];
+  if (typeof process !== 'undefined' && process.env && process.env[name]) {
+    return process.env[name];
+  }
+  return undefined;
+}
+
+const url = readEnv('VITE_SUPABASE_URL');
+const anonKey = readEnv('VITE_SUPABASE_ANON_KEY');
 
 /**
- * True when the project has been configured. Until then the app keeps running
- * on Dexie and sign-in reports a clear configuration error rather than
- * throwing at import time.
+ * True when the project has been configured. Until then reads return empty
+ * lists and sign-in reports a clear configuration error, rather than throwing
+ * at import time.
  */
 export const isSupabaseConfigured = Boolean(url && anonKey);
 
-export const supabase: SupabaseClient | null = isSupabaseConfigured
-  ? createClient(url!, anonKey!, {
-      auth: {
-        // Supabase persists and refreshes the session itself; the app no
-        // longer keeps its own copy of the login state.
-        persistSession: true,
-        autoRefreshToken: true,
-        detectSessionInUrl: true
-      }
-    })
-  : null;
+/**
+ * Two clients, two sessions.
+ *
+ * A browser holds one Supabase session per storage key. With a single client,
+ * signing in on the customer site replaced the staff session — the console then
+ * lost every staff-only read (staff list, bookings, queue) because RLS saw an
+ * ordinary customer. Giving the staff console its own storage key lets both
+ * sessions exist side by side, which is how the two areas are actually used.
+ */
+const makeClient = (storageKey?: string) =>
+  createClient(url!, anonKey!, {
+    auth: {
+      // Supabase persists and refreshes the session itself; the app no
+      // longer keeps its own copy of the login state.
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+      ...(storageKey ? { storageKey } : {})
+    }
+  });
+
+/** The customer site's client, and the default for public reads. */
+export const supabase: SupabaseClient | null = isSupabaseConfigured ? makeClient() : null;
+
+/** The staff console's client. Its session is stored separately. */
+export const supabaseStaff: SupabaseClient | null =
+  isSupabaseConfigured ? makeClient('arty-staff-auth') : null;
+
+/**
+ * Which client data reads and writes should use.
+ *
+ * While a staff member is signed in, everything goes through their session so
+ * RLS grants the staff-only tables. Otherwise the customer/anon client is used.
+ */
+let staffSessionActive = false;
+const clientListeners = new Set<() => void>();
+
+/** Notified when the active session changes, so live reads can re-run. */
+export function onDataClientChange(listener: () => void): () => void {
+  clientListeners.add(listener);
+  return () => clientListeners.delete(listener);
+}
+
+export function setStaffSessionActive(active: boolean) {
+  if (staffSessionActive === active) return;
+  staffSessionActive = active;
+  // Re-read everything under the new session: the staff console sees rows that
+  // an anonymous visitor cannot, and vice versa.
+  clientListeners.forEach(listener => listener());
+}
+
+export function getDataClient(): SupabaseClient | null {
+  return staffSessionActive ? supabaseStaff : supabase;
+}
 
 export const SUPABASE_NOT_CONFIGURED =
   'Sign-in is not configured yet. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.';

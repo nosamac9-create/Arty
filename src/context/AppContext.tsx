@@ -13,14 +13,21 @@ import {
   DEFAULT_PIPELINE_STAGES, isStageEnabled, stageCustomerLabel,
   DEFAULT_WORKSHOP_OPTIONS, isWorkshopOptionEnabled,
   WorkshopFieldConfig, DEFAULT_WORKSHOP_FIELDS,
-  INITIAL_WORKSHOPS, INITIAL_BOOKINGS, INITIAL_QUEUE, INITIAL_PIECES, INITIAL_EVENTS,
   DraftBooking, DEFAULT_LOGGING_FIELDS, LoggingConsoleField
 } from '../types';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../db';
+import { useLiveTable, fetchTable, fetchRow } from '../lib/supabaseData';
+import { getDataClient } from '../lib/supabase';
+import { toRow, rowToModel } from '../lib/mappers';
+// Stage 2: the data layer is Supabase. `db` is the Dexie-shaped façade over it
+// (lib/supabaseDb), so each mutator keeps its exact logic and invariants while
+// the storage underneath changed. Seat allocation does NOT go through it — see
+// addBooking, which uses the atomic book_session_seats RPC.
+import { sdb as db } from '../lib/supabaseDb';
 import { normalizeDateString, timeToMinutes } from '../utils/timeUtils';
 import { hasWebsiteAccount, buildAccountLink } from '../utils/accountUtils';
-import { supabase, isSupabaseConfigured, SUPABASE_NOT_CONFIGURED } from '../lib/supabase';
+import {
+  supabase, supabaseStaff, isSupabaseConfigured, SUPABASE_NOT_CONFIGURED, setStaffSessionActive
+} from '../lib/supabase';
 import {
   normalizeCustomerPhone, toDisplayPhone, findCustomerMatch, buildCustomerIdentity,
   mergeCustomerDetails, findDuplicateGroups, customerPhoneKey
@@ -184,8 +191,23 @@ interface AppContextType {
   addWorkshop: (ws: Omit<Workshop, 'id' | 'slug'>) => void;
   updateWorkshop: (id: string, updates: Partial<Workshop>) => void;
   addBooking: (booking: Omit<Booking, 'id' | 'createdAt' | 'timeline'>) => Booking;
+  /** Set when the last booking write failed, so the UI never claims success. */
+  bookingError: string | null;
+  clearBookingError: () => void;
   cancelBooking: (id: string, user?: string, paymentStatusUpdate?: 'Refunded' | 'Paid' | 'Unpaid') => void;
   updateBookingStatus: (id: string, status: Booking['status'], paymentStatus?: Booking['paymentStatus'], user?: string) => void;
+  /** A fresh read of the records an assignment conflict check needs. */
+  getFreshAssignmentSources: () => Promise<{
+    staff: StaffMember[];
+    workshopSessions: WorkshopSessionRecord[];
+    workshops: Workshop[];
+    events: AppEvent[];
+    queue: QueueItem[];
+    studioResources: StudioResource[];
+    appSettings: AppSetting[];
+  }>;
+  /** Staff read straight from the database, bypassing the cached list. */
+  getFreshStaff: () => Promise<StaffMember[]>;
   /** Adds a category unless one with that name already exists. */
   addCategoryIfMissing: (name: string) => Promise<{ created: boolean; id?: string }>;
   /** Updates a single workshop session record. */
@@ -249,7 +271,6 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-let isSeedingDatabase = false;
 
 // The previous hardcoded bootstrap credentials were removed in Stage 1b: they
 // were committed to a public repository and are permanently compromised.
@@ -335,86 +356,27 @@ function friendlyAuthError(message: string): string {
  * TODO(stage-2): when phone sign-in is enabled, gate this behind
  * supabase.auth.verifyOtp() for the phone channel before calling the RPC.
  *
- * Stage 1b note: customer rows still live in Dexie, so the authoritative link
- * is written locally. The Postgres RPC from Stage 1a is called first so the
- * behaviour is already correct once the data moves in Stage 2; a failure there
- * (tables still empty, or Supabase unconfigured) is not fatal yet.
+ * Stage 2: the RPC is the only writer. There is no local customer write.
  */
-/**
- * Stage 1b bridge.
- *
- * `npm run create-super-admin` writes the staff row to Postgres, but the app's
- * data layer is still Dexie until Stage 2. After Supabase Auth succeeds, this
- * reads that row back (RLS allows it: the caller IS that staff member) and
- * mirrors it into Dexie so the console has the record it expects.
- *
- * Delete this once Stage 2 moves staff onto Supabase.
- */
-async function mirrorStaffFromSupabase(authId: string): Promise<StaffMember | undefined> {
-  if (!supabase) return undefined;
-
-  try {
-    const { data, error } = await supabase
-      .from('staff')
-      .select('*')
-      .eq('user_id', authId)
-      .maybeSingle();
-
-    if (error || !data) return undefined;
-
-    const member: StaffMember = {
-      id: data.id,
-      name: data.name,
-      position: data.position || '',
-      phone: data.phone || '',
-      normalizedPhone: data.normalized_phone || '',
-      email: data.email || '',
-      status: data.status || 'Active',
-      weeklySchedule: data.weekly_schedule || {},
-      canAssignWorkshops: data.can_assign_workshops ?? true,
-      canAssignPieces: data.can_assign_pieces ?? true,
-      role: data.role,
-      permissions: data.permissions || [],
-      hasConsoleAccess: data.has_console_access === true,
-      passwordIsTemporary: data.password_is_temporary === true,
-      userId: data.user_id,
-      createdAt: data.created_at
-    } as StaffMember;
-
-    await db.staff.put(member);
-    return member;
-  } catch {
-    return undefined;
-  }
-}
-
 async function linkAuthToCustomer(identifier: string | undefined, authId: string): Promise<string | null> {
   const input = String(identifier || '').trim();
-  if (!input || !authId) return null;
+  if (!input || !authId || !supabase) return null;
 
-  if (supabase) {
-    try {
-      await supabase.rpc('link_existing_customer', { identifier: input, new_auth_id: authId });
-    } catch {
-      /* Stage 2 moves the data; until then the local link below is the real one. */
-    }
+  // The RPC is the real path: a customer session cannot read a row whose
+  // user_id is null, so the lookup has to happen with elevated rights. It
+  // matches on the same normalized phone/email rule as the app, is idempotent,
+  // and returns null identically for "no record" and "claimed by someone else"
+  // so it cannot be used to discover which numbers are on file.
+  const { data, error } = await supabase.rpc('link_existing_customer', {
+    identifier: input,
+    new_auth_id: authId
+  });
+
+  if (error) {
+    console.error('link_existing_customer failed:', error.message);
+    return null;
   }
-
-  // Local link, matching the RPC's rule exactly: phone first, then email.
-  const all = await db.customers.toArray();
-  const key = phoneMatchKey(input);
-  const mail = canonicalEmail(input);
-
-  const match =
-    (key ? all.find(c => customerPhoneKey(c) === key) : undefined) ||
-    (mail ? all.find(c => canonicalEmail(c.email) === mail) : undefined);
-
-  if (!match) return null;
-  // Already claimed by someone else: never re-point it.
-  if (match.userId && match.userId !== authId) return null;
-
-  await db.customers.update(match.id, buildAccountLink(authId));
-  return match.id;
+  return (typeof data === 'string' && data) ? data : null;
 }
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -426,6 +388,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   
   // Pending Checkout State
   const [pendingBooking, setPendingBooking] = useState<DraftBooking | null>(null);
+  /**
+   * Set when a booking write fails. The booking used to fail silently in the
+   * background while the confirmation screen still said "confirmed" — the
+   * customer left believing they had a seat.
+   */
+  const [bookingError, setBookingError] = useState<string | null>(null);
   
   // Birthday Package Selection State
   // Holds the id of the package the customer picked; resolved from the shared record.
@@ -491,33 +459,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     // Attach the auth user to the shared customer record.
-    const linkedId = await linkAuthToCustomer(normEmail || data.phone, authId);
+    // One call does the whole thing in Postgres: reuse the existing record for
+    // this phone/email if there is one — so a walk-in keeps their history —
+    // otherwise create it, and attach the new auth user either way.
+    //
+    // This must not be a client-side insert: right after sign-up there may be
+    // no session yet (email confirmation), so the caller is still anonymous and
+    // RLS would refuse the write. That is exactly what left an auth user with
+    // no customer record.
+    const { data: resolvedId, error: linkError } = await supabase.rpc('resolve_customer_record', {
+      p_name: data.name.trim(),
+      p_phone: normPhone,
+      p_email: normEmail,
+      p_auth_id: authId,
+      p_source: 'Website Registration'
+    });
 
-    let custId: string;
-
-    if (linkedId || existing) {
-      // A walk-in or admin-created guest is LINKED to the new account rather than
-      // duplicated, so their history stays on one record and they move from
-      // Walk-In / Guest to Registered.
-      custId = linkedId || existing!.id;
-      await db.customers.update(custId, {
-        name: data.name.trim() || existing?.name,
-        email: normEmail,
-        phone: normPhone,
-        ...buildAccountLink(authId)
-      });
-    } else {
-      custId = `CUST-${Math.floor(1000 + Math.random() * 9000)}`;
-      await db.customers.put({
-        id: custId,
-        name: data.name.trim(),
-        email: normEmail,
-        phone: normPhone,
-        createdAt: new Date().toISOString(),
-        // The auth user id is the account link.
-        ...buildAccountLink(authId)
-      });
+    if (linkError || !resolvedId) {
+      return {
+        success: false,
+        error: linkError?.message || 'Account created, but the customer record could not be saved.'
+      };
     }
+
+    const custId: string = resolvedId;
 
     // Email confirmation is on: there is no session until they confirm.
     if (!signUp.session) {
@@ -607,9 +572,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Resolve the shared record from the auth id, linking it on first sign-in.
     const linkedId = await linkAuthToCustomer(email, data.user.id);
-    const customer =
+    let customer =
       (await db.customers.toArray()).find(c => c.userId === data.user!.id) ||
       (linkedId ? await db.customers.get(linkedId) : undefined);
+
+    // An authenticated account with no customer record behind it. This happens
+    // when sign-up created the auth user but the record write did not land.
+    // Create and attach it now rather than leaving them locked out.
+    if (!customer) {
+      const { data: healedId } = await supabase.rpc('resolve_customer_record', {
+        p_name: data.user.user_metadata?.name ?? null,
+        p_phone: null,
+        p_email: email,
+        p_auth_id: data.user.id,
+        p_source: 'Website Registration'
+      });
+      if (healedId) customer = await db.customers.get(healedId);
+    }
 
     if (!customer) {
       return { success: false, error: 'No customer record is linked to this account yet.' };
@@ -748,36 +727,82 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => clearInterval(interval);
   }, []);
 
-  // Dynamic lists from Dexie Live Query.
-  // The raw results are kept alongside the fallbacks: `undefined` means the
-  // query has not resolved yet, which the admin table uses to show a loading
-  // skeleton instead of seed data.
-  const rawWorkshops = useLiveQuery(() => db.workshops.toArray());
-  const rawEvents = useLiveQuery(() => db.events.toArray());
-  const workshops = rawWorkshops || INITIAL_WORKSHOPS;
-  const bookings = useLiveQuery(() => db.bookings.toArray()) || INITIAL_BOOKINGS;
-  const queue = useLiveQuery(() => db.queue.toArray()) || INITIAL_QUEUE;
-  const pieces = useLiveQuery(() => db.pieces.toArray()) || INITIAL_PIECES;
+  // ================= LIVE DATA (Supabase) =================
+  // Each list is fetched once and then kept current by a realtime channel.
+  //
+  // `undefined` means the first read has not resolved yet. That is the loading
+  // signal — there are no seed-data fallbacks: a pending or failed read yields
+  // an empty list so the UI can never show phantom records.
+  const rawWorkshops = useLiveTable<Workshop>('workshops');
+  const rawEvents = useLiveTable<AppEvent>('events');
+  const rawBookings = useLiveTable<Booking>('bookings');
+  const rawQueue = useLiveTable<QueueItem>('queue');
+  const rawPieces = useLiveTable<PotteryPiece>('pieces');
+  const rawPieceHistory = useLiveTable<any>('piece_history', { orderBy: 'timestamp' });
+  const rawCustomers = useLiveTable<CustomerAccount>('customers');
+  const rawStaff = useLiveTable<StaffMember>('staff');
+  const rawSessions = useLiveTable<WorkshopSessionRecord>('workshop_sessions');
+  const rawNotifications = useLiveTable<NotificationItem>('notifications');
+  const rawCategories = useLiveTable<Category>('categories');
+  const rawAppSettings = useLiveTable<AppSetting>('app_settings');
+  const rawStudioResources = useLiveTable<StudioResource>('studio_resources', { orderBy: 'order' });
+  const rawBirthdayPackages = useLiveTable<BirthdayPackage>('birthday_packages', { orderBy: 'display_order' });
+  const rawPipelineStages = useLiveTable<PipelineStage>('pipeline_stages', { orderBy: 'order' });
+  const rawWorkshopOptions = useLiveTable<WorkshopOption>('workshop_options', { orderBy: 'order' });
+  const rawEventOptions = useLiveTable<EventOption>('event_options', { orderBy: 'order' });
+
+  const events = rawEvents || [];
+  const bookings = rawBookings || [];
+  const queue = rawQueue || [];
+  const customers = rawCustomers || [];
+  const staff = rawStaff || [];
+  const notifications = rawNotifications || [];
+  const categories = rawCategories || [];
+  const appSettings = rawAppSettings || [];
+  const studioResources = rawStudioResources || [];
+  const pipelineStages = rawPipelineStages || [];
+  const workshopOptions = rawWorkshopOptions || [];
+  const eventOptions = rawEventOptions || [];
+  const workshopSessions = rawSessions || [];
+
   // Results are produced by running the real suite, not seeded from a list.
-  const systemTests = useLiveQuery(() => db.systemTests.toArray()) || [];
-  const notifications = useLiveQuery(() => db.notifications.toArray()) || [];
-  const events = rawEvents || INITIAL_EVENTS;
-  const workshopSessions = useLiveQuery(() => db.workshopSessions.toArray()) || [];
-  const customers = useLiveQuery(() => db.customers.toArray()) || [];
-  const studioResources = useLiveQuery(() => db.studioResources.orderBy('order').toArray()) || [];
-  const rawBirthdayPackages = useLiveQuery(() => db.birthdayPackages.orderBy('displayOrder').toArray()) || [];
+  const systemTests: TestResult[] = [];
+
+  // A piece's history lives in its own append-only table; it is stitched back
+  // onto the piece so every existing reader of `piece.history` still works.
+  const pieces = React.useMemo(() => {
+    const byPiece = new Map<string, any[]>();
+    for (const entry of rawPieceHistory || []) {
+      const list = byPiece.get(entry.pieceId) || [];
+      list.push({
+        status: entry.status,
+        timestamp: entry.timestamp,
+        riyadhTime: entry.riyadhTime,
+        user: entry.user,
+        reason: entry.reason || undefined
+      });
+      byPiece.set(entry.pieceId, list);
+    }
+    return (rawPieces || []).map(p => ({ ...p, history: byPiece.get(p.id) || [] }));
+  }, [rawPieces, rawPieceHistory]);
+
+  // Sessions are their own table now. They are also attached to their workshop
+  // so the places that read `workshop.sessions` keep working unchanged.
+  const workshops = React.useMemo(() => {
+    const byWorkshop = new Map<string, WorkshopSessionRecord[]>();
+    for (const session of rawSessions || []) {
+      const list = byWorkshop.get(session.workshopId) || [];
+      list.push(session);
+      byWorkshop.set(session.workshopId, list);
+    }
+    return (rawWorkshops || []).map(w => ({ ...w, sessions: byWorkshop.get(w.id) || [] }));
+  }, [rawWorkshops, rawSessions]);
+
   // Older records are filled in so the customer site has one consistent shape.
   const birthdayPackages = React.useMemo(
-    () => rawBirthdayPackages.map(normalizeBirthdayPackage),
+    () => (rawBirthdayPackages || []).map(normalizeBirthdayPackage),
     [rawBirthdayPackages]
   );
-
-  const pipelineStages = useLiveQuery(() => db.pipelineStages.orderBy('order').toArray()) || [];
-  const staff = useLiveQuery(() => db.staff.toArray()) || [];
-  const workshopOptions = useLiveQuery(() => db.workshopOptions.orderBy('order').toArray()) || [];
-  const eventOptions = useLiveQuery(() => db.eventOptions.orderBy('order').toArray()) || [];
-  const categories = useLiveQuery(() => db.categories.toArray()) || [];
-  const appSettings = useLiveQuery(() => db.appSettings.toArray()) || [];
 
   /**
    * Makes sure every default birthday package exists and is up to date.
@@ -789,396 +814,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
    * state and a custom image are kept, and packages that already carry the
    * structured fields are left untouched.
    */
-  const ensureBirthdayPackages = async () => {
-    try {
-      for (const seeded of DEFAULT_BIRTHDAY_PACKAGES) {
-        const existing = await db.birthdayPackages.get(seeded.id);
+  // Birthday packages are seeded by 0001_init.sql; there is no client-side
+  // self-heal any more.
 
-        if (!existing) {
-          await db.birthdayPackages.put({ ...seeded });
-          continue;
-        }
 
-        if (!existing.cakeSizes) {
-          await db.birthdayPackages.put({
-            ...seeded,
-            displayOrder: existing.displayOrder ?? seeded.displayOrder,
-            status: existing.status ?? seeded.status,
-            image: existing.image || seeded.image
-          });
-        }
-      }
-    } catch (err) {
-      console.error("Failed to ensure birthday packages:", err);
-    }
-  };
+  // The database is seeded by supabase/migrations/0001_init.sql. There is no
+  // client-side seeding: an empty table means an empty table.
 
-  // Birthday packages are ensured on every load, independently of the one-time
-  // data-wipe flag that short-circuits the main seed — otherwise a browser that
-  // has been opened before can never gain a package it is missing.
-  useEffect(() => {
-    ensureBirthdayPackages();
-  }, []);
-
-  // Seeding database if empty
-  useEffect(() => {
-    const seedDatabase = async () => {
-      if (isSeedingDatabase) return;
-      if (localStorage.getItem('artycafe_data_cleared') === 'true') return;
-      
-      // Execute explicit user request to wipe data for testing on initial load
-      if (localStorage.getItem('artycafe_initial_wipe_v1') !== 'true') {
-        localStorage.setItem('artycafe_initial_wipe_v1', 'true');
-        localStorage.setItem('artycafe_data_cleared', 'true');
-        await removeAllData();
-        return;
-      }
-
-      isSeedingDatabase = true;
-      try {
-        await db.transaction('rw', [
-          db.workshops,
-          db.workshopSessions,
-          db.categories,
-          db.bookings,
-          db.queue,
-          db.pieces,
-          db.systemTests,
-          db.pipelineStages,
-          db.staff,
-          db.workshopOptions,
-          db.eventOptions,
-          db.appSettings,
-          db.events,
-          db.customers,
-          db.birthdayPackages,
-          db.studioResources,
-          db.workshopOptions
-        ], async () => {
-          // Studio rooms and table stations. Any rooms/tables configured before
-          // this table existed are carried over so nothing is lost.
-          try {
-            const resourceCount = await db.studioResources.count();
-            if (resourceCount === 0) {
-              const migrated: StudioResource[] = [];
-
-              const legacyRooms = await db.workshopOptions.where('type').equals('room').toArray();
-              legacyRooms.forEach((opt, idx) => {
-                migrated.push({
-                  id: opt.id,
-                  name: opt.value,
-                  type: 'Studio Room',
-                  seats: 10,
-                  status: 'Active',
-                  order: idx
-                });
-              });
-
-              const capacity = (await db.appSettings.get('capacitySettings'))?.value;
-              (capacity?.tables || []).forEach((table: any, idx: number) => {
-                migrated.push({
-                  id: table.id,
-                  name: table.name,
-                  type: 'Table Station',
-                  seats: Number(table.seats) || 4,
-                  status: table.status === 'Maintenance' ? 'Maintenance' : (table.status === 'Inactive' ? 'Inactive' : 'Active'),
-                  order: legacyRooms.length + idx
-                });
-              });
-
-              await db.studioResources.bulkPut(
-                migrated.length > 0 ? migrated : DEFAULT_STUDIO_RESOURCES
-              );
-            }
-          } catch (err) {
-            console.error("Dexie seed studioResources error:", err);
-          }
-
-          // Shared birthday package records — the customer site renders from these.
-          await ensureBirthdayPackages();
-
-          // Robust, defensively-isolated table seeds inside transaction
-          try {
-            const customersCount = await db.customers.count();
-            if (customersCount === 0) {
-              await db.customers.bulkPut([
-                {
-                  id: 'CUST-82941',
-                  name: 'Noura Al-Amri',
-                  email: 'nosamac9@gmail.com',
-                  phone: '+966 50 123 4567',
-                                    createdAt: getRelativeRiyadhDateStr(-30)
-                },
-                {
-                  id: 'CUST-10394',
-                  name: 'Yasser Qahtani',
-                  email: 'yasser@qahtani.sa',
-                  phone: '+966 54 987 6543',
-                                    createdAt: getRelativeRiyadhDateStr(-20)
-                }
-              ]);
-            }
-          } catch (err) {
-            console.error("Dexie seed customers error:", err);
-          }
-
-          try {
-            const workshopsCount = await db.workshops.count();
-            if (workshopsCount === 0) {
-              await db.workshops.bulkPut(INITIAL_WORKSHOPS);
-            }
-          } catch (err) {
-            console.error("Dexie seed workshops error:", err);
-          }
-
-          try {
-            const sessionsCount = await db.workshopSessions.count();
-            if (sessionsCount === 0) {
-              const defaultSessions = [
-                // ws-1: Wheel Throwing
-                { id: 'sess-ws1-1', workshopId: 'ws-1', date: getRelativeRiyadhDateStr(0), startTime: '11:00 AM', capacity: 8, status: 'Published' as const, instructor: 'Ali bin Khalid', staffId: 'staff-1' },
-                { id: 'sess-ws1-2', workshopId: 'ws-1', date: getRelativeRiyadhDateStr(0), startTime: '04:30 PM', capacity: 8, status: 'Published' as const, instructor: 'Ali bin Khalid', staffId: 'staff-1' },
-                { id: 'sess-ws1-3', workshopId: 'ws-1', date: getRelativeRiyadhDateStr(0), startTime: '07:30 PM', capacity: 8, status: 'Published' as const, instructor: 'Ali bin Khalid', staffId: 'staff-1' },
-                { id: 'sess-ws1-4', workshopId: 'ws-1', date: getRelativeRiyadhDateStr(1), startTime: '11:00 AM', capacity: 8, status: 'Published' as const, instructor: 'Ali bin Khalid', staffId: 'staff-1' },
-                { id: 'sess-ws1-5', workshopId: 'ws-1', date: getRelativeRiyadhDateStr(1), startTime: '04:30 PM', capacity: 8, status: 'Published' as const, instructor: 'Ali bin Khalid', staffId: 'staff-1' },
-                { id: 'sess-ws1-6', workshopId: 'ws-1', date: getRelativeRiyadhDateStr(1), startTime: '07:30 PM', capacity: 8, status: 'Published' as const, instructor: 'Ali bin Khalid', staffId: 'staff-1' },
-                { id: 'sess-ws1-7', workshopId: 'ws-1', date: getRelativeRiyadhDateStr(2), startTime: '11:00 AM', capacity: 8, status: 'Published' as const, instructor: 'Ali bin Khalid', staffId: 'staff-1' },
-                { id: 'sess-ws1-8', workshopId: 'ws-1', date: getRelativeRiyadhDateStr(2), startTime: '04:30 PM', capacity: 8, status: 'Published' as const, instructor: 'Ali bin Khalid', staffId: 'staff-1' },
-                { id: 'sess-ws1-9', workshopId: 'ws-1', date: getRelativeRiyadhDateStr(2), startTime: '07:30 PM', capacity: 8, status: 'Published' as const, instructor: 'Ali bin Khalid', staffId: 'staff-1' },
-
-                // ws-2: Hand-Building
-                { id: 'sess-ws2-1', workshopId: 'ws-2', date: getRelativeRiyadhDateStr(0), startTime: '01:00 PM', capacity: 12, status: 'Published' as const, instructor: 'Aisha Al-Jahdali', staffId: 'staff-2' },
-                { id: 'sess-ws2-2', workshopId: 'ws-2', date: getRelativeRiyadhDateStr(0), startTime: '05:00 PM', capacity: 12, status: 'Published' as const, instructor: 'Aisha Al-Jahdali', staffId: 'staff-2' },
-                { id: 'sess-ws2-3', workshopId: 'ws-2', date: getRelativeRiyadhDateStr(1), startTime: '01:00 PM', capacity: 12, status: 'Published' as const, instructor: 'Aisha Al-Jahdali', staffId: 'staff-2' },
-                { id: 'sess-ws2-4', workshopId: 'ws-2', date: getRelativeRiyadhDateStr(1), startTime: '05:00 PM', capacity: 12, status: 'Published' as const, instructor: 'Aisha Al-Jahdali', staffId: 'staff-2' },
-                { id: 'sess-ws2-5', workshopId: 'ws-2', date: getRelativeRiyadhDateStr(2), startTime: '01:00 PM', capacity: 12, status: 'Published' as const, instructor: 'Aisha Al-Jahdali', staffId: 'staff-2' },
-
-                // ws-3: Acrylic Landscape
-                { id: 'sess-ws3-1', workshopId: 'ws-3', date: getRelativeRiyadhDateStr(0), startTime: '06:00 PM', capacity: 15, status: 'Published' as const, instructor: 'Faisal Al-Otaibi', staffId: 'staff-3' },
-                { id: 'sess-ws3-2', workshopId: 'ws-3', date: getRelativeRiyadhDateStr(1), startTime: '06:00 PM', capacity: 15, status: 'Published' as const, instructor: 'Faisal Al-Otaibi', staffId: 'staff-3' },
-                { id: 'sess-ws3-3', workshopId: 'ws-3', date: getRelativeRiyadhDateStr(2), startTime: '06:00 PM', capacity: 15, status: 'Published' as const, instructor: 'Faisal Al-Otaibi', staffId: 'staff-3' },
-
-                // ws-4: Kids Clay
-                { id: 'sess-ws4-1', workshopId: 'ws-4', date: getRelativeRiyadhDateStr(0), startTime: '10:00 AM', capacity: 10, status: 'Published' as const, instructor: 'Sara Al-Malki', staffId: 'staff-5' },
-                { id: 'sess-ws4-2', workshopId: 'ws-4', date: getRelativeRiyadhDateStr(0), startTime: '02:00 PM', capacity: 10, status: 'Published' as const, instructor: 'Sara Al-Malki', staffId: 'staff-5' },
-                { id: 'sess-ws4-3', workshopId: 'ws-4', date: getRelativeRiyadhDateStr(1), startTime: '10:00 AM', capacity: 10, status: 'Published' as const, instructor: 'Sara Al-Malki', staffId: 'staff-5' },
-
-                // ws-5: Couples Pottery
-                { id: 'sess-ws5-1', workshopId: 'ws-5', date: getRelativeRiyadhDateStr(0), startTime: '07:00 PM', capacity: 6, status: 'Published' as const, instructor: 'Ali bin Khalid', staffId: 'staff-1' },
-                { id: 'sess-ws5-2', workshopId: 'ws-5', date: getRelativeRiyadhDateStr(0), startTime: '09:00 PM', capacity: 6, status: 'Published' as const, instructor: 'Ali bin Khalid', staffId: 'staff-1' },
-                { id: 'sess-ws5-3', workshopId: 'ws-5', date: getRelativeRiyadhDateStr(1), startTime: '07:00 PM', capacity: 6, status: 'Published' as const, instructor: 'Ali bin Khalid', staffId: 'staff-1' }
-              ];
-              await db.workshopSessions.bulkPut(defaultSessions);
-            }
-          } catch (err) {
-            console.error("Dexie seed workshopSessions error:", err);
-          }
-
-          try {
-            const eventsCount = await db.events.count();
-            if (eventsCount === 0) {
-              await db.events.bulkPut(INITIAL_EVENTS);
-            }
-          } catch (err) {
-            console.error("Dexie seed events error:", err);
-          }
-
-          try {
-            const categoriesCount = await db.categories.count();
-            if (categoriesCount === 0) {
-              await db.categories.bulkPut([
-                { id: 'cat-1', name: 'Pottery' },
-                { id: 'cat-2', name: 'Painting' },
-                { id: 'cat-3', name: 'Kids' },
-                { id: 'cat-4', name: 'Couples' },
-                { id: 'cat-5', name: 'Group' }
-              ]);
-            }
-          } catch (err) {
-            console.error("Dexie seed categories error:", err);
-          }
-
-          try {
-            const todayRiyadh = getRiyadhDateString();
-            const bookingsCount = await db.bookings.count();
-            if (bookingsCount === 0) {
-              await db.bookings.bulkPut(INITIAL_BOOKINGS);
-            } else {
-              const existingBookings = await db.bookings.toArray();
-              const hasTodayBookings = existingBookings.some(b => b.date === todayRiyadh);
-              if (!hasTodayBookings && existingBookings.length > 0) {
-                // Migrate initial sample bookings to today
-                for (const b of existingBookings) {
-                  if (['ART-10394', 'ART-99201', 'ART-82941'].includes(b.id)) {
-                    await db.bookings.update(b.id, { date: todayRiyadh });
-                  }
-                }
-              }
-            }
-          } catch (err) {
-            console.error("Dexie seed bookings error:", err);
-          }
-
-          try {
-            const todayRiyadh = getRiyadhDateString();
-            const queueCount = await db.queue.count();
-            if (queueCount === 0) {
-              const seededQueue = INITIAL_QUEUE.map(item => ({
-                ...item,
-                date: todayRiyadh
-              }));
-              await db.queue.bulkPut(seededQueue);
-            }
-          } catch (err) {
-            console.error("Dexie seed queue error:", err);
-          }
-
-          try {
-            const piecesCount = await db.pieces.count();
-            if (piecesCount === 0) {
-              await db.pieces.bulkPut(INITIAL_PIECES);
-            }
-          } catch (err) {
-            console.error("Dexie seed pieces error:", err);
-          }
-
-          try {
-            await ensurePipelineStages();
-          } catch (err) {
-            console.error("Dexie seed pipelineStages error:", err);
-          }
-
-          try {
-            const staffCount = await db.staff.count();
-            if (staffCount === 0) {
-              // Sample roster only. Schedules here are seeded records, not defaults:
-              // staff created through Staff Management start with an empty schedule.
-              const sampleSchedule = (): Record<string, StaffScheduleDayEntry> => {
-                const shift = { id: 'shift-seed-1', isWorking: true, startTime: '10:00 AM', endTime: '08:00 PM' };
-                const entry: StaffScheduleDayEntry = { isWorking: true, shifts: [shift] };
-                return {
-                  Sunday: entry, Monday: entry, Tuesday: entry,
-                  Wednesday: entry, Thursday: entry, Saturday: entry
-                };
-              };
-
-              await db.staff.bulkPut([
-                { id: 'staff-1', name: 'Ali bin Khalid', position: 'Master Wheelist / Instructor', phone: '+966 50 111 2222', normalizedPhone: '501112222', email: 'ali@artycafe.com', status: 'Active', weeklySchedule: sampleSchedule(), canAssignWorkshops: true, canAssignPieces: true, role: 'Staff' as const, hasConsoleAccess: true, userId: 'staff-1', permissions: ['dashboard', 'queue', 'pieces-admin'] },
-                { id: 'staff-2', name: 'Aisha Al-Jahdali', position: 'Handcraft Specialist / Instructor', phone: '+966 54 333 4444', email: 'aisha@artycafe.com', status: 'Active', weeklySchedule: sampleSchedule(), canAssignWorkshops: true, canAssignPieces: true , role: 'Staff' as const, hasConsoleAccess: false },
-                { id: 'staff-3', name: 'Faisal Al-Otaibi', position: 'Acrylic Specialist / Instructor', phone: '+966 56 555 6666', email: 'faisal@artycafe.com', status: 'Active', weeklySchedule: sampleSchedule(), canAssignWorkshops: true, canAssignPieces: true , role: 'Staff' as const, hasConsoleAccess: false },
-                // Studio Manager holds the Super Admin console account. The role
-                // itself grants every page; no permissions need selecting.
-                { id: 'staff-4', name: 'Lina Al-Sudais', position: 'Studio Manager', phone: '+966 55 777 8888', normalizedPhone: '557778888', email: 'lina@artycafe.com', status: 'Active', weeklySchedule: sampleSchedule(), canAssignWorkshops: true, canAssignPieces: true, role: 'Super Admin' as const, hasConsoleAccess: true, userId: 'staff-4', permissions: [] },
-                { id: 'staff-5', name: 'Sara Al-Malki', position: 'Kids Coach / Instructor', phone: '+966 50 999 0000', email: 'sara@artycafe.com', status: 'Active', weeklySchedule: sampleSchedule(), canAssignWorkshops: true, canAssignPieces: true }
-              ]);
-            }
-          } catch (err) {
-            console.error("Dexie seed staff error:", err);
-          }
-
-          try {
-            const optionsCount = await db.workshopOptions.count();
-            if (optionsCount === 0) {
-              const defaultOptions: Omit<WorkshopOption, 'id'>[] = [
-                { type: 'skillLevel', value: 'Beginner', order: 0 },
-                { type: 'skillLevel', value: 'Intermediate', order: 1 },
-                { type: 'skillLevel', value: 'Advanced', order: 2 },
-                { type: 'skillLevel', value: 'All Levels', order: 3 },
-                { type: 'category', value: 'Pottery', order: 0 },
-                { type: 'category', value: 'Painting', order: 1 },
-                { type: 'category', value: 'Kids', order: 2 },
-                { type: 'category', value: 'Couples', order: 3 },
-                { type: 'category', value: 'Group', order: 4 },
-                { type: 'workshopType', value: 'Wheel Throwing', order: 0 },
-                { type: 'workshopType', value: 'Handbuilding', order: 1 },
-                { type: 'workshopType', value: 'Glazing', order: 2 },
-                { type: 'workshopType', value: 'Painting', order: 3 },
-                { type: 'workshopType', value: 'Special Event', order: 4 },
-                { type: 'room', value: 'The Clay Station (Studio A)', order: 0 },
-                { type: 'room', value: 'The Handcraft Lounge', order: 1 },
-                { type: 'room', value: 'The Canvas Atelier (Studio B)', order: 2 },
-                { type: 'room', value: 'Kiln Room 2', order: 3 },
-                { type: 'material', value: 'Terracotta Clay', order: 0 },
-                { type: 'material', value: 'Apron', order: 1 },
-                { type: 'material', value: 'Trimming Tools', order: 2 },
-                { type: 'material', value: 'Kiln Firing & Glazing', order: 3 },
-                { type: 'material', value: 'Stoneware Clay', order: 4 },
-                { type: 'material', value: 'Texture Stamps', order: 5 },
-                { type: 'material', value: 'Engobes & Glazes', order: 6 },
-                { type: 'material', value: 'Firing included', order: 7 },
-                { type: 'material', value: '40x50cm Canvas', order: 8 },
-                { type: 'material', value: 'Artist-grade Acrylics', order: 9 },
-                { type: 'material', value: 'Brushes & Easel', order: 10 },
-                { type: 'material', value: 'Café Drink', order: 11 }
-              ];
-              await db.workshopOptions.bulkPut(defaultOptions.map((opt, i) => ({ ...opt, id: `wopt-${i}` })));
-            }
-          } catch (err) {
-            console.error("Dexie seed workshopOptions error:", err);
-          }
-
-          try {
-            const eventOptionsCount = await db.eventOptions.count();
-            if (eventOptionsCount === 0) {
-              const defaultEventOptions: Omit<EventOption, 'id'>[] = [
-                { type: 'eventCategory', value: 'Socials', order: 0 },
-                { type: 'eventCategory', value: 'Masterclass', order: 1 },
-                { type: 'eventCategory', value: 'Holiday Special', order: 2 },
-                { type: 'eventCategory', value: 'Community Meetup', order: 3 },
-                { type: 'eventType', value: 'Clay & Jazz', order: 0 },
-                { type: 'eventType', value: 'Glazing Party', order: 1 },
-                { type: 'eventType', value: 'Kids Playdate', order: 2 },
-                { type: 'eventType', value: 'Beginner Painting', order: 3 },
-                { type: 'location', value: 'Studio A', order: 0 },
-                { type: 'location', value: 'Studio B', order: 1 },
-                { type: 'location', value: 'The Terrace', order: 2 },
-                { type: 'location', value: 'Main Lounge', order: 3 },
-                { type: 'host', value: 'Arty Café Instructors', order: 0 },
-                { type: 'host', value: 'Guest Artist Faisal', order: 1 },
-                { type: 'host', value: 'Studio Manager Lina', order: 2 }
-              ];
-              await db.eventOptions.bulkPut(defaultEventOptions.map((opt, i) => ({ ...opt, id: `eopt-${i}` })));
-            }
-          } catch (err) {
-            console.error("Dexie seed eventOptions error:", err);
-          }
-
-          try {
-            const appSettingsCount = await db.appSettings.count();
-            if (appSettingsCount === 0) {
-              await db.appSettings.bulkPut([
-                {
-                  id: 'prePaymentInstructions',
-                  value: {
-                    enabled: true,
-                    title: 'Important Studio Safety & Timeline Instructions',
-                    body: `<p>Please note the following studio rules before proceeding to payment:</p><ul><li><strong>Clay Processing Time:</strong> All pottery created in the studio takes <strong>10 to 14 days</strong> to completely air dry, undergo bisque-firing, be hand-glazed, and fired a second time.</li><li><strong>Live Tracker:</strong> Once booked, your piece will appear in your "My Pieces" collection tracker where you can track its lifecycle stages.</li><li><strong>Safety Attire:</strong> We recommend wearing clothes you do not mind getting a little clay on (although aprons are provided!).</li><li><strong>Storage Window:</strong> Your finished pieces will be held at our collection shelves for up to <strong>30 days</strong> post-firing.</li></ul>`,
-                    requiredCheckbox: true,
-                    checkboxLabel: 'I confirm I have read these safety rules and understand the 10-14 day firing timeline.'
-                  }
-                },
-                {
-                  id: 'defaultEventSettings',
-                  value: {
-                    defaultCapacity: 15,
-                    defaultDuration: '2.5 hours',
-                    defaultPrice: 300
-                  }
-                }
-              ]);
-            }
-          } catch (err) {
-            console.error("Dexie seed appSettings error:", err);
-          }
-        });
-      } catch (err) {
-        console.error("Dexie seeding transaction error:", err);
-      } finally {
-        isSeedingDatabase = false;
-      }
-    };
-    seedDatabase();
-  }, []);
 
   // Migrate any existing "No Show" to "Cancelled" and "Confirmed" to "Pending"
   useEffect(() => {
@@ -1313,27 +955,66 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     syncTodayBookingsToQueue();
   }, [todayDateStr, bookings.length]);
 
+  /** Returns a cancelled booking's seats, clamped to capacity, in one statement. */
+  const releaseSeats = async (bookingId: string) => {
+    if (!supabase || !bookingId) return;
+    const { error } = await supabase.rpc('release_booking_seats', { p_booking_id: bookingId });
+    if (error) console.error('Failed to release seats:', error.message);
+  };
+
+  /**
+   * The next queue number for today, from Postgres.
+   *
+   * The number is computed server-side so two walk-ins checked in at the same
+   * moment cannot be handed the same one. The local fallback below only runs
+   * when the RPC is unavailable.
+   */
+  /**
+   * A fresh read of everything an assignment/space conflict check needs.
+   *
+   * Deliberately not the cached lists: the check must see a session someone
+   * else saved a moment ago, or it will approve a double booking.
+   */
+  const getFreshAssignmentSources = async () => {
+    const [staffRows, sessions, workshopRows, eventRows, queueRows, resources, settings] =
+      await Promise.all([
+        fetchTable<StaffMember>('staff'),
+        fetchTable<WorkshopSessionRecord>('workshop_sessions'),
+        fetchTable<Workshop>('workshops'),
+        fetchTable<AppEvent>('events'),
+        fetchTable<QueueItem>('queue'),
+        fetchTable<StudioResource>('studio_resources'),
+        fetchTable<AppSetting>('app_settings')
+      ]);
+    return {
+      staff: staffRows,
+      workshopSessions: sessions,
+      workshops: workshopRows,
+      events: eventRows,
+      queue: queueRows,
+      studioResources: resources,
+      appSettings: settings
+    };
+  };
+
+  /** Staff read straight from Postgres, for checks that must not be stale. */
+  const getFreshStaff = async (): Promise<StaffMember[]> => fetchTable<StaffMember>('staff');
+
   const generateNextQueueId = async (): Promise<string> => {
-    // Query ALL queue items across the entire table to prevent primary key collisions
-    const allQueueItems = await db.queue.toArray();
-    
-    let nextNum = 1;
-    if (allQueueItems.length > 0) {
-      const numbers = allQueueItems.map(qi => {
-        const match = qi.id.match(/\d+/);
-        return match ? parseInt(match[0], 10) : 0;
-      });
-      nextNum = Math.max(...numbers, 0) + 1;
+    const today = getRiyadhDateString();
+
+    if (supabase) {
+      const { data, error } = await supabase.rpc('next_queue_id', { p_date: today });
+      if (!error && typeof data === 'string' && data) return data;
+      if (error) console.error('next_queue_id failed, numbering locally:', error.message);
     }
-    
-    let id = `Q-${String(nextNum).padStart(3, '0')}`;
-    let exists = await db.queue.get(id);
-    while (exists) {
-      nextNum++;
-      id = `Q-${String(nextNum).padStart(3, '0')}`;
-      exists = await db.queue.get(id);
-    }
-    return id;
+
+    const todaysItems = (await db.queue.toArray()).filter(qi => qi.date === today);
+    const highest = todaysItems.reduce((max, qi) => {
+      const match = String(qi.id).match(/\d+/);
+      return Math.max(max, match ? parseInt(match[0], 10) : 0);
+    }, 0);
+    return `Q-${String(highest + 1).padStart(3, '0')}`;
   };
 
   // Test Running State
@@ -1402,15 +1083,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   });
                 }
 
-                // Refund spots left back to workshop
-                if (b.workshopId && b.workshopId !== 'birthday-party-event') {
-                  const ws = await db.workshops.get(b.workshopId);
-                  if (ws) {
-                    await db.workshops.update(b.workshopId, {
-                      spotsLeft: Math.min(ws.capacity, ws.spotsLeft + b.participants)
-                    });
-                  }
-                }
+                // Seats go back in one clamped Postgres statement, never a
+                // read-modify-write from here.
+                await releaseSeats(b.id);
               });
             }
           }
@@ -1576,15 +1251,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     });
                   }
 
-                  // Release spots back
-                  if (b.workshopId && b.workshopId !== 'birthday-party-event') {
-                    const ws = await db.workshops.get(b.workshopId);
-                    if (ws) {
-                      await db.workshops.update(b.workshopId, {
-                        spotsLeft: Math.min(ws.capacity, ws.spotsLeft + b.participants)
-                      });
-                    }
-                  }
+                  // Seats go back in one clamped Postgres statement.
+                  await releaseSeats(b.id);
                 });
               }
             }
@@ -1601,6 +1269,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   const addBooking = (newBookingData: Omit<Booking, 'id' | 'createdAt' | 'timeline'>): Booking => {
+    setBookingError(null);
     const refCode = `ART-${Math.floor(10000 + Math.random() * 90000)}`;
     const nowStr = new Date().toISOString();
     
@@ -1623,36 +1292,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ]
     };
 
-    // Save to DB asynchronously
-    db.bookings.put(newBooking).then(async () => {
-      // Update Spots Left in matching workshop
-      if (newBookingData.workshopId && newBookingData.workshopId !== 'birthday-party-event') {
-        const ws = await db.workshops.get(newBookingData.workshopId);
-        if (ws) {
-          await db.workshops.update(newBookingData.workshopId, {
-            spotsLeft: Math.max(0, ws.spotsLeft - newBookingData.participants)
-          });
-        }
+    // The insert and the seat check happen in one Postgres statement, with the
+    // session row locked: two people taking the last seat cannot both succeed.
+    // Never read capacity here and write it back.
+    (async () => {
+      const client = getDataClient();
+      if (!client) throw new Error(SUPABASE_NOT_CONFIGURED);
+
+      // The customer record is resolved FIRST, so the booking carries
+      // customer_id. Without it the booking is invisible to the person who
+      // made it: the customer row-level policy matches on that column, so
+      // My Bookings would always be empty.
+      let customerId = newBookingData.customerId;
+      if (!customerId && (newBookingData.customerEmail || newBookingData.customerPhone)) {
+        const resolved = await resolveCustomer({
+          name: newBookingData.customerName,
+          email: newBookingData.customerEmail,
+          phone: newBookingData.customerPhone
+        });
+        customerId = resolved.customer?.id;
       }
 
-      // Upsert/Link Customer Account
-      if (newBookingData.customerEmail || newBookingData.customerPhone) {
-        const normEmail = (newBookingData.customerEmail || '').trim().toLowerCase();
-        if (normEmail) {
-          const existing = await db.customers.where('email').equalsIgnoreCase(normEmail).first();
-          if (!existing) {
-            await db.customers.put({
-              id: `CUST-${Math.floor(1000 + Math.random() * 9000)}`,
-              name: newBookingData.customerName,
-              email: normEmail,
-              phone: newBookingData.customerPhone,
-                            createdAt: new Date().toISOString()
-            });
-          }
-        }
-      }
-    }).catch(err => {
+      newBooking.customerId = customerId;
+
+      const { error } = await client.rpc('book_session_seats', {
+        p_booking: toRow('bookings', { ...newBooking, customerId }),
+        p_session_id: newBooking.sessionId || null
+      });
+      if (error) throw new Error(error.message);
+    })().catch(err => {
       console.error("Failed to add booking:", err);
+      setBookingError(err?.message || 'The booking could not be saved.');
     });
 
     // If walk-in or admin, automatically add to today's live queue
@@ -1773,15 +1443,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           });
         }
 
-        // Refund spots left back to workshop
-        if (booking.workshopId && booking.workshopId !== 'birthday-party-event') {
-          const ws = await db.workshops.get(booking.workshopId);
-          if (ws) {
-            await db.workshops.update(booking.workshopId, {
-              spotsLeft: Math.min(ws.capacity, ws.spotsLeft + booking.participants)
-            });
-          }
-        }
+        // Seats go back in one clamped Postgres statement.
+        await releaseSeats(booking.id);
       });
     }
   };
@@ -2028,14 +1691,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         user: performerUser,
         reason: reason || undefined
       };
-      const newHistory = [...(piece.history || []), historyEntry];
-
-      const pieceUpdates: Partial<PotteryPiece> = { status, history: newHistory };
+      const pieceUpdates: Partial<PotteryPiece> = { status };
       // Broken keeps the internal damage note on the piece; it never leaves the console.
       if (status === 'Broken' && reason) {
         pieceUpdates.damageNote = reason;
       }
       await db.pieces.update(id, pieceUpdates);
+
+      // History is its own append-only table now, so the trail cannot be
+      // overwritten by a concurrent update the way a JSON column could.
+      await db.pieceHistory.add({ pieceId: id, ...historyEntry });
 
       // Generate CUSTOMER notification
       let friendlyMsg = `Your piece "${piece.name}" has been updated to "${status}".`;
@@ -2130,15 +1795,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       assignedStaff: 'Lina',
       ...piece,
       id,
-      daysElapsed: 0,
-      history: [{
-        status: piece.status || 'Created',
-        timestamp: new Date().toISOString(),
-        user: 'Staff',
-        reason: 'Piece manually logged or initialized'
-      }]
+      daysElapsed: 0
     };
     await db.pieces.add(newPiece);
+
+    // The opening history entry, in the append-only table.
+    await db.pieceHistory.add({
+      pieceId: id,
+      status: newPiece.status || 'Created',
+      timestamp: new Date().toISOString(),
+      riyadhTime: `${getRiyadhDateString()} ${getRiyadhNow().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`,
+      user: 'Staff',
+      reason: 'Piece manually logged or initialized'
+    });
   };
 
   const updatePiece = async (id: string, updates: Partial<PotteryPiece>) => {
@@ -2176,22 +1845,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, 150);
   };
 
-  const toggleTestResult = async (id: string) => {
-    const test = await db.systemTests.get(id);
-    if (test) {
-      const newStatus = test.status === 'passed' ? 'failed' : 'passed';
-      const updates: Partial<TestResult> = { status: newStatus };
-      if (newStatus === 'failed') {
-        updates.expected = 'Status: HTTP 200 OK';
-        updates.actual = 'Status: HTTP 500 Internal Server Error';
-        updates.failureMessage = 'Uncaught DBTimeoutException: Could not reserve seating in Clay Studio A under high transactional load.';
-      } else {
-        updates.expected = undefined;
-        updates.actual = undefined;
-        updates.failureMessage = undefined;
-      }
-      await db.systemTests.update(id, updates);
-    }
+  /**
+   * Left as a no-op: it faked a failure in the old hardcoded test list, which
+   * was replaced by the real suite in utils/systemTests. There is no
+   * system_tests table — results come from actually running the tests. Kept so
+   * the context contract is unchanged.
+   */
+  const toggleTestResult = async (_id: string) => {
+    /* results are produced by running the suite, not toggled */
   };
 
   // Pipeline Stages Mutators
@@ -2243,35 +1904,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
    * Guarantees the Admin Console is reachable.
    *
    * The main seed is skipped once the one-time data-wipe flag is set, so a
-   * browser that has been opened before never receives the seeded console
-   * accounts — and existing staff rows predate the account fields entirely.
-   * This runs on every load, independently of that gate:
-   *
-   * Backfills the phone match key on staff rows. It no longer creates an
-   * account: there is no default console login.
+   * Backfills the phone match key on staff rows, so a record saved before the
+   * field existed is still found by phone. No account is ever created here:
+   * credentials belong to Supabase Auth.
    */
-  const ensureConsoleAccess = async () => {
+  const ensureStaffPhoneKeys = async () => {
+    if (!supabase) return;
     try {
-      const allStaff = await db.staff.toArray();
-
-      // Backfill the normalized phone key on staff records.
+      const allStaff = await fetchTable<StaffMember>('staff');
       for (const member of allStaff) {
         const key = normalizeCustomerPhone(member.phone);
         if (key && member.normalizedPhone !== key) {
-          await db.staff.update(member.id, { normalizedPhone: key });
+          await supabase.from('staff').update({ normalized_phone: key }).eq('id', member.id);
         }
       }
-
-      // No account is auto-provisioned any more. Credentials belong to
-      // Supabase Auth, and the first Super Admin is created deliberately with
-      // `npm run create-super-admin` (see README, "First Super Admin").
     } catch (err) {
       console.error('Failed to backfill staff sign-in keys:', err);
     }
   };
 
   useEffect(() => {
-    ensureConsoleAccess();
+    ensureStaffPhoneKeys();
   }, []);
 
 
@@ -2284,40 +1937,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
    * stages if none exist and backfills the newer fields on older rows, without
    * touching a stage an admin has already customised.
    */
-  const ensurePipelineStages = async () => {
-    try {
-      const existing = await db.pipelineStages.toArray();
+  // Pipeline stages are seeded by 0001_init.sql.
 
-      if (existing.length === 0) {
-        await db.pipelineStages.bulkPut(DEFAULT_PIPELINE_STAGES);
-        return;
-      }
-
-      for (const stage of existing) {
-        const updates: Partial<PipelineStage> = {};
-        if (stage.enabled === undefined) updates.enabled = true;
-        if (stage.notifyCustomer === undefined) updates.notifyCustomer = true;
-        if (Object.keys(updates).length > 0) {
-          await db.pipelineStages.update(stage.id, updates);
-        }
-      }
-
-      // A stage the pottery workflow relies on but that is missing entirely is
-      // restored, so a status in use can never be absent from the configuration.
-      const names = new Set(existing.map(x => x.name));
-      for (const seeded of DEFAULT_PIPELINE_STAGES) {
-        if (!names.has(seeded.name)) {
-          await db.pipelineStages.put({ ...seeded, order: existing.length + seeded.order });
-        }
-      }
-    } catch (err) {
-      console.error('Failed to ensure pipeline stages:', err);
-    }
-  };
-
-  useEffect(() => {
-    ensurePipelineStages();
-  }, []);
 
 
   /**
@@ -2326,38 +1947,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
    * load. Existing options are never overwritten — only missing lists are added
    * and older rows have `enabled` backfilled.
    */
-  const ensureWorkshopOptions = async () => {
-    try {
-      const existing = await db.workshopOptions.toArray();
+  // Workshop option lists are seeded by 0001_init.sql.
 
-      for (const option of existing) {
-        if (option.enabled === undefined) {
-          await db.workshopOptions.update(option.id, { enabled: true });
-        }
-      }
-
-      for (const list of DEFAULT_WORKSHOP_OPTIONS) {
-        const already = existing.filter(o => o.type === list.type);
-        if (already.length > 0) continue;
-
-        await db.workshopOptions.bulkPut(
-          list.values.map((value, index) => ({
-            id: `wopt-${list.type}-${index}`,
-            type: list.type,
-            value,
-            order: index,
-            enabled: true
-          }))
-        );
-      }
-    } catch (err) {
-      console.error('Failed to ensure workshop options:', err);
-    }
-  };
-
-  useEffect(() => {
-    ensureWorkshopOptions();
-  }, []);
 
   // ================= ADMIN CONSOLE SESSION =================
   const [currentStaffId, setCurrentStaffId] = useState<string | null>(null);
@@ -2373,48 +1964,71 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     let cancelled = false;
 
-    const resolveSession = async (authId: string | null) => {
+    /** Who is signed in, re-derived from each session's auth id. */
+    const resolveSessions = async (staffAuthId: string | null, customerAuthId: string | null) => {
       if (cancelled) return;
 
-      if (!authId) {
+      // The staff session decides which client data reads use, so set it
+      // before reading anything.
+      setStaffSessionActive(!!staffAuthId);
+
+      if (staffAuthId) {
+        const staffRows = await fetchTable<StaffMember>('staff');
+        if (cancelled) return;
+        const row = staffRows.find(m => m.userId === staffAuthId);
+        setCurrentStaffId(row ? row.id : null);
+        if (!row) setStaffSessionActive(false);
+      } else {
         setCurrentStaffId(null);
-        setCurrentUser(null);
-        setStaffAuthChecked(true);
-        return;
       }
 
-      const [allStaff, allCustomers] = await Promise.all([
-        db.staff.toArray(), db.customers.toArray()
-      ]);
-      if (cancelled) return;
-
-      const staffRow = allStaff.find(m => m.userId === authId);
-      setCurrentStaffId(staffRow ? staffRow.id : null);
-
-      const customerRow = allCustomers.find(c => c.userId === authId);
-      setCurrentUser(customerRow
-        ? { id: customerRow.id, name: customerRow.name, email: customerRow.email, phone: customerRow.phone }
-        : null);
+      if (customerAuthId) {
+        const customerRows = await fetchTable<CustomerAccount>('customers');
+        if (cancelled) return;
+        const row = customerRows.find(c => c.userId === customerAuthId);
+        setCurrentUser(row
+          ? { id: row.id, name: row.name, email: row.email, phone: row.phone }
+          : null);
+      } else {
+        setCurrentUser(null);
+      }
 
       setStaffAuthChecked(true);
     };
 
-    if (!supabase) {
+    if (!supabase || !supabaseStaff) {
       setStaffAuthChecked(true);
       return;
     }
 
-    supabase.auth.getSession().then(({ data }) => resolveSession(data.session?.user?.id ?? null));
+    let staffId: string | null = null;
+    let customerId: string | null = null;
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      resolveSession(session?.user?.id ?? null);
+    Promise.all([
+      supabaseStaff.auth.getSession(),
+      supabase.auth.getSession()
+    ]).then(([staffSession, customerSession]) => {
+      staffId = staffSession.data.session?.user?.id ?? null;
+      customerId = customerSession.data.session?.user?.id ?? null;
+      resolveSessions(staffId, customerId);
+    });
+
+    const staffSub = supabaseStaff.auth.onAuthStateChange((_e, session) => {
+      staffId = session?.user?.id ?? null;
+      resolveSessions(staffId, customerId);
+    });
+
+    const customerSub = supabase.auth.onAuthStateChange((_e, session) => {
+      customerId = session?.user?.id ?? null;
+      resolveSessions(staffId, customerId);
     });
 
     return () => {
       cancelled = true;
-      sub.subscription.unsubscribe();
+      staffSub.data.subscription.unsubscribe();
+      customerSub.data.subscription.unsubscribe();
     };
-  }, [staff.length, customers.length]);
+  }, []);
 
   /** Always re-read from the live staff table so role and permission edits apply. */
   const currentStaff = React.useMemo(
@@ -2427,7 +2041,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (currentStaffId && staff.length > 0 && !hasConsoleAccount(currentStaff)) {
       // Losing console access signs them out immediately.
       setCurrentStaffId(null);
-      supabase?.auth.signOut();
+      setStaffSessionActive(false);
+      supabaseStaff?.auth.signOut();
     }
   }, [currentStaffId, currentStaff, staff]);
 
@@ -2439,7 +2054,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const input = String(emailOrPhone || '').trim();
     if (!input) return { success: false, error: 'Enter your email address or phone number.' };
     if (!password) return { success: false, error: 'Enter your password.' };
-    if (!supabase) return { success: false, error: SUPABASE_NOT_CONFIGURED };
+    if (!supabaseStaff) return { success: false, error: SUPABASE_NOT_CONFIGURED };
 
     const email = canonicalEmail(input);
     if (!email.includes('@')) {
@@ -2447,8 +2062,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, error: 'Sign in with your work email address.' };
     }
 
-    // 1. Supabase Auth verifies the credential.
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    // 1. Supabase Auth verifies the credential, on the console's own session
+    //    so signing in as a customer elsewhere does not sign staff out.
+    const { data, error } = await supabaseStaff.auth.signInWithPassword({ email, password });
     if (error || !data.user) {
       // The real reason, so "email not confirmed" is not reported as a wrong
       // password.
@@ -2457,34 +2073,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // 2. The staff record, resolved from the auth id. Role and permissions are
     //    read from this row — never from the token or anything stored locally.
-    const all = await db.staff.toArray();
-    let account =
+    // Read fresh, not from the cached list: a role or access change made a
+    // moment ago must apply to this sign-in.
+    const all = await fetchTable<StaffMember>('staff');
+    const account =
       all.find(member => member.userId === data.user!.id) ||
       // First sign-in after the account was provisioned: link by email once.
       all.find(member => canonicalEmail(member.email) === email);
 
-    // Stage 1b bridge: an account provisioned by `npm run create-super-admin`
-    // lives in Postgres, not yet in the local Dexie staff table (data moves in
-    // Stage 2). Mirror it on every sign-in so role, permissions and the
-    // temporary-password flag are always taken from Postgres.
-    const mirrored = await mirrorStaffFromSupabase(data.user.id);
-    if (mirrored) account = mirrored;
-
     if (!account) {
-      await supabase.auth.signOut();
+      await supabaseStaff.auth.signOut();
       return { success: false, error: 'No staff account found with those details.' };
     }
 
     // 3. The existing console guards, unchanged.
     if (!account.hasConsoleAccess) {
-      await supabase.auth.signOut();
+      await supabaseStaff.auth.signOut();
       return { success: false, error: 'This staff profile does not have Admin Console access.' };
     }
     if (account.status === 'Inactive' || account.status === 'Former Staff') {
-      await supabase.auth.signOut();
+      await supabaseStaff.auth.signOut();
       return { success: false, error: `This account is ${account.status} and cannot sign in.` };
     }
 
+    // Data reads now go through the staff session, so RLS grants the
+    // staff-only tables.
+    setStaffSessionActive(true);
     setCurrentStaffId(account.id);
     await db.staff.update(account.id, {
       lastLoginAt: new Date().toISOString(),
@@ -2500,14 +2114,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
    * clears the temporary flag, so the console stops asking.
    */
   const changeStaffPassword = async (newPassword: string) => {
-    if (!supabase) return { success: false, error: SUPABASE_NOT_CONFIGURED };
+    if (!supabaseStaff) return { success: false, error: SUPABASE_NOT_CONFIGURED };
 
     const strength = validatePasswordRule(newPassword);
     if (!strength.valid) return { success: false, error: strength.error };
 
     try {
       // A hung request must not leave the screen stuck on "Saving...".
-      const update = supabase.auth.updateUser({ password: newPassword });
+      const update = supabaseStaff!.auth.updateUser({ password: newPassword });
       const timeout = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('The authentication service did not respond. Check your connection and try again.')), 15000)
       );
@@ -2534,7 +2148,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const logoutStaff = async () => {
-    if (supabase) await supabase.auth.signOut();
+    if (supabaseStaff) await supabaseStaff.auth.signOut();
+    setStaffSessionActive(false);
     setCurrentStaffId(null);
     // Signing out always drops back to the public site.
     setArea('customer');
@@ -2556,36 +2171,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
    * normalized phone first, so the same person is never stored twice.
    */
   const resolveCustomer = async (input: { name?: string; phone?: string; email?: string }) => {
-    const all = await db.customers.toArray();
-    const { customer: existing, reason } = findCustomerMatch(all, {
+    // Find-or-create runs in Postgres. It has to: a guest booking is made by an
+    // anonymous visitor, who cannot read or insert customer rows directly, and
+    // doing the lookup client-side would also race two simultaneous walk-ins
+    // into two records for the same person.
+    const known = await db.customers.toArray();
+    const { customer: cached, reason } = findCustomerMatch(known, {
       phone: input.phone,
       email: input.email
     });
 
-    if (existing) {
-      // Only fill gaps — a blank incoming email never clears a stored one, and
-      // the account relationship is left untouched.
-      const updates = mergeCustomerDetails(existing, input);
-      if (Object.keys(updates).length > 0) {
-        await db.customers.update(existing.id, { ...updates, updatedAt: new Date().toISOString() });
-      }
-      const refreshed = await db.customers.get(existing.id);
-      return { customer: refreshed || existing, created: false, matchedOn: reason };
+    if (!supabase) {
+      return { customer: (cached || { id: '', name: input.name || 'Guest' }) as CustomerAccount, created: false, matchedOn: reason };
     }
 
-    const id = `CUST-${Math.floor(10000 + Math.random() * 90000)}`;
-    const identity = buildCustomerIdentity(input);
-    const created: CustomerAccount = {
-      ...identity,
-      id,
-      name: identity.name || 'Guest',
-      // A walk-in never gets a login account automatically.
-      hasAccount: false,
-      createdAt: new Date().toISOString()
-    };
-    await db.customers.put(created);
+    const { data: id, error } = await supabase.rpc('resolve_customer_record', {
+      p_name: input.name ?? null,
+      p_phone: input.phone ?? null,
+      p_email: input.email ?? null,
+      p_auth_id: null,
+      p_source: null
+    });
 
-    return { customer: created, created: true, matchedOn: 'none' };
+    if (error || !id) {
+      console.error('resolve_customer_record failed:', error?.message);
+      return { customer: (cached || { id: '', name: input.name || 'Guest' }) as CustomerAccount, created: false, matchedOn: reason };
+    }
+
+    // Read the row back. A guest has no session, so this goes through the
+    // summary function rather than a direct select.
+    const { data: summary } = await supabase.rpc('get_customer_summary', { p_id: id });
+    const row = Array.isArray(summary) ? summary[0] : summary;
+
+    const customer = (row ? rowToModel<CustomerAccount>(row) : { ...buildCustomerIdentity(input), id }) as CustomerAccount;
+
+    return { customer, created: !cached, matchedOn: cached ? reason : 'none' };
   };
 
   /**
@@ -2838,40 +2458,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await db.appSettings.put({ id, value });
   };
 
+  /**
+   * Settings -> Data Reset.
+   *
+   * This now clears the SHARED database, not one browser's copy: every device
+   * sees the result. Two things are deliberately preserved.
+   *
+   *  - staff, because deleting those rows would remove the signed-in Super
+   *    Admin's own record and permanently lock the console (the auth user
+   *    would survive with nothing to link to).
+   *  - the configuration seeded by the migrations — stages, option lists,
+   *    packages, resources, settings — which is no longer re-created by the
+   *    client and could not be recovered without re-running the migration.
+   */
   const removeAllData = async () => {
-    localStorage.setItem('artycafe_data_cleared', 'true');
     localStorage.removeItem('artycafe_current_user');
     localStorage.removeItem('artycafe_pending_booking');
 
-    await Promise.all([
-      db.workshops.clear(),
-      db.workshopSessions.clear(),
-      db.bookings.clear(),
-      db.queue.clear(),
-      db.pieces.clear(),
-      db.systemTests.clear(),
-      db.categories.clear(),
-      db.notifications.clear(),
-      db.pipelineStages.clear(),
-      db.staff.clear(),
-      db.workshopOptions.clear(),
-      db.eventOptions.clear(),
-      db.appSettings.clear(),
-      db.events.clear(),
-      db.customers.clear(),
-      db.birthdayPackages.clear(),
-      db.studioResources.clear()
-    ]);
+    // Operational records only, children before parents.
+    await db.pieceHistory.clear();
+    await db.notifications.clear();
+    await db.queue.clear();
+    await db.pieces.clear();
+    await db.bookings.clear();
+    await db.workshopSessions.clear();
+    await db.workshops.clear();
+    await db.events.clear();
+    await db.customers.clear();
+
     setCurrentUser(null);
   };
 
+  /**
+   * Sample data is no longer generated by the app: the database is seeded by
+   * supabase/migrations. Kept so the Settings button keeps its contract.
+   */
   const reseedSampleData = async () => {
-    localStorage.removeItem('artycafe_data_cleared');
-    localStorage.removeItem('artycafe_initial_wipe_v1');
-    isSeedingDatabase = false;
+    console.info(
+      'Sample data is seeded by supabase/migrations, not by the app. ' +
+      'Re-run the migration to restore configuration rows.'
+    );
     window.location.reload();
   };
-
 
   const loggingFieldsSetting = appSettings.find(s => s.id === 'potteryLoggingConsoleFields')?.value;
   const loggingFields: LoggingConsoleField[] = React.useMemo(() => {
@@ -3033,8 +2661,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       workshopFields, updateWorkshopFields,
       birthdayFormFields, updateBirthdayFormFields,
       addWorkshop, updateWorkshop,
-      addBooking, cancelBooking, updateBookingStatus,
+      addBooking, bookingError, clearBookingError: () => setBookingError(null),
+      cancelBooking, updateBookingStatus,
       addCategoryIfMissing, updateWorkshopSession, appendBookingTimeline,
+      getFreshAssignmentSources, getFreshStaff,
       addQueueItem, updateQueueStatus, updateQueueItem, reorderQueue, returnQueueItemToWaiting,
       updatePieceStatus, addPiece, updatePiece, markNotificationAsRead, clearAllNotifications,
       runAllTests, toggleTestResult,
