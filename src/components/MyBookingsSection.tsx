@@ -95,7 +95,7 @@ export const MyBookingsSection: React.FC = () => {
           </p>
           <div className="pt-2">
             <button
-              onClick={() => { setAuthScreen('signin'); setCustomerTab('account'); }}
+              onClick={() => { setAuthScreen('login'); setCustomerTab('auth'); }}
               className="cursor-pointer bg-brand-terracotta hover:bg-brand-terracotta-hover text-brand-cream font-bold py-3 px-6 rounded-2xl shadow-sm text-xs transition-colors"
             >
               Sign In or Create Account

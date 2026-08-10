@@ -278,6 +278,14 @@ export interface PotteryPiece {
   additionalDescriptionGlazingNotes?: string;
   expectedCompletion?: string;
   expectedReadyDate?: string;
+  /** Set when the piece actually reached Ready for Collection. */
+  actualReadyDate?: string;
+  /** Legacy alias kept on older records. */
+  readyDate?: string;
+  /** Date the piece was handed over. */
+  collectionDate?: string;
+  /** Last pickup reminder sent, so the dashboard does not nag daily. */
+  lastNotificationDate?: string;
   history?: {
     status: string;
     timestamp: string;
@@ -1232,6 +1240,8 @@ export function fieldsForCard(
 
 export interface StudioTableConfig {
   id: string;
+  /** Display number shown in the capacity table, e.g. 1 for "Table 1". */
+  number: number;
   name: string; // e.g. "Table 1"
   seats: number;
   status: 'Active' | 'Inactive' | 'Maintenance';

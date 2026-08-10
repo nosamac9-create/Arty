@@ -226,7 +226,8 @@ interface AppContextType {
   addCustomer: (
     customer: Omit<CustomerAccount, 'id' | 'createdAt'>
   ) => Promise<{ success: boolean; error?: string; customerId?: string }>;
-  updateCustomer: (id: string, updates: Partial<CustomerAccount>) => Promise<void>;
+  updateCustomer: (id: string, updates: Partial<CustomerAccount>) =>
+    Promise<{ success: boolean; error?: string }>;
   addStaffMember: (member: Omit<StaffMember, 'id'>) => Promise<void>;
   updateStaffMember: (id: string, updates: Partial<StaffMember>) => Promise<void>;
   deleteStaffMember: (id: string) => Promise<{ success: boolean; message?: string; assignmentsCount?: number }>;
@@ -2701,7 +2702,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           email: updates.email ?? (await db.customers.get(id))?.email
         })
       : {};
-    await db.customers.update(id, { ...updates, ...identity, updatedAt: new Date().toISOString() });
+    try {
+      await db.customers.update(id, { ...updates, ...identity, updatedAt: new Date().toISOString() });
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Failed to update customer details.' };
+    }
   };
 
   // Staff Mutators
