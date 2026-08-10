@@ -175,9 +175,18 @@ grant execute on function public.next_queue_id(date) to authenticated;
 
 -- =============================================================================
 -- Realtime: the app subscribes to these tables via postgres_changes.
+--
+-- This is deliberately failure-proof. `alter publication` needs ownership of
+-- supabase_realtime, and on some projects the SQL editor's role does not have
+-- it. An uncaught error here would abort the whole file and roll back every
+-- function above — which is exactly what happened the first time. Every
+-- outcome is swallowed and reported as a notice instead.
 -- =============================================================================
 do $$
-declare t text;
+declare
+  t       text;
+  added   int := 0;
+  skipped int := 0;
 begin
   foreach t in array ARRAY[
     'workshops','workshop_sessions','bookings','queue','pieces','piece_history',
@@ -188,10 +197,32 @@ begin
   loop
     begin
       execute format('alter publication supabase_realtime add table public.%I', t);
+      added := added + 1;
     exception
-      when duplicate_object then null;   -- already published
-      when undefined_object then null;   -- publication not present on this plan
+      when others then
+        -- already published, no publication, or not the owner: never fatal.
+        skipped := skipped + 1;
     end;
   end loop;
+
+  raise notice 'Realtime: % table(s) added, % skipped.', added, skipped;
+  if added = 0 then
+    raise notice 'If live updates do not work, enable Realtime for these tables '
+                 'under Database -> Replication in the dashboard.';
+  end if;
 end
 $$;
+
+-- =============================================================================
+-- Verification. The result of this migration, so a silent failure is visible.
+-- Expect five rows.
+-- =============================================================================
+select p.proname as created_function
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname = 'public'
+   and p.proname in (
+     'session_seats_taken', 'session_seats_remaining',
+     'book_session_seats', 'release_booking_seats', 'next_queue_id'
+   )
+ order by 1;
