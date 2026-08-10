@@ -20,6 +20,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
 import { normalizeDateString, timeToMinutes } from '../utils/timeUtils';
 import { hasWebsiteAccount, buildAccountLink } from '../utils/accountUtils';
+import { supabase, isSupabaseConfigured, SUPABASE_NOT_CONFIGURED } from '../lib/supabase';
 import {
   normalizeCustomerPhone, toDisplayPhone, findCustomerMatch, buildCustomerIdentity,
   mergeCustomerDetails, findDuplicateGroups, customerPhoneKey
@@ -51,8 +52,18 @@ export {
 
 interface AppContextType {
   // Navigation
-  perspective: 'customer' | 'admin';
-  setPerspective: (p: 'customer' | 'admin') => void;
+  /**
+   * Which area of the app is showing. The customer site is the default and is
+   * open to everyone; the staff console is a separate area reached only by an
+   * explicit staff sign-in. There is no free toggle between the two.
+   */
+  area: 'customer' | 'staff';
+  /** Opens the staff sign-in screen. Grants nothing on its own. */
+  goToStaffLogin: () => void;
+  /** Leaves the staff area for the customer site, keeping the session. */
+  viewCustomerSite: () => void;
+  /** Returns a signed-in staff member to the console. */
+  returnToStaffConsole: () => void;
   customerTab: 'home' | 'workshops' | 'detail' | 'checkout-info' | 'checkout-payment' | 'confirmation' | 'my-bookings' | 'my-pieces' | 'auth' | 'birthday-booking';
   setCustomerTab: (tab: 'home' | 'workshops' | 'detail' | 'checkout-info' | 'checkout-payment' | 'confirmation' | 'my-bookings' | 'my-pieces' | 'auth' | 'birthday-booking') => void;
   adminTab: 'dashboard' | 'queue' | 'customers' | 'staff' | 'bookings' | 'workshops-admin' | 'events-admin' | 'pieces-admin' | 'system-health' | 'settings';
@@ -72,7 +83,11 @@ interface AppContextType {
   authScreen: 'login' | 'register' | 'forgot';
   setAuthScreen: (screen: 'login' | 'register' | 'forgot') => void;
   registerCustomer: (data: { name: string; email: string; phone: string; password?: string }) => Promise<{ success: boolean; error?: string }>;
-  loginCustomer: (email: string, password?: string) => Promise<{ success: boolean; error?: string }>;
+  loginCustomer: (email: string, password?: string) =>
+    Promise<{ success: boolean; error?: string; needsPasswordSetup?: boolean }>;
+  /** Attaches a password to an existing passwordless record and signs them in. */
+  claimCustomerAccount: (emailOrPhone: string, password: string) =>
+    Promise<{ success: boolean; error?: string; customerId?: string }>;
   resetCustomerPassword: (emailOrPhone: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
   logoutCustomer: () => void;
 
@@ -112,7 +127,10 @@ interface AppContextType {
   /** The signed-in staff member, or null. Never defaults to a staff record. */
   currentStaff: StaffMember | null;
   staffAuthChecked: boolean;
-  loginStaff: (emailOrPhone: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  loginStaff: (emailOrPhone: string, password: string) =>
+    Promise<{ success: boolean; error?: string; mustChangePassword?: boolean }>;
+  /** Replaces the signed-in staff member's password (Supabase Auth). */
+  changeStaffPassword: (newPassword: string) => Promise<{ success: boolean; error?: string }>;
   logoutStaff: () => void;
   /** Page-level authorization for the signed-in staff member. */
   canAccessAdminPage: (pageId: string) => boolean;
@@ -155,6 +173,9 @@ interface AppContextType {
   workshopOptions: WorkshopOption[];
   eventOptions: EventOption[];
   categories: Category[];
+  /** Raw workshop/event queries: `undefined` until the first read resolves. */
+  rawWorkshops: Workshop[] | undefined;
+  rawEvents: AppEvent[] | undefined;
   appSettings: AppSetting[];
   loggingFields: LoggingConsoleField[];
   updateLoggingFields: (fields: LoggingConsoleField[]) => Promise<void>;
@@ -165,6 +186,12 @@ interface AppContextType {
   addBooking: (booking: Omit<Booking, 'id' | 'createdAt' | 'timeline'>) => Booking;
   cancelBooking: (id: string, user?: string, paymentStatusUpdate?: 'Refunded' | 'Paid' | 'Unpaid') => void;
   updateBookingStatus: (id: string, status: Booking['status'], paymentStatus?: Booking['paymentStatus'], user?: string) => void;
+  /** Adds a category unless one with that name already exists. */
+  addCategoryIfMissing: (name: string) => Promise<{ created: boolean; id?: string }>;
+  /** Updates a single workshop session record. */
+  updateWorkshopSession: (id: string, updates: Partial<WorkshopSessionRecord>) => Promise<void>;
+  /** Appends one entry to a booking's timeline. */
+  appendBookingTimeline: (bookingId: string, action: string) => Promise<void>;
   addQueueItem: (item: Omit<QueueItem, 'id' | 'checkInTime' | 'elapsedMinutes' | 'status' | 'date' | 'history'>) => Promise<void>;
   updateQueueStatus: (id: string, status: QueueItem['status']) => void;
   updateQueueItem: (id: string, updates: Partial<QueueItem>) => Promise<void>;
@@ -223,9 +250,9 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 let isSeedingDatabase = false;
 
-/** Credentials used only when no Admin Console account exists yet. */
-export const BOOTSTRAP_CONSOLE_EMAIL = 'admin@artycafe.com';
-export const BOOTSTRAP_CONSOLE_PASSWORD = 'artycafe123';
+// The previous hardcoded bootstrap credentials were removed in Stage 1b: they
+// were committed to a public repository and are permanently compromised.
+// Supabase Auth owns credentials; see README, "First Super Admin".
 
 interface BookingSessionLink {
   sessionId?: string;
@@ -278,9 +305,121 @@ const resolveBookingSessionLink = async (booking: Booking): Promise<BookingSessi
   }
 };
 
+
+// ================= AUTH HELPERS (Stage 1b) =================
+
+/** Turns a Supabase Auth error into something a customer can act on. */
+function friendlyAuthError(message: string): string {
+  const m = String(message || '').toLowerCase();
+  if (m.includes('already registered') || m.includes('already been registered')) {
+    return 'An account with this email address already exists. Please sign in instead.';
+  }
+  if (m.includes('invalid login credentials')) {
+    return 'Incorrect email or password. Please try again.';
+  }
+  if (m.includes('email not confirmed')) {
+    return 'Please confirm your email address first — check your inbox for the link.';
+  }
+  return message || 'Sign-in failed. Please try again.';
+}
+
+/**
+ * Attaches an auth user to the ONE shared customer record for that identifier.
+ *
+ * ⚠️ OWNERSHIP VERIFICATION
+ * This links an account to a record found by phone or email. It must only run
+ * once Supabase Auth has proven the caller controls that identifier. Today that
+ * proof is the email confirmation link. A phone-only claim MUST NOT attach on
+ * knowledge of the number alone.
+ * TODO(stage-2): when phone sign-in is enabled, gate this behind
+ * supabase.auth.verifyOtp() for the phone channel before calling the RPC.
+ *
+ * Stage 1b note: customer rows still live in Dexie, so the authoritative link
+ * is written locally. The Postgres RPC from Stage 1a is called first so the
+ * behaviour is already correct once the data moves in Stage 2; a failure there
+ * (tables still empty, or Supabase unconfigured) is not fatal yet.
+ */
+/**
+ * Stage 1b bridge.
+ *
+ * `npm run create-super-admin` writes the staff row to Postgres, but the app's
+ * data layer is still Dexie until Stage 2. After Supabase Auth succeeds, this
+ * reads that row back (RLS allows it: the caller IS that staff member) and
+ * mirrors it into Dexie so the console has the record it expects.
+ *
+ * Delete this once Stage 2 moves staff onto Supabase.
+ */
+async function mirrorStaffFromSupabase(authId: string): Promise<StaffMember | undefined> {
+  if (!supabase) return undefined;
+
+  try {
+    const { data, error } = await supabase
+      .from('staff')
+      .select('*')
+      .eq('user_id', authId)
+      .maybeSingle();
+
+    if (error || !data) return undefined;
+
+    const member: StaffMember = {
+      id: data.id,
+      name: data.name,
+      position: data.position || '',
+      phone: data.phone || '',
+      normalizedPhone: data.normalized_phone || '',
+      email: data.email || '',
+      status: data.status || 'Active',
+      weeklySchedule: data.weekly_schedule || {},
+      canAssignWorkshops: data.can_assign_workshops ?? true,
+      canAssignPieces: data.can_assign_pieces ?? true,
+      role: data.role,
+      permissions: data.permissions || [],
+      hasConsoleAccess: data.has_console_access === true,
+      passwordIsTemporary: data.password_is_temporary === true,
+      userId: data.user_id,
+      createdAt: data.created_at
+    } as StaffMember;
+
+    await db.staff.put(member);
+    return member;
+  } catch {
+    return undefined;
+  }
+}
+
+async function linkAuthToCustomer(identifier: string | undefined, authId: string): Promise<string | null> {
+  const input = String(identifier || '').trim();
+  if (!input || !authId) return null;
+
+  if (supabase) {
+    try {
+      await supabase.rpc('link_existing_customer', { identifier: input, new_auth_id: authId });
+    } catch {
+      /* Stage 2 moves the data; until then the local link below is the real one. */
+    }
+  }
+
+  // Local link, matching the RPC's rule exactly: phone first, then email.
+  const all = await db.customers.toArray();
+  const key = phoneMatchKey(input);
+  const mail = canonicalEmail(input);
+
+  const match =
+    (key ? all.find(c => customerPhoneKey(c) === key) : undefined) ||
+    (mail ? all.find(c => canonicalEmail(c.email) === mail) : undefined);
+
+  if (!match) return null;
+  // Already claimed by someone else: never re-point it.
+  if (match.userId && match.userId !== authId) return null;
+
+  await db.customers.update(match.id, buildAccountLink(authId));
+  return match.id;
+}
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Navigation State
-  const [perspective, setPerspective] = useState<'customer' | 'admin'>('customer');
+  // Everyone starts on the customer site.
+  const [area, setArea] = useState<'customer' | 'staff'>('customer');
   const [customerTab, setCustomerTab] = useState<'home' | 'workshops' | 'detail' | 'checkout-info' | 'checkout-payment' | 'confirmation' | 'my-bookings' | 'my-pieces' | 'auth' | 'birthday-booking'>('home');
   const [adminTab, setAdminTab] = useState<'dashboard' | 'queue' | 'customers' | 'staff' | 'bookings' | 'workshops-admin' | 'events-admin' | 'pieces-admin' | 'system-health' | 'settings'>('dashboard');
   
@@ -292,14 +431,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [selectedBirthdayPackage, setSelectedBirthdayPackage] = useState<string>('');
   
   // Auth State (Initialized ONLY from localStorage session, defaults strictly to null)
-  const [currentUser, setCurrentUser] = useState<{ id?: string; name: string; email: string; phone: string } | null>(() => {
-    try {
-      const saved = localStorage.getItem('artycafe_user');
-      return saved ? JSON.parse(saved) : null;
-    } catch (e) {
-      return null;
-    }
-  });
+  // Derived from the Supabase session on load, never trusted from storage.
+  const [currentUser, setCurrentUser] = useState<{ id?: string; name: string; email: string; phone: string } | null>(null);
   const [authScreen, setAuthScreen] = useState<'login' | 'register' | 'forgot'>('login');
 
   const registerCustomer = async (data: { name: string; email: string; phone: string; password?: string }) => {
@@ -316,6 +449,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const passwordCheck = validatePasswordRule(data.password);
     if (!passwordCheck.valid) return { success: false, error: passwordCheck.error };
+
+    if (!supabase) return { success: false, error: SUPABASE_NOT_CONFIGURED };
 
     const normEmail = canonicalEmail(data.email);
     const normPhone = canonicalPhone(data.phone);
@@ -338,18 +473,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     }
 
+    // Supabase Auth creates and hashes the credential. No password is ever
+    // written to a customer record.
+    const { data: signUp, error: signUpError } = await supabase.auth.signUp({
+      email: normEmail,
+      password: data.password!
+    });
+
+    if (signUpError) {
+      return { success: false, error: friendlyAuthError(signUpError.message) };
+    }
+
+    const authId = signUp.user?.id;
+    if (!authId) {
+      return { success: false, error: 'Could not create the account. Please try again.' };
+    }
+
+    // Attach the auth user to the shared customer record.
+    const linkedId = await linkAuthToCustomer(normEmail || data.phone, authId);
+
     let custId: string;
 
-    if (existing) {
+    if (linkedId || existing) {
       // A walk-in or admin-created guest is LINKED to the new account rather than
       // duplicated, so their history stays on one record and they move from
       // Walk-In / Guest to Registered.
-      custId = existing.id;
-      await db.customers.update(existing.id, {
-        name: data.name.trim() || existing.name,
+      custId = linkedId || existing!.id;
+      await db.customers.update(custId, {
+        name: data.name.trim() || existing?.name,
         email: normEmail,
         phone: normPhone,
-        ...buildAccountLink(existing.id, data.password)
+        ...buildAccountLink(authId)
       });
     } else {
       custId = `CUST-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -359,43 +513,170 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         email: normEmail,
         phone: normPhone,
         createdAt: new Date().toISOString(),
-        // Explicit account link — this is what the Registered filter matches on.
-        ...buildAccountLink(custId, data.password)
+        // The auth user id is the account link.
+        ...buildAccountLink(authId)
       });
     }
 
-    const userObj = { id: custId, name: data.name.trim(), email: normEmail, phone: normPhone };
-    setCurrentUser(userObj);
-    localStorage.setItem('artycafe_user', JSON.stringify(userObj));
+    // Email confirmation is on: there is no session until they confirm.
+    if (!signUp.session) {
+      return {
+        success: false,
+        needsEmailConfirmation: true,
+        error: 'Almost there — check your email and confirm your address to finish creating your account.'
+      };
+    }
 
+    setCurrentUser({ id: custId, name: data.name.trim(), email: normEmail, phone: normPhone });
     return { success: true };
   };
 
+  /**
+   * Finds the shared customer record for a typed email address or phone number.
+   * Matching is normalized, so a record saved as "0501234567", "+966501234567"
+   * or "Noura@Example.com" is found however the person types it.
+   */
+  const findCustomerForSignIn = async (input: string) => {
+    const all = await db.customers.toArray();
+    const email = canonicalEmail(input);
+    const phoneKey = phoneMatchKey(input);
+
+    if (email) {
+      const byEmail = all.find(c => canonicalEmail(c.email) === email);
+      if (byEmail) return byEmail;
+    }
+    if (phoneKey) {
+      const byPhone = all.find(c => customerPhoneKey(c) === phoneKey);
+      if (byPhone) return byPhone;
+    }
+    return undefined;
+  };
+
+  const signInCustomerRecord = (customer: CustomerAccount) => {
+    setCurrentUser({
+      id: customer.id, name: customer.name, email: customer.email, phone: customer.phone
+    });
+  };
+
+  /**
+   * Customer sign-in.
+   *
+   * A password is REQUIRED: the account must have one stored and the entered
+   * one must match it. Records created without a password — walk-ins, admin
+   * entries and bookings taken over the counter — cannot be signed into at all
+   * until their owner claims them and sets one. `needsPasswordSetup` tells the
+   * screen to offer that instead of just refusing.
+   */
   const loginCustomer = async (emailOrPhone: string, password?: string) => {
-    const input = emailOrPhone.trim();
+    const input = String(emailOrPhone || '').trim();
     if (!input) return { success: false, error: 'Email or phone number is required.' };
+    if (!password) return { success: false, error: 'Enter your password.' };
+    if (!supabase) return { success: false, error: SUPABASE_NOT_CONFIGURED };
 
-    const normEmail = input.toLowerCase();
-    let customer = await db.customers.where('email').equalsIgnoreCase(normEmail).first();
-
-    if (!customer && validateSaudiPhone(input)) {
-      const normPhone = normaliseSaudiPhone(input);
-      customer = await db.customers.where('phone').equals(normPhone).first();
+    // Supabase Auth verifies the credential. There is no password comparison
+    // in the app any more, and no password column to compare against.
+    const email = canonicalEmail(input);
+    if (!email.includes('@')) {
+      // Phone sign-in is not enabled yet; the record still resolves by phone
+      // so the message can point at the right recovery route.
+      const byPhone = await findCustomerForSignIn(input);
+      if (byPhone && !byPhone.userId) {
+        return {
+          success: false,
+          needsPasswordSetup: true,
+          error: 'This number is on file from a visit or booking, but it does not have an account yet. Set one up to claim it.'
+        };
+      }
+      return { success: false, error: 'Please sign in with your email address.' };
     }
 
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error || !data.user) {
+      // An unclaimed record is offered the claim route rather than a dead end.
+      const existing = await findCustomerForSignIn(email);
+      if (existing && !existing.userId) {
+        return {
+          success: false,
+          needsPasswordSetup: true,
+          error: 'This email is on file from a visit or booking, but it does not have an account yet. Set one up to claim it.'
+        };
+      }
+      return { success: false, error: friendlyAuthError(error?.message || '') };
+    }
+
+    // Resolve the shared record from the auth id, linking it on first sign-in.
+    const linkedId = await linkAuthToCustomer(email, data.user.id);
+    const customer =
+      (await db.customers.toArray()).find(c => c.userId === data.user!.id) ||
+      (linkedId ? await db.customers.get(linkedId) : undefined);
+
+    if (!customer) {
+      return { success: false, error: 'No customer record is linked to this account yet.' };
+    }
+
+    signInCustomerRecord(customer);
+    return { success: true };
+  };
+
+  /**
+   * Claims an existing passwordless record: creates the auth user and attaches
+   * it to the record already found by normalized phone or email. No second
+   * customer is ever created.
+   *
+   * ⚠️ OWNERSHIP VERIFICATION — see linkAuthToCustomer(). The claim only
+   * completes once Supabase Auth has proven the caller controls the address
+   * (the email confirmation link). Knowing a phone number must never be enough.
+   */
+  const claimCustomerAccount = async (emailOrPhone: string, password: string) => {
+    const input = String(emailOrPhone || '').trim();
+    if (!input) return { success: false, error: 'Email or phone number is required.' };
+    if (!supabase) return { success: false, error: SUPABASE_NOT_CONFIGURED };
+
+    const strength = validatePasswordRule(password);
+    if (!strength.valid) return { success: false, error: strength.error };
+
+    const customer = await findCustomerForSignIn(input);
     if (!customer) {
       return { success: false, error: 'No account found with these details. Please create an account.' };
     }
-
-    if (password && customer.password && customer.password !== password) {
-      return { success: false, error: 'Incorrect password. Please try again.' };
+    if (customer.userId) {
+      return { success: false, error: 'This account already has a sign-in. Please sign in, or use Forgot password.' };
     }
 
-    const userObj = { id: customer.id, name: customer.name, email: customer.email, phone: customer.phone };
-    setCurrentUser(userObj);
-    localStorage.setItem('artycafe_user', JSON.stringify(userObj));
+    // The email the account will be created against. A record with no email on
+    // file cannot be claimed by email — that path needs phone OTP.
+    // TODO(stage-2): offer supabase.auth.signInWithOtp({ phone }) here.
+    const email = canonicalEmail(customer.email) || canonicalEmail(input);
+    if (!email.includes('@')) {
+      return {
+        success: false,
+        error: 'This record has no email address on file. Please ask the studio to add one, then claim your account.'
+      };
+    }
 
-    return { success: true };
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    if (error) return { success: false, error: friendlyAuthError(error.message) };
+
+    const authId = data.user?.id;
+    if (!authId) return { success: false, error: 'Could not create the account. Please try again.' };
+
+    const linkedId = await linkAuthToCustomer(email, authId);
+    if (!linkedId) {
+      return { success: false, error: 'No account found with these details. Please create an account.' };
+    }
+
+    if (!data.session) {
+      return {
+        success: false,
+        needsEmailConfirmation: true,
+        error: 'Almost there — check your email and confirm your address to finish claiming your account.'
+      };
+    }
+
+    const claimed = await db.customers.get(linkedId);
+    if (claimed) signInCustomerRecord(claimed);
+
+    return { success: true, customerId: linkedId };
   };
 
   const resetCustomerPassword = async (emailOrPhone: string, newPassword: string): Promise<{ success: boolean; error?: string }> => {
@@ -424,9 +705,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true };
   };
 
-  const logoutCustomer = () => {
+  const logoutCustomer = async () => {
+    // Supabase owns the session; signing out clears it everywhere.
+    if (supabase) await supabase.auth.signOut();
     setCurrentUser(null);
-    localStorage.removeItem('artycafe_user');
     setCustomerTab('home');
   };
 
@@ -465,15 +747,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => clearInterval(interval);
   }, []);
 
-  // Dynamic lists from Dexie Live Query
-  const workshops = useLiveQuery(() => db.workshops.toArray()) || INITIAL_WORKSHOPS;
+  // Dynamic lists from Dexie Live Query.
+  // The raw results are kept alongside the fallbacks: `undefined` means the
+  // query has not resolved yet, which the admin table uses to show a loading
+  // skeleton instead of seed data.
+  const rawWorkshops = useLiveQuery(() => db.workshops.toArray());
+  const rawEvents = useLiveQuery(() => db.events.toArray());
+  const workshops = rawWorkshops || INITIAL_WORKSHOPS;
   const bookings = useLiveQuery(() => db.bookings.toArray()) || INITIAL_BOOKINGS;
   const queue = useLiveQuery(() => db.queue.toArray()) || INITIAL_QUEUE;
   const pieces = useLiveQuery(() => db.pieces.toArray()) || INITIAL_PIECES;
   // Results are produced by running the real suite, not seeded from a list.
   const systemTests = useLiveQuery(() => db.systemTests.toArray()) || [];
   const notifications = useLiveQuery(() => db.notifications.toArray()) || [];
-  const events = useLiveQuery(() => db.events.toArray()) || INITIAL_EVENTS;
+  const events = rawEvents || INITIAL_EVENTS;
   const workshopSessions = useLiveQuery(() => db.workshopSessions.toArray()) || [];
   const customers = useLiveQuery(() => db.customers.toArray()) || [];
   const studioResources = useLiveQuery(() => db.studioResources.orderBy('order').toArray()) || [];
@@ -619,16 +906,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   name: 'Noura Al-Amri',
                   email: 'nosamac9@gmail.com',
                   phone: '+966 50 123 4567',
-                  password: 'password123',
-                  createdAt: getRelativeRiyadhDateStr(-30)
+                                    createdAt: getRelativeRiyadhDateStr(-30)
                 },
                 {
                   id: 'CUST-10394',
                   name: 'Yasser Qahtani',
                   email: 'yasser@qahtani.sa',
                   phone: '+966 54 987 6543',
-                  password: 'password123',
-                  createdAt: getRelativeRiyadhDateStr(-20)
+                                    createdAt: getRelativeRiyadhDateStr(-20)
                 }
               ]);
             }
@@ -777,12 +1062,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               };
 
               await db.staff.bulkPut([
-                { id: 'staff-1', name: 'Ali bin Khalid', position: 'Master Wheelist / Instructor', phone: '+966 50 111 2222', normalizedPhone: '501112222', email: 'ali@artycafe.com', status: 'Active', weeklySchedule: sampleSchedule(), canAssignWorkshops: true, canAssignPieces: true, role: 'Staff' as const, hasConsoleAccess: true, password: 'password123', userId: 'staff-1', permissions: ['dashboard', 'queue', 'pieces-admin'] },
+                { id: 'staff-1', name: 'Ali bin Khalid', position: 'Master Wheelist / Instructor', phone: '+966 50 111 2222', normalizedPhone: '501112222', email: 'ali@artycafe.com', status: 'Active', weeklySchedule: sampleSchedule(), canAssignWorkshops: true, canAssignPieces: true, role: 'Staff' as const, hasConsoleAccess: true, userId: 'staff-1', permissions: ['dashboard', 'queue', 'pieces-admin'] },
                 { id: 'staff-2', name: 'Aisha Al-Jahdali', position: 'Handcraft Specialist / Instructor', phone: '+966 54 333 4444', email: 'aisha@artycafe.com', status: 'Active', weeklySchedule: sampleSchedule(), canAssignWorkshops: true, canAssignPieces: true , role: 'Staff' as const, hasConsoleAccess: false },
                 { id: 'staff-3', name: 'Faisal Al-Otaibi', position: 'Acrylic Specialist / Instructor', phone: '+966 56 555 6666', email: 'faisal@artycafe.com', status: 'Active', weeklySchedule: sampleSchedule(), canAssignWorkshops: true, canAssignPieces: true , role: 'Staff' as const, hasConsoleAccess: false },
                 // Studio Manager holds the Super Admin console account. The role
                 // itself grants every page; no permissions need selecting.
-                { id: 'staff-4', name: 'Lina Al-Sudais', position: 'Studio Manager', phone: '+966 55 777 8888', normalizedPhone: '557778888', email: 'lina@artycafe.com', status: 'Active', weeklySchedule: sampleSchedule(), canAssignWorkshops: true, canAssignPieces: true, role: 'Super Admin' as const, hasConsoleAccess: true, password: 'password123', userId: 'staff-4', permissions: [] },
+                { id: 'staff-4', name: 'Lina Al-Sudais', position: 'Studio Manager', phone: '+966 55 777 8888', normalizedPhone: '557778888', email: 'lina@artycafe.com', status: 'Active', weeklySchedule: sampleSchedule(), canAssignWorkshops: true, canAssignPieces: true, role: 'Super Admin' as const, hasConsoleAccess: true, userId: 'staff-4', permissions: [] },
                 { id: 'staff-5', name: 'Sara Al-Malki', position: 'Kids Coach / Instructor', phone: '+966 50 999 0000', email: 'sara@artycafe.com', status: 'Active', weeklySchedule: sampleSchedule(), canAssignWorkshops: true, canAssignPieces: true }
               ]);
             }
@@ -1360,8 +1645,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               name: newBookingData.customerName,
               email: normEmail,
               phone: newBookingData.customerPhone,
-              password: 'password123',
-              createdAt: new Date().toISOString()
+                            createdAt: new Date().toISOString()
             });
           }
         }
@@ -1499,6 +1783,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       });
     }
+  };
+
+  /**
+   * Adds a workshop/event category unless one with that name already exists.
+   * The comparison is case-insensitive, so "Pottery" typed again never creates
+   * a second row. Used by both Publish and Save Draft.
+   */
+  const addCategoryIfMissing = async (name: string): Promise<{ created: boolean; id?: string }> => {
+    const clean = String(name || '').trim();
+    if (!clean) return { created: false };
+
+    const all = await db.categories.toArray();
+    const existing = all.find(c => String(c.name || '').trim().toLowerCase() === clean.toLowerCase());
+    if (existing) return { created: false, id: existing.id };
+
+    const id = `cat-${Date.now()}`;
+    await db.categories.add({ id, name: clean });
+    return { created: true, id };
+  };
+
+  /**
+   * Updates one workshop session. Kept as a mutator so session writes go
+   * through the data layer rather than straight to the table.
+   */
+  const updateWorkshopSession = async (id: string, updates: Partial<WorkshopSessionRecord>) => {
+    if (!id) return;
+    await db.workshopSessions.update(String(id), { ...updates, updatedAt: new Date().toISOString() });
+  };
+
+  /**
+   * Appends one entry to a booking's timeline, preserving what is already
+   * there. Every booking write keeps its own audit trail this way.
+   */
+  const appendBookingTimeline = async (bookingId: string, action: string) => {
+    if (!bookingId || !action) return;
+    const booking = await db.bookings.get(String(bookingId));
+    if (!booking) return;
+
+    const nowStr = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    await db.bookings.update(booking.id, {
+      timeline: [...(booking.timeline || []), { time: nowStr, action }]
+    });
   };
 
   const updateBookingStatus = async (id: string, status: Booking['status'], paymentStatus?: Booking['paymentStatus'], user: string = 'Staff') => {
@@ -1920,16 +2246,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
    * accounts — and existing staff rows predate the account fields entirely.
    * This runs on every load, independently of that gate:
    *
-   *  1. Backfills the phone match key so phone sign-in works for every staff row.
-   *  2. If nobody has console access, promotes one staff member to Super Admin
-   *     with a temporary password, or creates that account when there is no
-   *     staff at all. The credentials are surfaced on the login screen.
+   * Backfills the phone match key on staff rows. It no longer creates an
+   * account: there is no default console login.
    */
   const ensureConsoleAccess = async () => {
     try {
       const allStaff = await db.staff.toArray();
 
-      // 1. Backfill the normalized phone used for sign-in.
+      // Backfill the normalized phone key on staff records.
       for (const member of allStaff) {
         const key = normalizeCustomerPhone(member.phone);
         if (key && member.normalizedPhone !== key) {
@@ -1937,49 +2261,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
 
-      const withAccess = allStaff.filter(m => m.hasConsoleAccess === true);
-      if (withAccess.length > 0) return;
-
-      // 2. No console account exists — bootstrap exactly one Super Admin.
-      const candidate =
-        allStaff.find(m => m.status === 'Active' && /manager/i.test(m.position || '')) ||
-        allStaff.find(m => m.status === 'Active') ||
-        allStaff[0];
-
-      if (candidate) {
-        await db.staff.update(candidate.id, {
-          role: 'Super Admin',
-          hasConsoleAccess: true,
-          password: BOOTSTRAP_CONSOLE_PASSWORD,
-          passwordIsTemporary: true,
-          userId: candidate.id,
-          normalizedPhone: normalizeCustomerPhone(candidate.phone),
-          permissions: []
-        });
-      } else {
-        const id = `staff-${Date.now()}`;
-        await db.staff.add({
-          id,
-          name: 'Studio Super Admin',
-          position: 'Studio Manager',
-          phone: '+966500000000',
-          normalizedPhone: '500000000',
-          email: BOOTSTRAP_CONSOLE_EMAIL,
-          status: 'Active',
-          weeklySchedule: {},
-          canAssignWorkshops: true,
-          canAssignPieces: true,
-          role: 'Super Admin',
-          hasConsoleAccess: true,
-          password: BOOTSTRAP_CONSOLE_PASSWORD,
-          passwordIsTemporary: true,
-          userId: id,
-          permissions: [],
-          createdAt: new Date().toISOString()
-        } as StaffMember);
-      }
+      // No account is auto-provisioned any more. Credentials belong to
+      // Supabase Auth, and the first Super Admin is created deliberately with
+      // `npm run create-super-admin` (see README, "First Super Admin").
     } catch (err) {
-      console.error('Failed to ensure console access:', err);
+      console.error('Failed to backfill staff sign-in keys:', err);
     }
   };
 
@@ -2076,16 +2362,58 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [currentStaffId, setCurrentStaffId] = useState<string | null>(null);
   const [staffAuthChecked, setStaffAuthChecked] = useState(false);
 
-  // Restore a persisted staff session on load.
+  /**
+   * Restores the Supabase session on load and re-derives who is signed in.
+   *
+   * Nothing about identity or role is read from local storage: the session
+   * gives an auth id, and the staff/customer row is looked up from it, so a
+   * revoked role or a deactivated account takes effect on the next load.
+   */
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem('artycafe_staff_session');
-      if (stored) setCurrentStaffId(JSON.parse(stored)?.staffId || null);
-    } catch {
-      localStorage.removeItem('artycafe_staff_session');
+    let cancelled = false;
+
+    const resolveSession = async (authId: string | null) => {
+      if (cancelled) return;
+
+      if (!authId) {
+        setCurrentStaffId(null);
+        setCurrentUser(null);
+        setStaffAuthChecked(true);
+        return;
+      }
+
+      const [allStaff, allCustomers] = await Promise.all([
+        db.staff.toArray(), db.customers.toArray()
+      ]);
+      if (cancelled) return;
+
+      const staffRow = allStaff.find(m => m.userId === authId);
+      setCurrentStaffId(staffRow ? staffRow.id : null);
+
+      const customerRow = allCustomers.find(c => c.userId === authId);
+      setCurrentUser(customerRow
+        ? { id: customerRow.id, name: customerRow.name, email: customerRow.email, phone: customerRow.phone }
+        : null);
+
+      setStaffAuthChecked(true);
+    };
+
+    if (!supabase) {
+      setStaffAuthChecked(true);
+      return;
     }
-    setStaffAuthChecked(true);
-  }, []);
+
+    supabase.auth.getSession().then(({ data }) => resolveSession(data.session?.user?.id ?? null));
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      resolveSession(session?.user?.id ?? null);
+    });
+
+    return () => {
+      cancelled = true;
+      sub.subscription.unsubscribe();
+    };
+  }, [staff.length, customers.length]);
 
   /** Always re-read from the live staff table so role and permission edits apply. */
   const currentStaff = React.useMemo(
@@ -2096,8 +2424,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // A staff member who loses console access is signed out immediately.
   useEffect(() => {
     if (currentStaffId && staff.length > 0 && !hasConsoleAccount(currentStaff)) {
+      // Losing console access signs them out immediately.
       setCurrentStaffId(null);
-      localStorage.removeItem('artycafe_staff_session');
+      supabase?.auth.signOut();
     }
   }, [currentStaffId, currentStaff, staff]);
 
@@ -2109,42 +2438,112 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const input = String(emailOrPhone || '').trim();
     if (!input) return { success: false, error: 'Enter your email address or phone number.' };
     if (!password) return { success: false, error: 'Enter your password.' };
+    if (!supabase) return { success: false, error: SUPABASE_NOT_CONFIGURED };
 
+    const email = canonicalEmail(input);
+    if (!email.includes('@')) {
+      // Console sign-in is by email; the phone field stays for the customer site.
+      return { success: false, error: 'Sign in with your work email address.' };
+    }
+
+    // 1. Supabase Auth verifies the credential.
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error || !data.user) {
+      // The real reason, so "email not confirmed" is not reported as a wrong
+      // password.
+      return { success: false, error: friendlyAuthError(error?.message || '') };
+    }
+
+    // 2. The staff record, resolved from the auth id. Role and permissions are
+    //    read from this row — never from the token or anything stored locally.
     const all = await db.staff.toArray();
-    const email = input.toLowerCase();
-    const phoneKey = normalizeCustomerPhone(input);
+    let account =
+      all.find(member => member.userId === data.user!.id) ||
+      // First sign-in after the account was provisioned: link by email once.
+      all.find(member => canonicalEmail(member.email) === email);
 
-    const account = all.find(member => {
-      const memberEmail = String(member.email || '').trim().toLowerCase();
-      if (memberEmail && memberEmail === email) return true;
-      if (!phoneKey) return false;
-      const memberPhone = member.normalizedPhone || normalizeCustomerPhone(member.phone);
-      return !!memberPhone && memberPhone === phoneKey;
-    });
+    // Stage 1b bridge: an account provisioned by `npm run create-super-admin`
+    // lives in Postgres, not yet in the local Dexie staff table (data moves in
+    // Stage 2). Mirror it on every sign-in so role, permissions and the
+    // temporary-password flag are always taken from Postgres.
+    const mirrored = await mirrorStaffFromSupabase(data.user.id);
+    if (mirrored) account = mirrored;
 
     if (!account) {
+      await supabase.auth.signOut();
       return { success: false, error: 'No staff account found with those details.' };
     }
+
+    // 3. The existing console guards, unchanged.
     if (!account.hasConsoleAccess) {
+      await supabase.auth.signOut();
       return { success: false, error: 'This staff profile does not have Admin Console access.' };
     }
     if (account.status === 'Inactive' || account.status === 'Former Staff') {
+      await supabase.auth.signOut();
       return { success: false, error: `This account is ${account.status} and cannot sign in.` };
-    }
-    if (!account.password || account.password !== password) {
-      return { success: false, error: 'Incorrect password. Please try again.' };
     }
 
     setCurrentStaffId(account.id);
-    localStorage.setItem('artycafe_staff_session', JSON.stringify({ staffId: account.id }));
-    await db.staff.update(account.id, { lastLoginAt: new Date().toISOString() });
+    await db.staff.update(account.id, {
+      lastLoginAt: new Date().toISOString(),
+      // Bind the record to this auth user on first sign-in.
+      userId: account.userId || data.user.id
+    });
+
+    return { success: true, mustChangePassword: account.passwordIsTemporary === true };
+  };
+
+  /**
+   * Replaces the signed-in staff member's password through Supabase Auth and
+   * clears the temporary flag, so the console stops asking.
+   */
+  const changeStaffPassword = async (newPassword: string) => {
+    if (!supabase) return { success: false, error: SUPABASE_NOT_CONFIGURED };
+
+    const strength = validatePasswordRule(newPassword);
+    if (!strength.valid) return { success: false, error: strength.error };
+
+    try {
+      // A hung request must not leave the screen stuck on "Saving...".
+      const update = supabase.auth.updateUser({ password: newPassword });
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('The authentication service did not respond. Check your connection and try again.')), 15000)
+      );
+      const { error } = await Promise.race([update, timeout]) as { error: any };
+
+      if (error) return { success: false, error: friendlyAuthError(error.message) };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Could not save the new password.' };
+    }
+
+    if (currentStaffId) {
+      await db.staff.update(currentStaffId, { passwordIsTemporary: false });
+      // The flag was set in Postgres by the provisioning script, so clear it
+      // there too — otherwise the next sign-in asks again. Not fatal if it
+      // fails: Dexie is authoritative until Stage 2.
+      try {
+        await supabase.from('staff').update({ password_is_temporary: false }).eq('id', currentStaffId);
+      } catch (err) {
+        console.warn('Could not clear password_is_temporary in Supabase:', err);
+      }
+    }
 
     return { success: true };
   };
 
-  const logoutStaff = () => {
+  const logoutStaff = async () => {
+    if (supabase) await supabase.auth.signOut();
     setCurrentStaffId(null);
-    localStorage.removeItem('artycafe_staff_session');
+    // Signing out always drops back to the public site.
+    setArea('customer');
+  };
+
+  const goToStaffLogin = () => setArea('staff');
+  const viewCustomerSite = () => setArea('customer');
+  /** Only meaningful for an authenticated staff member. */
+  const returnToStaffConsole = () => {
+    if (currentStaffId) setArea('staff');
   };
 
   const canAccessAdminPage = (pageId: string) => canAccessPage(currentStaff, pageId);
@@ -2600,14 +2999,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   return (
     <AppContext.Provider value={{
-      perspective, setPerspective,
+      area, goToStaffLogin, viewCustomerSite, returnToStaffConsole,
       customerTab, setCustomerTab,
       adminTab, setAdminTab,
       pendingBooking, setPendingBooking,
       selectedBirthdayPackage, setSelectedBirthdayPackage,
       currentUser, setCurrentUser,
       authScreen, setAuthScreen,
-      registerCustomer, loginCustomer, resetCustomerPassword, logoutCustomer,
+      registerCustomer, loginCustomer, claimCustomerAccount, resetCustomerPassword, logoutCustomer,
       selectedWorkshopId, setSelectedWorkshopId,
       lastBookingCreated, setLastBookingCreated,
       editingWorkshopId, setEditingWorkshopId,
@@ -2617,9 +3016,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       getRelativeRiyadhDateStr, getRiyadhFormattedDate,
       workshops, bookings, queue, pieces, systemTests, notifications, events, workshopSessions,
       pipelineStages, staff, workshopOptions, eventOptions, categories, appSettings,
+      rawWorkshops, rawEvents,
       loggingFields, updateLoggingFields,
       customers,
-      currentStaff, staffAuthChecked, loginStaff, logoutStaff, canAccessAdminPage,
+      currentStaff, staffAuthChecked, loginStaff, changeStaffPassword, logoutStaff, canAccessAdminPage,
       resolveCustomer,
       studioResources, addStudioResource, updateStudioResource, removeStudioResource,
       birthdayPackages, publishedBirthdayPackages,
@@ -2628,6 +3028,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       birthdayFormFields, updateBirthdayFormFields,
       addWorkshop, updateWorkshop,
       addBooking, cancelBooking, updateBookingStatus,
+      addCategoryIfMissing, updateWorkshopSession, appendBookingTimeline,
       addQueueItem, updateQueueStatus, updateQueueItem, reorderQueue, returnQueueItemToWaiting,
       updatePieceStatus, addPiece, updatePiece, markNotificationAsRead, clearAllNotifications,
       runAllTests, toggleTestResult,

@@ -19,6 +19,7 @@ import { MyPiecesSection } from './components/MyPiecesSection';
 
 import { AdminSidebar, AdminTopBar } from './components/AdminSidebar';
 import { AdminLoginSection } from './components/AdminLoginSection';
+import { StaffPasswordChangeSection } from './components/StaffPasswordChangeSection';
 import { firstAllowedPage, getPageLabel } from './utils/adminAccess';
 
 /** Shown when a signed-in account opens a page it is not authorized for. */
@@ -47,11 +48,10 @@ import { AdminStaffSection } from './components/AdminStaffSection';
 import { SystemHealthSection } from './components/SystemHealthSection';
 import { AdminSettingsSection } from './components/AdminSettingsSection';
 
-import { Sparkles, ArrowRightLeft } from 'lucide-react';
 
 export default function App() {
   const {
-    perspective, setPerspective, customerTab, adminTab, setAdminTab,
+    area, customerTab, adminTab, setAdminTab,
     currentStaff, staffAuthChecked, canAccessAdminPage
   } = useApp();
 
@@ -66,45 +66,14 @@ export default function App() {
   return (
     <div className="min-h-screen bg-brand-cream font-sans text-brand-charcoal flex flex-col justify-between selection:bg-brand-terracotta/20">
       
-      {/* PERSPECTIVE SWITCHER TOOLBAR (Floating Demo utility for easy preview) */}
-      <div className="bg-brand-charcoal text-brand-cream border-b border-brand-clay/10 py-1.5 px-4 text-[11px] font-bold flex justify-between items-center z-50 shrink-0 select-none">
-        <div className="flex items-center gap-1.5">
-          <Sparkles className="h-3.5 w-3.5 text-brand-terracotta" />
-          <span>Arty Café Live Mock Environment</span>
-        </div>
+      {/* AREA ROUTER
+          The customer site is the default area and is open to everyone. The
+          staff console is a separate area: it is only ever mounted for a
+          signed-in staff account. */}
+      {area === 'customer' ? (
         
-        <div className="flex items-center gap-3">
-          <span className="text-brand-cream/60">Current Perspective:</span>
-          <div className="flex bg-brand-cream/10 p-0.5 rounded-lg border border-brand-cream/15 font-semibold">
-            <button
-              onClick={() => setPerspective('customer')}
-              className={`px-3 py-1 rounded-md transition-all cursor-pointer ${
-                perspective === 'customer' 
-                  ? 'bg-brand-terracotta text-brand-cream shadow-xs' 
-                  : 'text-brand-cream/65 hover:text-brand-cream'
-              }`}
-            >
-              Customer Site
-            </button>
-            <button
-              onClick={() => setPerspective('admin')}
-              className={`px-3 py-1 rounded-md transition-all cursor-pointer ${
-                perspective === 'admin' 
-                  ? 'bg-brand-terracotta text-brand-cream shadow-xs' 
-                  : 'text-brand-cream/65 hover:text-brand-cream'
-              }`}
-            >
-              Staff Console
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* PERSPECTIVE SWITCHED ROUTER FRAME */}
-      {perspective === 'customer' ? (
-        
-        /* 1. CUSTOMER PERSPECTIVE FRAME */
-        <div className="flex flex-col flex-1 justify-between min-h-[calc(100vh-32px)]">
+        /* 1. CUSTOMER SITE */
+        <div className="flex flex-col flex-1 justify-between min-h-screen">
           <CustomerHeader />
           
           <main className="flex-1 w-full bg-brand-cream">
@@ -124,7 +93,7 @@ export default function App() {
         </div>
       ) : (
         
-        /* 2. ADMIN CONSOLE PERSPECTIVE FRAME */
+        /* 2. STAFF CONSOLE — guarded */
         !staffAuthChecked ? (
           <div className="flex-1 flex items-center justify-center bg-brand-cream text-xs font-bold text-brand-charcoal/50">
             Checking your session…
@@ -133,8 +102,12 @@ export default function App() {
           /* No console session: the login screen is the only thing rendered, so
              protected pages are never mounted for an unauthenticated visitor. */
           <AdminLoginSection />
+        ) : currentStaff.passwordIsTemporary ? (
+          /* Signed in, but still on the provisioned password. The console is
+             not mounted until it is replaced. */
+          <StaffPasswordChangeSection />
         ) : (
-        <div className="flex flex-1 min-h-[calc(100vh-32px)] overflow-hidden">
+        <div className="flex flex-1 min-h-screen overflow-hidden">
           <AdminSidebar />
           
           <div className="flex-1 flex flex-col overflow-y-auto min-h-screen bg-brand-cream">

@@ -5,10 +5,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { db } from '../db';
 import { StudioTableConfig, CapacitySettingsConfig } from '../types';
 import { Save, AlertTriangle, Plus, Trash2, Check, Shield, LayoutGrid } from 'lucide-react';
-import { useLiveQuery } from 'dexie-react-hooks';
 
 export const AdminCapacitySettings: React.FC = () => {
   const {
@@ -16,7 +14,10 @@ export const AdminCapacitySettings: React.FC = () => {
     studioResources,
     addStudioResource,
     updateStudioResource,
-    removeStudioResource
+    removeStudioResource,
+    // Already provided by the shared data layer.
+    appSettings: rawAppSettings,
+    queue: rawQueue
   } = useApp();
 
   const [resourceToast, setResourceToast] = useState<string | null>(null);
@@ -49,9 +50,6 @@ export const AdminCapacitySettings: React.FC = () => {
     const result = await removeStudioResource(id);
     showResourceToast(result.message || `"${name}" removed.`);
   };
-  const rawAppSettings = useLiveQuery(() => db.appSettings.toArray()) || [];
-  const rawQueue = useLiveQuery(() => db.queue.toArray()) || [];
-
   const rawConfig = rawAppSettings.find(s => s.id === 'capacitySettings')?.value as CapacitySettingsConfig | undefined;
 
   const [totalTables, setTotalTables] = useState<number>(rawConfig?.totalTables ?? 8);

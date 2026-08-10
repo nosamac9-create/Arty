@@ -58,6 +58,8 @@ export const CheckoutInfoSection: React.FC = () => {
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [modalError, setModalError] = useState<string | null>(null);
+  /** The typed account exists but was created without a password. */
+  const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const validate = async () => {
@@ -135,6 +137,9 @@ export const CheckoutInfoSection: React.FC = () => {
     const res = await loginCustomer(loginEmail, loginPassword);
     if (!res.success) {
       setModalError(res.error || 'Login failed.');
+      // The record exists but has no password. Sending them to the Login page
+      // is where the claim step lives.
+      setNeedsPasswordSetup(!!res.needsPasswordSetup);
       return;
     }
 
@@ -405,8 +410,20 @@ export const CheckoutInfoSection: React.FC = () => {
             <p className="text-xs text-brand-charcoal/70 mb-4">Enter your email to quickly sign in and autofill your details.</p>
             
             {modalError && (
-              <div className="mb-3 p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs font-semibold">
-                {modalError}
+              <div className="mb-3 p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs font-semibold space-y-2">
+                <p>{modalError}</p>
+                {needsPasswordSetup && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsLoginModalOpen(false);
+                      setCustomerTab('auth');
+                    }}
+                    className="font-bold underline cursor-pointer"
+                  >
+                    Set up your password
+                  </button>
+                )}
               </div>
             )}
 

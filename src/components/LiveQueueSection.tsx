@@ -22,7 +22,6 @@ import {
 import { validateCustomerForm, validateBookingForm, canonicalPhone, phoneMatchKey } from '../utils/validation';
 import { checkStaffMemberAvailability } from '../utils/staffAvailabilityUtils';
 import { AssignmentSources } from '../utils/staffAssignments';
-import { db } from '../db';
 import {
   searchCustomers, summarizeCustomerActivity, normalizeCustomerPhone, toDisplayPhone,
   customerPhoneKey, CustomerSearchResult
@@ -653,7 +652,8 @@ export const LiveQueueSection: React.FC = () => {
     queue, updateQueueStatus, updateQueueItem, addQueueItem, returnQueueItemToWaiting,
     todayDateStr, formattedTodayDate, appSettings,
     staff, workshops, workshopSessions, bookings, events,
-    customers, pieces, resolveCustomer, updateCustomer
+    customers, pieces, resolveCustomer, updateCustomer,
+    updateWorkshopSession, appendBookingTimeline
   } = useApp();
 
   // One shared view of the real records the queue depends on.
@@ -1032,21 +1032,16 @@ export const LiveQueueSection: React.FC = () => {
       const member = staff.find(m => m.id === editStaffId);
       if (member) {
         if (editingItem.sessionId) {
-          await db.workshopSessions.update(String(editingItem.sessionId), {
+          await updateWorkshopSession(String(editingItem.sessionId), {
             staffId: member.id,
             instructor: member.name
           });
         }
         if (editingItem.bookingId) {
-          const booking = await db.bookings.get(String(editingItem.bookingId));
-          if (booking) {
-            await db.bookings.update(booking.id, {
-              timeline: [...(booking.timeline || []), {
-                time: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
-                action: `Instructor reassigned to ${member.name} via Live Queue`
-              }]
-            });
-          }
+          await appendBookingTimeline(
+            String(editingItem.bookingId),
+            `Instructor reassigned to ${member.name} via Live Queue`
+          );
         }
       }
     }

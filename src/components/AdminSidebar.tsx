@@ -14,7 +14,7 @@ import { formatTime } from '../utils/calendarConfig';
 
 export const AdminSidebar: React.FC = () => {
   const {
-    adminTab, setAdminTab, setPerspective, currentStaff, canAccessAdminPage, logoutStaff,
+    adminTab, setAdminTab, viewCustomerSite, currentStaff, canAccessAdminPage, logoutStaff,
     settingsSection, setSettingsSection
   } = useApp();
   const [collapsed, setCollapsed] = useState(false);
@@ -165,7 +165,7 @@ export const AdminSidebar: React.FC = () => {
         )}
 
         <button
-          onClick={() => setPerspective('customer')}
+          onClick={() => viewCustomerSite()}
           className="flex items-center w-full rounded-xl p-3 text-xs font-bold text-brand-cream/70 hover:text-brand-cream hover:bg-brand-terracotta/20 transition-all cursor-pointer"
         >
           <LogOut className="h-4 w-4 shrink-0 text-brand-terracotta" />

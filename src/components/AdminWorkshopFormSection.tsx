@@ -5,7 +5,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
 import {
   RecurringScheduleRule, isWorkshopOptionEnabled,
@@ -43,12 +42,16 @@ export const AdminWorkshopFormSection: React.FC = () => {
     studioResources,
     workshopOptions,
     workshopFields,
-    appSettings
+    appSettings,
+    // Shared category list and the mutator that writes to it.
+    categories: dbCategories,
+    addCategoryIfMissing,
+    // Raw queries so the loading skeleton still distinguishes "not yet read"
+    // from "no workshops".
+    rawWorkshops,
+    rawEvents
   } = useApp();
 
-  // Load workshops from Dexie
-  const rawWorkshops = useLiveQuery(() => db.workshops.toArray());
-  const rawEvents = useLiveQuery(() => db.events.toArray());
   const isWorkshopsLoading = rawWorkshops === undefined;
   const workshops = rawWorkshops || [];
 
@@ -58,7 +61,6 @@ export const AdminWorkshopFormSection: React.FC = () => {
   const [workshopErrors, setWorkshopErrors] = useState<Record<string, string>>({});
 
   // Load categories from Dexie
-  const dbCategories = useLiveQuery(() => db.categories.toArray()) || [];
 
   // Form states
   const [title, setTitle] = useState('');
@@ -867,15 +869,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
       };
 
       // Ensure category is permanently saved to the categories table
-      if (finalCategory) {
-        const exists = dbCategories.find(c => c.name.toLowerCase() === finalCategory.toLowerCase());
-        if (!exists) {
-          await db.categories.add({
-            id: `cat-${Date.now()}`,
-            name: finalCategory
-          });
-        }
-      }
+      await addCategoryIfMissing(finalCategory);
 
       if (editingWorkshopId) {
         await updateWorkshop(editingWorkshopId, workshopData);
@@ -971,15 +965,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
         customFields: customFieldValues
       };
 
-      if (finalCategory) {
-        const exists = dbCategories.find(c => c.name.toLowerCase() === finalCategory.toLowerCase());
-        if (!exists) {
-          await db.categories.add({
-            id: `cat-${Date.now()}`,
-            name: finalCategory
-          });
-        }
-      }
+      await addCategoryIfMissing(finalCategory);
 
       if (editingWorkshopId) {
         await updateWorkshop(editingWorkshopId, workshopData);

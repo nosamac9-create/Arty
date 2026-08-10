@@ -5,8 +5,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../db';
 import { getRiyadhNow, parseBookingDateTimeToRiyadhDate, getRiyadhDateString } from '../utils/dateUtils';
 import { resolveStaffName } from '../utils/staffAssignments';
 import { getSessionSeatUsage } from '../utils/queueUtils';
@@ -19,7 +17,9 @@ import {
 export const WorkshopDetailSection: React.FC = () => {
   const { 
     workshops, selectedWorkshopId, setCustomerTab, setPendingBooking, currentUser, todayDateStr, staff, queue,
-    workshopFields
+    workshopFields,
+    // Shared records, narrowed to this workshop below.
+    workshopSessions, bookings
   } = useApp();
 
   const workshop = useMemo(() => {
@@ -40,16 +40,16 @@ export const WorkshopDetailSection: React.FC = () => {
     'https://images.unsplash.com/photo-1578749556568-bc2c40e68b61?auto=format&fit=crop&w=400&q=80',
   ];
 
-  // Live session query for selected workshop from Dexie
-  const dbSessions = useLiveQuery(
-    () => db.workshopSessions.where('workshopId').equals(workshop?.id || '').toArray(),
-    [workshop?.id]
-  ) || [];
+  // This workshop's sessions and bookings, taken from the shared data layer.
+  const dbSessions = useMemo(
+    () => workshopSessions.filter(s => s.workshopId === (workshop?.id || '')),
+    [workshopSessions, workshop?.id]
+  );
 
-  const dbBookings = useLiveQuery(
-    () => db.bookings.where('workshopId').equals(workshop?.id || '').toArray(),
-    [workshop?.id]
-  ) || [];
+  const dbBookings = useMemo(
+    () => bookings.filter(b => b.workshopId === (workshop?.id || '')),
+    [bookings, workshop?.id]
+  );
 
   // Identify dates with available published sessions
   const datesWithPublishedSessions = useMemo(() => {

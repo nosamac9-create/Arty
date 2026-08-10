@@ -1,7 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../db';
 import { Booking, BirthdayPackage, DEFAULT_CAKE_SIZES } from '../types';
 import { formatDateTime } from '../utils/calendarConfig';
 import { 
@@ -29,7 +27,9 @@ export const AdminEventsSection: React.FC = () => {
     addBirthdayPackage,
     updateBirthdayPackage,
     deleteBirthdayPackage,
-    reorderBirthdayPackages
+    reorderBirthdayPackages,
+    // Already provided by the shared data layer.
+    bookings: liveBookings
   } = useApp();
 
   // Toast message state
@@ -119,9 +119,6 @@ export const AdminEventsSection: React.FC = () => {
     reordered.splice(target, 0, moved);
     await reorderBirthdayPackages(reordered);
   };
-
-  // Live Query Bookings for Customer Table
-  const liveBookings = useLiveQuery(() => db.bookings.toArray()) || [];
 
   // Table Filters & Search & Pagination
   const [tableSearch, setTableSearch] = useState('');

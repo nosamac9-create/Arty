@@ -10,17 +10,16 @@
  */
 
 import React, { useState } from 'react';
-import { useApp, BOOTSTRAP_CONSOLE_PASSWORD } from '../context/AppContext';
+import { useApp } from '../context/AppContext';
 import { Lock, LogIn, ShieldAlert, AlertCircle, Mail } from 'lucide-react';
 
 export const AdminLoginSection: React.FC = () => {
-  const { loginStaff, setPerspective, staff } = useApp();
+  const { loginStaff, viewCustomerSite, staff } = useApp();
 
   // Accounts that can actually sign in, so staff are never left guessing.
   const consoleAccounts = staff.filter(
     m => m.hasConsoleAccess && m.status !== 'Inactive' && m.status !== 'Former Staff'
   );
-  const bootstrapAccount = consoleAccounts.find(m => m.passwordIsTemporary);
 
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
@@ -42,7 +41,8 @@ export const AdminLoginSection: React.FC = () => {
       return;
     }
 
-    // The console lands on the first page this account is allowed to open.
+    // A provisioned account is sent to the password-change screen by the
+    // routing guard in App.tsx, not from here.
     setPassword('');
     setIsSubmitting(false);
   };
@@ -124,33 +124,14 @@ export const AdminLoginSection: React.FC = () => {
             </button>
             <button
               type="button"
-              onClick={() => setPerspective('customer')}
+              onClick={() => viewCustomerSite()}
               className="text-[11px] font-bold text-brand-charcoal/60 hover:text-brand-terracotta cursor-pointer"
             >
               Back to Customer Site
             </button>
           </div>
 
-          {/* First-run help: shown only while the auto-provisioned password is
-              still in place, so the console is never locked out. */}
-          {bootstrapAccount && (
-            <div className="text-[11px] bg-brand-sand/40 border border-brand-clay rounded-xl p-3 space-y-1">
-              <p className="font-bold text-brand-charcoal">First-time sign in</p>
-              <p className="text-brand-charcoal/70 leading-relaxed">
-                A Super Admin account was set up for{' '}
-                <span className="font-bold">{bootstrapAccount.name}</span>. Sign in with:
-              </p>
-              <p className="font-mono font-bold text-brand-charcoal">
-                {bootstrapAccount.email || bootstrapAccount.phone}
-              </p>
-              <p className="font-mono font-bold text-brand-charcoal">{BOOTSTRAP_CONSOLE_PASSWORD}</p>
-              <p className="text-brand-charcoal/55">
-                Change this password in Settings → Staff Registry after signing in.
-              </p>
-            </div>
-          )}
-
-          {!bootstrapAccount && consoleAccounts.length > 0 && (
+          {consoleAccounts.length > 0 && (
             <p className="text-[11px] text-brand-charcoal/50">
               {consoleAccounts.length} staff account{consoleAccounts.length === 1 ? '' : 's'} can sign in to the console.
             </p>

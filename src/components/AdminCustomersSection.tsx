@@ -44,7 +44,7 @@ export const AdminCustomersSection: React.FC = () => {
     setAdminTab,
     setPendingBooking,
     setCustomerTab,
-    setPerspective
+    viewCustomerSite
   } = useApp();
 
   // Navigation state inside Customers section
@@ -762,7 +762,7 @@ export const AdminCustomersSection: React.FC = () => {
                         customerEmail: selectedCustomer.email
                       });
                       setCustomerTab('checkout-info');
-                      setPerspective('customer');
+                      viewCustomerSite();
                     }}
                     className="w-full bg-brand-terracotta text-brand-cream py-2.5 rounded-xl text-xs font-bold hover:bg-brand-terracotta-hover transition-colors flex items-center justify-center gap-2 cursor-pointer"
                   >

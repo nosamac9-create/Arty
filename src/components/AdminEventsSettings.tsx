@@ -5,7 +5,6 @@
 
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { db } from '../db';
 import {
   EventsSettingsConfig, BirthdayFormField, BirthdayTermsConfig,
   DEFAULT_BIRTHDAY_TERMS, renderTermsLine
@@ -13,11 +12,13 @@ import {
 import {
   Save, Check, Calendar, Gift, Info, Plus, Trash2, ChevronUp, ChevronDown, ListChecks, ShieldAlert
 } from 'lucide-react';
-import { useLiveQuery } from 'dexie-react-hooks';
 
 export const AdminEventsSettings: React.FC = () => {
-  const { updateSetting, birthdayFormFields, updateBirthdayFormFields } = useApp();
-  const rawAppSettings = useLiveQuery(() => db.appSettings.toArray()) || [];
+  const {
+    updateSetting, birthdayFormFields, updateBirthdayFormFields,
+    // Already provided by the shared data layer.
+    appSettings: rawAppSettings
+  } = useApp();
   const rawConfig = rawAppSettings.find(s => s.id === 'eventsSettings')?.value as EventsSettingsConfig | undefined;
 
   const [minBirthdayNoticeDays, setMinBirthdayNoticeDays] = useState<number>(rawConfig?.minBirthdayNoticeDays ?? 4);

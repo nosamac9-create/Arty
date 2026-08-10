@@ -16,7 +16,8 @@ import {
 export const AuthSection: React.FC = () => {
   const { 
     authScreen, setAuthScreen, currentUser, setCurrentUser, setCustomerTab, 
-    loginCustomer, registerCustomer, resetCustomerPassword, logoutCustomer, pendingBooking 
+    loginCustomer, claimCustomerAccount, registerCustomer, resetCustomerPassword,
+    logoutCustomer, pendingBooking 
   } = useApp();
 
   // Common Inputs
@@ -27,6 +28,10 @@ export const AuthSection: React.FC = () => {
   const [phone, setPhone] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  /** Set when the typed account exists but has no password yet. */
+  const [claimIdentifier, setClaimIdentifier] = useState<string | null>(null);
+  const [claimPassword, setClaimPassword] = useState('');
+  const [claimConfirm, setClaimConfirm] = useState('');
   // Field-keyed messages from the shared validation layer.
   const [errors, setErrors] = useState<Record<string, string>>({});
   const clearError = (key: string) =>
@@ -52,6 +57,13 @@ export const AuthSection: React.FC = () => {
     setIsSubmitting(false);
 
     if (!res.success) {
+      // The record exists but was created at the counter without a password.
+      // Offer to claim it rather than leaving them stuck.
+      if (res.needsPasswordSetup) {
+        setClaimIdentifier(loginInput);
+        setClaimPassword('');
+        setClaimConfirm('');
+      }
       setErrorMsg(res.error || 'Invalid credentials.');
       return;
     }
@@ -61,6 +73,34 @@ export const AuthSection: React.FC = () => {
     } else {
       setCustomerTab('my-bookings');
     }
+  };
+
+  /** Attaches a password to the existing record — never creates a new one. */
+  const handleClaimAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg(null);
+
+    const match = validatePasswordConfirmation(claimPassword, claimConfirm);
+    if (!match.valid) {
+      setErrorMsg(match.error!);
+      return;
+    }
+
+    setIsSubmitting(true);
+    const res = await claimCustomerAccount(claimIdentifier || '', claimPassword);
+    setIsSubmitting(false);
+
+    if (!res.success) {
+      setErrorMsg(res.error || 'Could not set up your password.');
+      return;
+    }
+
+    setClaimIdentifier(null);
+    setClaimPassword('');
+    setClaimConfirm('');
+    setPassword('');
+    if (pendingBooking) setCustomerTab('checkout-info');
+    else setCustomerTab('my-bookings');
   };
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -312,6 +352,75 @@ export const AuthSection: React.FC = () => {
                     <span>{isSubmitting ? 'Signing in...' : 'Log In'}</span>
                   </button>
                 </form>
+
+                {/* Claim an account created at the counter. The password is
+                    attached to that existing record, so their bookings, visits
+                    and pottery stay on one customer. */}
+                {claimIdentifier && (
+                  <form onSubmit={handleClaimAccount} className="space-y-3 p-4 bg-brand-sand/30 border border-brand-clay rounded-2xl">
+                    <div>
+                      <h3 className="text-sm font-bold text-brand-charcoal">Set up your password</h3>
+                      <p className="text-[11px] text-brand-charcoal/65 mt-0.5 leading-relaxed">
+                        We already have <span className="font-bold">{claimIdentifier}</span> on file from a
+                        visit or booking. Choose a password to claim that account — your history stays with it.
+                      </p>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-brand-charcoal/80">New password *</label>
+                      <input
+                        type="password"
+                        required
+                        placeholder="••••••••"
+                        value={claimPassword}
+                        onChange={e => { setClaimPassword(e.target.value); setErrorMsg(null); }}
+                        className="w-full bg-brand-cream border border-brand-clay rounded-xl py-3 px-4 text-sm font-semibold text-brand-charcoal"
+                      />
+                      <ul className="space-y-0.5 pt-0.5">
+                        {passwordChecklist(claimPassword).map(item => (
+                          <li
+                            key={item.label}
+                            className={`text-[11px] font-semibold flex items-center gap-1.5 ${
+                              item.met ? 'text-brand-sage' : 'text-brand-charcoal/45'
+                            }`}
+                          >
+                            <span>{item.met ? '✓' : '•'}</span>
+                            <span>{item.label}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-brand-charcoal/80">Confirm password *</label>
+                      <input
+                        type="password"
+                        required
+                        placeholder="••••••••"
+                        value={claimConfirm}
+                        onChange={e => { setClaimConfirm(e.target.value); setErrorMsg(null); }}
+                        className="w-full bg-brand-cream border border-brand-clay rounded-xl py-3 px-4 text-sm font-semibold text-brand-charcoal"
+                      />
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button
+                        type="submit"
+                        disabled={isSubmitting}
+                        className="flex-1 cursor-pointer rounded-xl bg-brand-terracotta py-3 text-sm font-bold text-brand-cream hover:bg-brand-terracotta-hover transition-colors disabled:opacity-50"
+                      >
+                        {isSubmitting ? 'Saving...' : 'Set password & continue'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setClaimIdentifier(null); setErrorMsg(null); }}
+                        className="px-4 rounded-xl border border-brand-clay text-xs font-bold text-brand-charcoal/60 cursor-pointer hover:bg-brand-sand/40"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                )}
 
                 <div className="text-center pt-4 border-t border-brand-clay/60">
                   <p className="text-xs font-medium text-brand-charcoal/75">

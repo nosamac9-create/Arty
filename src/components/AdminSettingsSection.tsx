@@ -19,7 +19,8 @@ import {
   PrePaymentPopupConfig, migratePrePaymentPopup, popupParagraphs
 } from '../types';
 import {
-  ADMIN_PAGES, defaultPermissionsForRole, sanitizePermissions, isSuperAdmin, canAccessPage
+  ADMIN_PAGES, defaultPermissionsForRole, sanitizePermissions, isSuperAdmin, canAccessPage,
+  isSuperAdminOnlyPage
 } from '../utils/adminAccess';
 import { normalizeCustomerPhone } from '../utils/customerIdentity';
 import { validateStaffForm, staffStorageFields } from '../utils/validation';
@@ -1603,7 +1604,10 @@ export const AdminSettingsSection: React.FC = () => {
                         <div className="flex items-center gap-2">
                           <button
                             type="button"
-                            onClick={() => setPermDraft(prev => ({ ...prev, permissions: ADMIN_PAGES.map(p => p.id) }))}
+                            onClick={() => setPermDraft(prev => ({
+                              ...prev,
+                              permissions: ADMIN_PAGES.filter(p => !isSuperAdminOnlyPage(p.id)).map(p => p.id)
+                            }))}
                             className="text-[10px] font-bold text-brand-terracotta hover:underline cursor-pointer"
                           >
                             Select all
@@ -1619,8 +1623,9 @@ export const AdminSettingsSection: React.FC = () => {
                       </div>
 
                       <div className="bg-white border border-brand-clay rounded-2xl p-3 space-y-1.5">
-                        {/* The real Admin Console pages — no invented names. */}
-                        {ADMIN_PAGES.map(page => (
+                        {/* The real Admin Console pages, minus the ones only a
+                            Super Admin may open — those cannot be granted. */}
+                        {ADMIN_PAGES.filter(page => !isSuperAdminOnlyPage(page.id)).map(page => (
                           <label
                             key={page.id}
                             className="flex items-center gap-2.5 py-1 cursor-pointer hover:bg-brand-sand/25 rounded-lg px-1.5"

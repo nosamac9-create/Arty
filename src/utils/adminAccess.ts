@@ -48,6 +48,17 @@ export function getPageLabel(id: string): string {
   return ADMIN_PAGES.find(p => p.id === id)?.label || id;
 }
 
+/**
+ * Pages only a Super Admin may open, whatever permissions are stored on the
+ * account. The developer/testing area lives here, so it never appears for a
+ * customer or a regular admin and cannot be reached by navigating to it.
+ */
+export const SUPER_ADMIN_ONLY_PAGES: AdminPageId[] = ['system-health'];
+
+export function isSuperAdminOnlyPage(pageId: string): boolean {
+  return SUPER_ADMIN_ONLY_PAGES.includes(pageId as AdminPageId);
+}
+
 /** The role itself grants unrestricted access; no page needs selecting. */
 export function isSuperAdmin(staff?: StaffMember | null): boolean {
   return staff?.role === 'Super Admin';
@@ -68,6 +79,8 @@ export function canAccessPage(staff: StaffMember | null | undefined, pageId: str
   if (!staff) return false;
   if (!hasConsoleAccount(staff)) return false;
   if (isSuperAdmin(staff)) return true;
+  // Super-Admin-only pages are refused even when the id was granted.
+  if (isSuperAdminOnlyPage(pageId)) return false;
   return (staff.permissions || []).includes(pageId);
 }
 
@@ -86,14 +99,18 @@ export function firstAllowedPage(staff: StaffMember | null | undefined): AdminPa
 /** Default page set for a newly granted console account. */
 export function defaultPermissionsForRole(role: StaffRole): string[] {
   if (role === 'Super Admin') return [...ADMIN_PAGE_IDS];
-  if (role === 'Admin') return ADMIN_PAGE_IDS.filter(id => id !== 'settings');
+  if (role === 'Admin') {
+    return ADMIN_PAGE_IDS.filter(id => id !== 'settings' && !isSuperAdminOnlyPage(id));
+  }
   return ['dashboard', 'queue'];
 }
 
 /** Keeps only ids that are real console pages. */
 export function sanitizePermissions(permissions?: string[]): string[] {
   if (!permissions) return [];
-  return permissions.filter(id => ADMIN_PAGE_IDS.includes(id as AdminPageId));
+  // A Super-Admin-only page is never stored as a granted permission.
+  return permissions.filter(
+    id => ADMIN_PAGE_IDS.includes(id as AdminPageId) && !isSuperAdminOnlyPage(id));
 }
 
 

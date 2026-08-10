@@ -123,7 +123,7 @@ export const CustomerHeader: React.FC = () => {
 };
 
 export const CustomerFooter: React.FC = () => {
-  const { setCustomerTab } = useApp();
+  const { setCustomerTab, goToStaffLogin, currentStaff, returnToStaffConsole } = useApp();
   
   return (
     <footer className="border-t border-brand-clay bg-brand-sand/40 py-12 text-brand-charcoal/90">
@@ -194,10 +194,30 @@ export const CustomerFooter: React.FC = () => {
 
         <div className="mt-12 pt-8 border-t border-brand-clay/60 flex flex-col sm:flex-row items-center justify-between text-xs text-brand-charcoal/60 gap-4">
           <p>© 2026 Arty Café Jeddah. All rights reserved.</p>
-          <div className="flex gap-6">
+          <div className="flex gap-6 items-center">
             <span className="hover:text-brand-terracotta cursor-pointer">Instagram</span>
             <span className="hover:text-brand-terracotta cursor-pointer">X (Twitter)</span>
             <span className="hover:text-brand-terracotta cursor-pointer">TikTok</span>
+
+            {/* The only way into the staff area. Signing in is still required —
+                this opens the staff login, it grants nothing. */}
+            {currentStaff ? (
+              <button
+                type="button"
+                onClick={() => returnToStaffConsole()}
+                className="font-bold text-brand-terracotta hover:underline cursor-pointer"
+              >
+                Back to Staff Console
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => goToStaffLogin()}
+                className="hover:text-brand-terracotta cursor-pointer"
+              >
+                Staff Login
+              </button>
+            )}
           </div>
         </div>
       </div>

@@ -5,13 +5,11 @@
 
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../db';
 import { Search, SlidersHorizontal, RefreshCw, Layers, Calendar, User, Eye, EyeOff } from 'lucide-react';
 import { Workshop } from '../types';
 
 export const WorkshopsBrowsingSection: React.FC = () => {
-  const { workshops, setCustomerTab, setSelectedWorkshopId } = useApp();
+  const { workshops, setCustomerTab, setSelectedWorkshopId, categories: dbCategories } = useApp();
   
   // Interactive Simulators for testing the skeleton and empty states requested in prompt
   const [simulatorMode, setSimulatorMode] = useState<'live' | 'loading' | 'empty'>('live');
@@ -22,8 +20,7 @@ export const WorkshopsBrowsingSection: React.FC = () => {
   const [selectedSkillLevel, setSelectedSkillLevel] = useState<string>('All');
   const [sortBy, setSortBy] = useState<'Popularity' | 'PriceLow' | 'PriceHigh'>('Popularity');
 
-  // Load categories dynamically from Dexie
-  const dbCategories = useLiveQuery(() => db.categories.toArray()) || [];
+  // Categories come from the shared data layer.
   const categories = useMemo(() => {
     const excluded = ['Kids', 'Couples', 'Group'];
     const list = ['All'];
