@@ -18,7 +18,6 @@
  * 966501234567 or +966 50 123 4567.
  */
 
-import { ArtyCafeDatabase } from '../db';
 import { sdb } from '../lib/supabaseDb';
 import { CustomerAccount, StaffMember, WorkshopSessionRecord } from '../types';
 import { normalizeCustomerPhone, customerPhoneKey } from './customerIdentity';
@@ -31,18 +30,25 @@ export interface ValidationResult {
 }
 
 /**
- * The database these checks read.
+ * The database these checks read: Postgres, through the shared façade.
  *
- * Stage 2 points the default at Supabase, so duplicate and capacity checks run
- * against Postgres — the same records every other reader sees. The System
- * Health suite still passes its own throwaway database, which is why this stays
- * injectable.
+ * Duplicate, capacity and existence checks therefore run against the same
+ * records every other reader sees. It stays injectable so a caller can pass a
+ * narrowed or stubbed source — the System Health suite passes one scoped to its
+ * own namespaced rows.
  */
-export type ValidationDb =
-  Pick<ArtyCafeDatabase, 'customers' | 'staff' | 'workshops' | 'workshopSessions' | 'bookings' | 'queue'>
-  | typeof sdb;
+type TableApi = (typeof sdb)['customers'];
 
-/** The live source: Postgres via the shared façade. */
+export type ValidationDb = {
+  customers: TableApi;
+  staff: TableApi;
+  workshops: TableApi;
+  workshopSessions: TableApi;
+  bookings: TableApi;
+  queue: TableApi;
+};
+
+/** The live source. */
 const db = sdb as unknown as ValidationDb;
 
 

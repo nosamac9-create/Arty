@@ -4,6 +4,7 @@
  */
 
 import React, { useState } from 'react';
+import { PasswordField } from './PasswordField';
 import { useApp } from '../context/AppContext';
 import { Palette, Mail, Lock, User, Check, AlertCircle, ArrowLeft, LogIn, KeyRound, ShieldCheck, CheckCircle2, RefreshCw } from 'lucide-react';
 import { PhoneInput } from './PhoneInput';
@@ -16,7 +17,7 @@ import {
 export const AuthSection: React.FC = () => {
   const { 
     authScreen, setAuthScreen, currentUser, setCurrentUser, setCustomerTab, 
-    loginCustomer, claimCustomerAccount, registerCustomer, resetCustomerPassword,
+    loginCustomer, claimCustomerAccount, registerCustomer, requestPasswordReset,
     logoutCustomer, pendingBooking 
   } = useApp();
 
@@ -39,13 +40,9 @@ export const AuthSection: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Password Recovery States
-  const [forgotStep, setForgotStep] = useState<'request' | 'verify' | 'reset' | 'success'>('request');
   const [forgotMethod, setForgotMethod] = useState<'email' | 'phone'>('email');
-  const [recoveryIdentifier, setRecoveryIdentifier] = useState('');
-  const [sentCode, setSentCode] = useState('');
-  const [inputCode, setInputCode] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  /** The non-committal confirmation shown after a reset request. */
+  const [resetSent, setResetSent] = useState<string | null>(null);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -139,69 +136,30 @@ export const AuthSection: React.FC = () => {
   };
 
   // Step 1: Request Password Recovery Code
-  const handleRequestResetCode = async (e: React.FormEvent) => {
+  /**
+   * Sends the reset link through Supabase Auth.
+   *
+   * Auth is the proof of ownership — only whoever can open the inbox finishes
+   * the reset. The flow this replaces accepted a hardcoded "123456" code, so
+   * anyone could reset any account.
+   *
+   * The confirmation reads the same whether or not the address is registered,
+   * so it cannot be used to discover which emails exist.
+   */
+  const handleRequestPasswordReset = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
-
-    const identifier = forgotMethod === 'email' ? email.trim() : recoveryIdentifier.trim();
-    if (!identifier) {
-      setErrorMsg(`Please enter your registered ${forgotMethod === 'email' ? 'email address' : 'phone number'}.`);
-      return;
-    }
-
+    setResetSent(null);
     setIsSubmitting(true);
-    // Standard mock verification code
-    const code = '123456';
-    setSentCode(code);
 
-    setTimeout(() => {
-      setIsSubmitting(false);
-      setForgotStep('verify');
-    }, 600);
-  };
-
-  // Step 2: Verify Code
-  const handleVerifyCode = (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMsg(null);
-
-    if (inputCode.trim() !== sentCode) {
-      setErrorMsg('Invalid verification code. Please check the code and try again.');
-      return;
-    }
-
-    setForgotStep('reset');
-  };
-
-  // Step 3: Save New Password
-  const handleSaveNewPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMsg(null);
-
-    // The same shared password rules as sign-up.
-    const strength = validatePasswordRule(newPassword);
-    if (!strength.valid) {
-      setErrorMsg(strength.error!);
-      return;
-    }
-
-    const match = validatePasswordConfirmation(newPassword, confirmNewPassword);
-    if (!match.valid) {
-      setErrorMsg(match.error!);
-      return;
-    }
-
-    setIsSubmitting(true);
-    const targetIdentifier = forgotMethod === 'email' ? email.trim() : recoveryIdentifier.trim();
-    const res = await resetCustomerPassword(targetIdentifier, newPassword);
+    const res = await requestPasswordReset(email);
     setIsSubmitting(false);
 
     if (!res.success) {
-      setErrorMsg(res.error || 'Failed to update password. Please verify account exists.');
+      setErrorMsg(res.error || 'Could not send the reset link.');
       return;
     }
-
-    setForgotStep('success');
+    setResetSent(res.message || 'If an account exists for that address, a reset link is on its way.');
   };
 
   return (
@@ -326,19 +284,18 @@ export const AuthSection: React.FC = () => {
                         onClick={() => { 
                           setErrorMsg(null); 
                           setAuthScreen('forgot'); 
-                          setForgotStep('request');
+                          setResetSent(null);
                         }}
                         className="text-xs font-bold text-brand-terracotta hover:underline cursor-pointer"
                       >
                         Forgot password?
                       </button>
                     </div>
-                    <input
-                      type="password"
+                    <PasswordField
                       required
                       placeholder="••••••••"
                       value={password}
-                      onChange={e => { setPassword(e.target.value); setErrorMsg(null); }}
+                      onChange={ v => { setPassword(v); setErrorMsg(null); }}
                       className="w-full bg-brand-cream border border-brand-clay rounded-xl py-3.5 px-4 text-sm font-semibold text-brand-charcoal shadow-2xs"
                     />
                   </div>
@@ -368,12 +325,11 @@ export const AuthSection: React.FC = () => {
 
                     <div className="space-y-1">
                       <label className="text-xs font-bold text-brand-charcoal/80">New password *</label>
-                      <input
-                        type="password"
+                      <PasswordField
                         required
                         placeholder="••••••••"
                         value={claimPassword}
-                        onChange={e => { setClaimPassword(e.target.value); setErrorMsg(null); }}
+                        onChange={ v => { setClaimPassword(v); setErrorMsg(null); }}
                         className="w-full bg-brand-cream border border-brand-clay rounded-xl py-3 px-4 text-sm font-semibold text-brand-charcoal"
                       />
                       <ul className="space-y-0.5 pt-0.5">
@@ -393,12 +349,11 @@ export const AuthSection: React.FC = () => {
 
                     <div className="space-y-1">
                       <label className="text-xs font-bold text-brand-charcoal/80">Confirm password *</label>
-                      <input
-                        type="password"
+                      <PasswordField
                         required
                         placeholder="••••••••"
                         value={claimConfirm}
-                        onChange={e => { setClaimConfirm(e.target.value); setErrorMsg(null); }}
+                        onChange={ v => { setClaimConfirm(v); setErrorMsg(null); }}
                         className="w-full bg-brand-cream border border-brand-clay rounded-xl py-3 px-4 text-sm font-semibold text-brand-charcoal"
                       />
                     </div>
@@ -482,12 +437,11 @@ export const AuthSection: React.FC = () => {
 
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-brand-charcoal/80">Password *</label>
-                    <input
-                      type="password"
+                    <PasswordField
                       required
                       placeholder="••••••••"
                       value={password}
-                      onChange={e => { setPassword(e.target.value); setErrorMsg(null); clearError('password'); }}
+                      onChange={ v => { setPassword(v); setErrorMsg(null); clearError('password'); }}
                       className="w-full bg-brand-cream border border-brand-clay rounded-xl py-3.5 px-4 text-sm font-semibold text-brand-charcoal shadow-2xs"
                     />
                     {/* Live checklist, updating as they type. */}
@@ -509,12 +463,11 @@ export const AuthSection: React.FC = () => {
 
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-brand-charcoal/80">Confirm password *</label>
-                    <input
-                      type="password"
+                    <PasswordField
                       required
                       placeholder="••••••••"
                       value={confirmPassword}
-                      onChange={e => { setConfirmPassword(e.target.value); setErrorMsg(null); clearError('confirmPassword'); }}
+                      onChange={ v => { setConfirmPassword(v); setErrorMsg(null); clearError('confirmPassword'); }}
                       className="w-full bg-brand-cream border border-brand-clay rounded-xl py-3.5 px-4 text-sm font-semibold text-brand-charcoal shadow-2xs"
                     />
                     {errors.confirmPassword && (
@@ -548,13 +501,9 @@ export const AuthSection: React.FC = () => {
             {/* 3. FORGOT PASSWORD RECOVERY FLOW */}
             {authScreen === 'forgot' && (
               <div className="space-y-6">
-                
+
                 <button
-                  onClick={() => { 
-                    setErrorMsg(null); 
-                    setAuthScreen('login'); 
-                    setForgotStep('request');
-                  }}
+                  onClick={() => { setErrorMsg(null); setAuthScreen('login'); setResetSent(null); }}
                   className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-terracotta hover:underline cursor-pointer"
                 >
                   <ArrowLeft className="h-4 w-4" />
@@ -564,177 +513,92 @@ export const AuthSection: React.FC = () => {
                 <div>
                   <h2 className="font-display text-3xl font-bold text-brand-charcoal">Password Recovery</h2>
                   <p className="text-xs text-brand-charcoal/65 mt-1">
-                    Reset your account password via email or phone verification.
+                    We will email you a secure link to set a new password.
                   </p>
                 </div>
 
-                {/* STEP 1: REQUEST VERIFICATION CODE */}
-                {forgotStep === 'request' && (
-                  <form onSubmit={handleRequestResetCode} className="space-y-4">
-                    
-                    {/* Method Selector */}
-                    <div className="grid grid-cols-2 gap-2 bg-brand-sand/30 p-1 rounded-xl border border-brand-clay/60">
-                      <button
-                        type="button"
-                        onClick={() => setForgotMethod('email')}
-                        className={`py-2 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
-                          forgotMethod === 'email' ? 'bg-white text-brand-terracotta shadow-xs' : 'text-brand-charcoal/60'
-                        }`}
-                      >
-                        Email Recovery
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setForgotMethod('phone')}
-                        className={`py-2 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
-                          forgotMethod === 'phone' ? 'bg-white text-brand-terracotta shadow-xs' : 'text-brand-charcoal/60'
-                        }`}
-                      >
-                        Phone Recovery
-                      </button>
+                {/* Method selector. Phone is offered but not yet available. */}
+                <div className="grid grid-cols-2 gap-2 bg-brand-sand/30 p-1 rounded-xl border border-brand-clay/60">
+                  <button
+                    type="button"
+                    onClick={() => setForgotMethod('email')}
+                    className={`py-2 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
+                      forgotMethod === 'email' ? 'bg-white text-brand-terracotta shadow-xs' : 'text-brand-charcoal/60'
+                    }`}
+                  >
+                    Email Recovery
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setForgotMethod('phone')}
+                    className={`py-2 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
+                      forgotMethod === 'phone' ? 'bg-white text-brand-terracotta shadow-xs' : 'text-brand-charcoal/60'
+                    }`}
+                  >
+                    Phone Recovery
+                  </button>
+                </div>
+
+                {forgotMethod === 'email' ? (
+                  <form onSubmit={handleRequestPasswordReset} className="space-y-4">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-brand-charcoal/80">Registered Email Address</label>
+                      <input
+                        type="email"
+                        required
+                        placeholder="e.g. noura@amri.sa"
+                        value={email}
+                        onChange={e => { setEmail(e.target.value); setResetSent(null); setErrorMsg(null); }}
+                        className="w-full bg-brand-cream border border-brand-clay rounded-xl py-3.5 px-4 text-sm font-semibold text-brand-charcoal shadow-2xs"
+                      />
                     </div>
 
-                    {forgotMethod === 'email' ? (
-                      <div className="space-y-1">
-                        <label className="text-xs font-bold text-brand-charcoal/80">Registered Email Address</label>
-                        <input
-                          type="email"
-                          required
-                          placeholder="e.g. noura@amri.sa"
-                          value={email}
-                          onChange={e => setEmail(e.target.value)}
-                          className="w-full bg-brand-cream border border-brand-clay rounded-xl py-3.5 px-4 text-sm font-semibold text-brand-charcoal shadow-2xs"
-                        />
+                    {/* Worded identically whether or not the address is on file,
+                        so this cannot be used to probe for accounts. */}
+                    {resetSent && (
+                      <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-800 flex items-start gap-2">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                        <span className="leading-relaxed">{resetSent}</span>
                       </div>
-                    ) : (
-                      <PhoneInput
-                        label="Registered Phone Number"
-                        required
-                        value={recoveryIdentifier}
-                        onChange={setRecoveryIdentifier}
-                      />
                     )}
 
                     <button
                       type="submit"
                       disabled={isSubmitting}
-                      className="w-full cursor-pointer rounded-xl bg-brand-terracotta py-3.5 text-sm font-bold text-brand-cream hover:bg-brand-terracotta-hover transition-colors shadow-sm mt-2 flex items-center justify-center gap-2"
+                      className="w-full cursor-pointer rounded-xl bg-brand-terracotta py-3.5 text-sm font-bold text-brand-cream hover:bg-brand-terracotta-hover transition-colors shadow-sm mt-2 flex items-center justify-center gap-2 disabled:opacity-50"
                     >
                       <KeyRound className="h-4 w-4" />
-                      <span>{isSubmitting ? 'Sending verification code...' : 'Send Verification Code'}</span>
+                      <span>{isSubmitting ? 'Sending reset link...' : 'Email me a reset link'}</span>
                     </button>
                   </form>
-                )}
-
-                {/* STEP 2: VERIFY CODE */}
-                {forgotStep === 'verify' && (
-                  <form onSubmit={handleVerifyCode} className="space-y-4">
-                    <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-800 space-y-1">
-                      <p className="font-bold flex items-center gap-1.5">
-                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                        <span>Verification code dispatched!</span>
-                      </p>
-                      <p className="text-[11px] text-emerald-700/80">
-                        We sent a 6-digit verification code to <strong className="font-bold">{forgotMethod === 'email' ? email : recoveryIdentifier}</strong>.
-                      </p>
-                      <p className="text-[11px] font-mono bg-white px-2 py-1 rounded border border-emerald-200 mt-2 inline-block font-bold">
-                        🔑 Verification Code: {sentCode}
+                ) : (
+                  /*
+                   * PHONE RECOVERY — deliberately not implemented.
+                   *
+                   * ⚠️ OWNERSHIP VERIFICATION
+                   * A phone reset must prove the caller controls the number.
+                   * Knowing it is not proof: a walk-in's number is known to
+                   * anyone who has seen the booking sheet, and resetting on that
+                   * basis hands over the account.
+                   * TODO(stage-2): once phone auth is enabled in Supabase this is
+                   * where supabase.auth.signInWithOtp({ phone }) and verifyOtp go.
+                   * Until then the customer is routed to email.
+                   */
+                  <div className="space-y-4">
+                    <div className="p-4 bg-brand-sand/40 border border-brand-clay rounded-2xl text-xs text-brand-charcoal/80 space-y-1.5">
+                      <p className="font-bold text-brand-charcoal">Phone recovery — coming soon</p>
+                      <p className="leading-relaxed">
+                        We can only reset a password once we can confirm the account is yours.
+                        SMS verification is not switched on yet, so please use email recovery.
+                        If there is no email on your record, call the studio on +966 12 654 3210.
                       </p>
                     </div>
-
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-brand-charcoal/80">Enter 6-Digit Code</label>
-                      <input
-                        type="text"
-                        maxLength={6}
-                        required
-                        placeholder="123456"
-                        value={inputCode}
-                        onChange={e => setInputCode(e.target.value)}
-                        className="w-full text-center font-mono tracking-widest text-lg font-bold bg-brand-cream border border-brand-clay rounded-xl py-3 px-4 text-brand-charcoal shadow-2xs"
-                      />
-                    </div>
-
-                    <button
-                      type="submit"
-                      className="w-full cursor-pointer rounded-xl bg-brand-terracotta py-3.5 text-sm font-bold text-brand-cream hover:bg-brand-terracotta-hover transition-colors shadow-sm mt-2"
-                    >
-                      Verify Code & Proceed
-                    </button>
-
                     <button
                       type="button"
-                      onClick={() => {
-                        setSentCode('123456');
-                        alert('Resent verification code: 123456');
-                      }}
-                      className="w-full text-center text-xs font-bold text-brand-terracotta hover:underline pt-2 flex items-center justify-center gap-1 cursor-pointer"
+                      onClick={() => { setForgotMethod('email'); setErrorMsg(null); }}
+                      className="w-full cursor-pointer rounded-xl bg-brand-terracotta py-3.5 text-sm font-bold text-brand-cream hover:bg-brand-terracotta-hover transition-colors"
                     >
-                      <RefreshCw className="h-3.5 w-3.5" />
-                      <span>Didn't receive code? Resend Code</span>
-                    </button>
-                  </form>
-                )}
-
-                {/* STEP 3: RESET PASSWORD FORM */}
-                {forgotStep === 'reset' && (
-                  <form onSubmit={handleSaveNewPassword} className="space-y-4">
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-brand-charcoal/80">New Password (min 6 characters)</label>
-                      <input
-                        type="password"
-                        required
-                        placeholder="••••••••"
-                        value={newPassword}
-                        onChange={e => setNewPassword(e.target.value)}
-                        className="w-full bg-brand-cream border border-brand-clay rounded-xl py-3.5 px-4 text-sm font-semibold text-brand-charcoal shadow-2xs"
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-brand-charcoal/80">Confirm New Password</label>
-                      <input
-                        type="password"
-                        required
-                        placeholder="••••••••"
-                        value={confirmNewPassword}
-                        onChange={e => setConfirmNewPassword(e.target.value)}
-                        className="w-full bg-brand-cream border border-brand-clay rounded-xl py-3.5 px-4 text-sm font-semibold text-brand-charcoal shadow-2xs"
-                      />
-                    </div>
-
-                    <button
-                      type="submit"
-                      disabled={isSubmitting}
-                      className="w-full cursor-pointer rounded-xl bg-brand-terracotta py-3.5 text-sm font-bold text-brand-cream hover:bg-brand-terracotta-hover transition-colors shadow-sm mt-2"
-                    >
-                      {isSubmitting ? 'Updating password...' : 'Update Password'}
-                    </button>
-                  </form>
-                )}
-
-                {/* STEP 4: SUCCESS */}
-                {forgotStep === 'success' && (
-                  <div className="p-6 bg-brand-sand/40 border border-brand-clay rounded-2xl text-center space-y-4">
-                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
-                      <Check className="h-6 w-6" />
-                    </div>
-                    <div>
-                      <h3 className="font-display text-xl font-bold text-brand-charcoal">Password Reset Successfully!</h3>
-                      <p className="text-xs text-brand-charcoal/70 mt-1">
-                        Your account password has been updated. You can now log in with your new credentials.
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAuthScreen('login');
-                        setForgotStep('request');
-                      }}
-                      className="w-full cursor-pointer rounded-xl bg-brand-terracotta py-3 text-xs font-bold text-brand-cream hover:bg-brand-terracotta-hover transition-colors"
-                    >
-                      Sign In Now
+                      Use email recovery instead
                     </button>
                   </div>
                 )}

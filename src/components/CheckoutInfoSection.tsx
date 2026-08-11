@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { PasswordField } from './PasswordField';
 import { useApp } from '../context/AppContext';
 import { User, Mail, Phone, ArrowLeft, ArrowRight, ShieldCheck, LogIn, CheckCircle2, Lock } from 'lucide-react';
 import { validateSaudiPhone, normaliseSaudiPhone } from '../utils/phoneUtils';
@@ -15,7 +16,7 @@ import {
 export const CheckoutInfoSection: React.FC = () => {
   const {
     pendingBooking, setPendingBooking, setCustomerTab, currentUser, setCurrentUser,
-    workshops, loginCustomer, registerCustomer, publishedBirthdayPackages
+    workshops, loginCustomer, registerCustomer, requestPasswordReset, publishedBirthdayPackages
   } = useApp();
 
   const workshop = workshops.find(w => w.id === pendingBooking?.workshopId) || workshops[0];
@@ -60,6 +61,7 @@ export const CheckoutInfoSection: React.FC = () => {
   const [modalError, setModalError] = useState<string | null>(null);
   /** The typed account exists but was created without a password. */
   const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false);
+  const [resetSent, setResetSent] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const validate = async () => {
@@ -127,6 +129,19 @@ export const CheckoutInfoSection: React.FC = () => {
     }
 
     setCustomerTab('checkout-payment');
+  };
+
+  /** Sends a reset link for whatever email is in the modal. */
+  const handleModalForgotPassword = async () => {
+    setModalError(null);
+    setResetSent(null);
+
+    const res = await requestPasswordReset(loginEmail || email);
+    if (!res.success) {
+      setModalError(res.error || 'Could not send the reset link.');
+      return;
+    }
+    setResetSent(res.message || 'If an account exists for that address, a reset link is on its way.');
   };
 
   const handleQuickLogin = async (e: React.FormEvent) => {
@@ -278,11 +293,10 @@ export const CheckoutInfoSection: React.FC = () => {
                   </label>
                   <div className="relative">
                     <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-charcoal/40" />
-                    <input
-                      type="password"
+                    <PasswordField
                       placeholder="••••••••"
                       value={password}
-                      onChange={e => { setPassword(e.target.value); if (errors.password) setErrors({...errors, password: ''}); }}
+                      onChange={ v => { setPassword(v); if (errors.password) setErrors({...errors, password: ''}); }}
                       className="w-full bg-brand-sand/20 border border-brand-clay/80 rounded-2xl py-3 pl-10 pr-4 text-sm font-semibold text-brand-charcoal focus:ring-1 focus:ring-brand-terracotta focus:outline-none"
                     />
                   </div>
@@ -309,11 +323,10 @@ export const CheckoutInfoSection: React.FC = () => {
                   </label>
                   <div className="relative">
                     <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-charcoal/40" />
-                    <input
-                      type="password"
+                    <PasswordField
                       placeholder="••••••••"
                       value={confirmPassword}
-                      onChange={e => { setConfirmPassword(e.target.value); if (errors.confirmPassword) setErrors({...errors, confirmPassword: ''}); }}
+                      onChange={ v => { setConfirmPassword(v); if (errors.confirmPassword) setErrors({...errors, confirmPassword: ''}); }}
                       className="w-full bg-brand-sand/20 border border-brand-clay/80 rounded-2xl py-3 pl-10 pr-4 text-sm font-semibold text-brand-charcoal focus:ring-1 focus:ring-brand-terracotta focus:outline-none"
                     />
                   </div>
@@ -442,11 +455,10 @@ export const CheckoutInfoSection: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-bold text-brand-charcoal/70 mb-1">Password</label>
-                <input
-                  type="password"
+                <PasswordField
                   placeholder="••••••••"
                   value={loginPassword}
-                  onChange={e => { setLoginPassword(e.target.value); setModalError(null); }}
+                  onChange={ v => { setLoginPassword(v); setModalError(null); }}
                   className="w-full bg-brand-sand/20 border border-brand-clay/80 rounded-xl py-2.5 px-3 text-sm font-semibold text-brand-charcoal"
                 />
               </div>
@@ -465,6 +477,21 @@ export const CheckoutInfoSection: React.FC = () => {
                 >
                   Sign In
                 </button>
+              </div>
+
+              {/* Forgot password, same as every other sign-in surface. */}
+              <div className="pt-1 space-y-2">
+                <button
+                  type="button"
+                  onClick={handleModalForgotPassword}
+                  className="text-[11px] font-bold text-brand-charcoal/60 hover:text-brand-terracotta cursor-pointer"
+                >
+                  Forgot password?
+                </button>
+                {/* Worded the same whether or not the address is registered. */}
+                {resetSent && (
+                  <p className="text-[11px] font-semibold text-brand-sage leading-relaxed">{resetSent}</p>
+                )}
               </div>
             </form>
           </div>

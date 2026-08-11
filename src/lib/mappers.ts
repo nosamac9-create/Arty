@@ -87,8 +87,8 @@ export const TABLE_COLUMNS: Record<string, string[]> = {
   bookings: [
     'id', 'customer_id', 'customer_name', 'customer_email', 'customer_phone', 'workshop_id',
     'session_id', 'workshop_title', 'date', 'time', 'participants', 'total_price', 'source',
-    'status', 'payment_status', 'notes', 'birthday_details', 'timeline',
-    'created_at', 'updated_at'
+    'status', 'payment_status', 'notes', 'staff_id', 'staff_name',
+    'birthday_details', 'timeline', 'created_at', 'updated_at'
   ],
   queue: [
     'id', 'booking_id', 'customer_id', 'name', 'phone', 'activity', 'participants',

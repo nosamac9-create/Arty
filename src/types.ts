@@ -212,6 +212,10 @@ export interface Booking {
   status: 'Pending' | 'Checked In' | 'In Progress' | 'Completed' | 'Cancelled';
   paymentStatus: 'Paid' | 'Unpaid' | 'Refunded' | 'Deposit Paid';
   notes?: string;
+  /** Staff member hosting this event/birthday. Ids are stable; the name is
+   *  denormalised for display only, exactly as workshop sessions do it. */
+  staffId?: string;
+  staffName?: string;
   /** Full birthday submission, kept on the one shared booking record. */
   birthdayDetails?: BirthdayBookingDetails;
   createdAt: string;

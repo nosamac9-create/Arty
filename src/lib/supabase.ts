@@ -41,6 +41,11 @@ function readEnv(name: string): string | undefined {
   return undefined;
 }
 
+/** The public settings, for callers that need their own client (the test suite). */
+export function readPublicEnv(name: 'VITE_SUPABASE_URL' | 'VITE_SUPABASE_ANON_KEY'): string | undefined {
+  return readEnv(name);
+}
+
 const url = readEnv('VITE_SUPABASE_URL');
 const anonKey = readEnv('VITE_SUPABASE_ANON_KEY');
 
@@ -67,7 +72,10 @@ const makeClient = (storageKey?: string) =>
       // longer keeps its own copy of the login state.
       persistSession: true,
       autoRefreshToken: true,
-      detectSessionInUrl: true,
+      // Only ONE client may read the token out of the URL. A recovery or
+      // confirmation token is single-use: with both clients detecting it they
+      // race, one consumes it and the other reports the link as expired.
+      detectSessionInUrl: !storageKey,
       ...(storageKey ? { storageKey } : {})
     }
   });

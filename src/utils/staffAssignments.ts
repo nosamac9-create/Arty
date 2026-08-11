@@ -11,15 +11,17 @@
  * only used as a fallback for legacy rows saved before IDs were stored.
  */
 
-import { StaffMember, WorkshopSessionRecord, Workshop, AppEvent, QueueItem } from '../types';
+import {
+  StaffMember, WorkshopSessionRecord, Workshop, AppEvent, QueueItem, Booking, BirthdayPackage
+} from '../types';
 import { normalizeDateString, timeToMinutes, getEndTimeMinutes, minutesToTimeString } from './timeUtils';
 
-export type StaffAssignmentType = 'Workshop Session' | 'Event' | 'Queue Duty';
+export type StaffAssignmentType = 'Workshop Session' | 'Event' | 'Birthday' | 'Queue Duty';
 
 export interface StaffAssignment {
   /** Stable per-source id, e.g. "workshop-session:sess-ws-1-2026-08-04-0400PM". */
   id: string;
-  sourceType: 'workshop-session' | 'event' | 'queue';
+  sourceType: 'workshop-session' | 'event' | 'booking' | 'queue';
   /** Id of the underlying record: workshop-session id, event id or queue id. */
   sourceId: string;
   workshopId?: string;
@@ -40,6 +42,10 @@ export interface AssignmentSources {
   workshopSessions?: WorkshopSessionRecord[];
   workshops?: Workshop[];
   events?: AppEvent[];
+  /** Birthday/event bookings hosted by a staff member. */
+  bookings?: Booking[];
+  /** Packages, so a birthday's duration is known. */
+  birthdayPackages?: BirthdayPackage[];
   queue?: QueueItem[];
 }
 
@@ -49,10 +55,22 @@ export interface AssignmentExclusion {
   /** Ignore every session belonging to this workshop (the workshop being edited). */
   workshopId?: string;
   eventIds?: string[];
+  /** Booking ids to ignore — the booking currently being assigned. */
+  bookingIds?: string[];
 }
 
 const INACTIVE_SESSION_STATUSES = ['Cancelled', 'Unavailable', 'Archived'];
 const INACTIVE_EVENT_STATUSES = ['Cancelled', 'Archived', 'Completed'];
+/** A cancelled booking releases its host. */
+const INACTIVE_BOOKING_STATUSES = ['cancelled', 'auto-cancelled', 'no show', 'no-show'];
+
+/** The same heuristic the Events page uses to classify a booking. */
+export function isBirthdayBooking(booking: Booking): boolean {
+  if (booking.workshopId === 'birthday-party-event') return true;
+  const title = String(booking.workshopTitle || '').toLowerCase();
+  return title.includes('birthday') || title.includes('party') || title.includes('package');
+}
+
 const INACTIVE_QUEUE_STATUSES = ['Cancelled', 'Completed'];
 
 /** Resolves a record's staff ID, falling back to a name match for legacy rows. */
@@ -91,6 +109,7 @@ function isExcluded(assignment: StaffAssignment, exclude?: AssignmentExclusion):
     if (exclude.workshopId && assignment.workshopId && String(exclude.workshopId) === assignment.workshopId) return true;
   }
   if (assignment.sourceType === 'event' && exclude.eventIds?.some(id => String(id) === assignment.sourceId)) return true;
+  if (assignment.sourceType === 'booking' && exclude.bookingIds?.some(id => String(id) === assignment.sourceId)) return true;
   return false;
 }
 
@@ -98,7 +117,10 @@ function isExcluded(assignment: StaffAssignment, exclude?: AssignmentExclusion):
  * Builds every staff assignment, keyed by staff ID.
  */
 export function buildStaffAssignmentMap(sources: AssignmentSources): Map<string, StaffAssignment[]> {
-  const { staff, workshopSessions = [], workshops = [], events = [], queue = [] } = sources;
+  const {
+    staff, workshopSessions = [], workshops = [], events = [],
+    bookings = [], birthdayPackages = [], queue = []
+  } = sources;
   const map = new Map<string, StaffAssignment[]>();
   staff.forEach(s => map.set(s.id, []));
 
@@ -171,6 +193,43 @@ export function buildStaffAssignmentMap(sources: AssignmentSources): Map<string,
       endMinutes,
       location: evt.location || 'The Terrace',
       status
+    });
+  });
+
+  // Birthday and event bookings hosted by a staff member. These are bookings,
+  // not AppEvents, so they were previously invisible to availability checks —
+  // someone hosting a party read as free for an overlapping workshop.
+  const packageById = new Map(birthdayPackages.map(p => [String(p.id), p]));
+
+  bookings.forEach(booking => {
+    const status = booking.status || 'Pending';
+    if (INACTIVE_BOOKING_STATUSES.includes(String(status).toLowerCase())) return;
+    if (!booking.staffId || !booking.time || !booking.date) return;
+
+    const staffId = resolveStaffId(staff, booking.staffId, booking.staffName);
+    if (!staffId) return;
+
+    const pkg = booking.birthdayDetails?.packageId
+      ? packageById.get(String(booking.birthdayDetails.packageId))
+      : undefined;
+
+    const startMinutes = timeToMinutes(booking.time);
+    const endMinutes = getEndTimeMinutes(booking.time, pkg?.duration);
+
+    push({
+      id: `booking:${booking.id}`,
+      sourceType: 'booking',
+      sourceId: String(booking.id),
+      staffId,
+      type: isBirthdayBooking(booking) ? 'Birthday' : 'Event',
+      title: pkg?.name || booking.workshopTitle || 'Event Booking',
+      date: normalizeDateString(booking.date),
+      startTime: booking.time,
+      endTime: minutesToTimeString(endMinutes),
+      startMinutes,
+      endMinutes,
+      location: 'The Studio',
+      status: String(status)
     });
   });
 

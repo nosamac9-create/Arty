@@ -16,6 +16,8 @@ import { MyBookingsSection } from './components/MyBookingsSection';
 import { AuthSection } from './components/AuthSection';
 import { BirthdayBookingSection } from './components/BirthdayBookingSection';
 import { MyPiecesSection } from './components/MyPiecesSection';
+import { ResetPasswordSection } from './components/ResetPasswordSection';
+import { MigrationWarning } from './components/MigrationWarning';
 
 import { AdminSidebar, AdminTopBar } from './components/AdminSidebar';
 import { AdminLoginSection } from './components/AdminLoginSection';
@@ -65,6 +67,10 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-brand-cream font-sans text-brand-charcoal flex flex-col justify-between selection:bg-brand-terracotta/20">
+
+      {/* Names any migration that has not been applied, rather than letting it
+          surface later as an unrelated failure. */}
+      <MigrationWarning />
       
       {/* AREA ROUTER
           The customer site is the default area and is open to everyone. The
@@ -86,6 +92,7 @@ export default function App() {
             {customerTab === 'my-bookings' && <MyBookingsSection />}
             {customerTab === 'my-pieces' && <MyPiecesSection />}
             {customerTab === 'auth' && <AuthSection />}
+            {customerTab === 'reset-password' && <ResetPasswordSection />}
             {customerTab === 'birthday-booking' && <BirthdayBookingSection />}
           </main>
 

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useApp, getRiyadhDateString } from '../context/AppContext';
 import { 
   Users, Clock, Play, CheckCircle, PhoneCall, MoreVertical, 
@@ -19,6 +19,7 @@ import {
   getSessionSeatUsage, computeQueueSessionPlan, validateHoursAndGuests, isSelfGuided,
   QueueRecordSources, AvailableSessionOption, CapacitySnapshot
 } from '../utils/queueUtils';
+import { timeToMinutes, getEndTimeMinutes } from '../utils/timeUtils';
 import { validateCustomerForm, validateBookingForm, canonicalPhone, phoneMatchKey } from '../utils/validation';
 import { checkStaffMemberAvailability } from '../utils/staffAvailabilityUtils';
 import { AssignmentSources } from '../utils/staffAssignments';
@@ -317,6 +318,56 @@ const CalledCard: React.FC<{
   );
 };
 
+/** How long before "time is up" a card turns red. */
+const ENDING_SOON_MS = 5 * 60 * 1000;
+
+/**
+ * When an In Progress visit is due to finish, for either instructor type.
+ *
+ *  - Without Instructor: the paid hours, counted from when they were seated.
+ *  - With Instructor: the booked session's end time on today's date, falling
+ *    back to its start time plus the session duration.
+ *
+ * Returns null when there is no known end — an entry with neither paid hours
+ * nor a session never warns and never auto-completes.
+ */
+function getVisitEnd(item: QueueItem, todayDateStr: string): Date | null {
+  if (item.type === 'Without Instructor') {
+    if (!item.hours || !item.seatedTime) return null;
+    return new Date(new Date(item.seatedTime).getTime() + item.hours * 60 * 60 * 1000);
+  }
+
+  const endLabel = item.sessionEndTime;
+  const minutes = endLabel
+    ? timeToMinutes(endLabel)
+    : (item.sessionStartTime
+        ? getEndTimeMinutes(item.sessionStartTime, item.sessionDuration)
+        : null);
+
+  if (minutes === null || Number.isNaN(minutes)) return null;
+
+  const day = new Date(`${item.date || todayDateStr}T00:00:00`);
+  if (Number.isNaN(day.getTime())) return null;
+  day.setMinutes(day.getMinutes() + minutes);
+  return day;
+}
+
+/** Normal -> ending soon -> overtime, from the end time and the current tick. */
+function getVisitTiming(item: QueueItem, todayDateStr: string, now: Date) {
+  const endTime = getVisitEnd(item, todayDateStr);
+  if (!endTime) {
+    return { endTime: null, remainingMs: null, isExceeded: false, isEndingSoon: false };
+  }
+
+  const remainingMs = endTime.getTime() - now.getTime();
+  return {
+    endTime,
+    remainingMs,
+    isExceeded: remainingMs <= 0,
+    isEndingSoon: remainingMs > 0 && remainingMs <= ENDING_SOON_MS
+  };
+}
+
 const InProgressCard: React.FC<{
   item: QueueItem;
   isExpanded: boolean;
@@ -324,7 +375,8 @@ const InProgressCard: React.FC<{
   onToggle: () => void;
   updateQueueStatus: (id: string, status: any) => void;
   now: Date;
-}> = ({ item, isExpanded, instructorName, onToggle, updateQueueStatus, now }) => {
+  todayDateStr: string;
+}> = ({ item, isExpanded, instructorName, onToggle, updateQueueStatus, now, todayDateStr }) => {
   const handleCardClick = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('button')) return;
     onToggle();
@@ -345,33 +397,27 @@ const InProgressCard: React.FC<{
   const isWithoutInstructor = item.type === 'Without Instructor';
   const hasHours = !!item.hours;
   
-  let expectedCheckout = '';
-  let remainingTimeStr = '';
-  let isExceeded = false;
+  // Timing applies to both instructor types: paid hours for a self-guided
+  // visit, the booked session's end time for an instructor-led one.
+  const { endTime, remainingMs, isExceeded, isEndingSoon } =
+    getVisitTiming(item, todayDateStr, now);
 
-  if (isWithoutInstructor && hasHours && startTime) {
-    const paidDurationMs = item.hours * 60 * 60 * 1000;
-    const endTime = new Date(startTime.getTime() + paidDurationMs);
-    
-    expectedCheckout = endTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-    
-    const remainingMs = endTime.getTime() - now.getTime();
-    isExceeded = remainingMs <= 0;
-    
-    const absRemainingMs = Math.abs(remainingMs);
-    const rSecs = Math.floor(absRemainingMs / 1000);
-    const rMins = Math.floor(rSecs / 60);
+  const expectedCheckout = endTime
+    ? endTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+    : '';
+
+  let remainingTimeStr = '';
+  if (remainingMs !== null) {
+    const rMins = Math.floor(Math.abs(remainingMs) / 60000);
     const rHrs = Math.floor(rMins / 60);
-    
-    remainingTimeStr = isExceeded
-      ? `Overtime by ${rHrs > 0 ? rHrs + 'h ' : ''}${rMins % 60}m`
-      : `${rHrs > 0 ? rHrs + 'h ' : ''}${rMins % 60}m left`;
+    const spread = `${rHrs > 0 ? rHrs + 'h ' : ''}${rMins % 60}m`;
+    remainingTimeStr = isExceeded ? `Overtime by ${spread}` : `${spread} left`;
   }
 
   return (
     <div className={`rounded-2xl p-4 shadow-2xs border-2 transition-all duration-300 flex flex-col gap-3 ${
-      isExceeded 
-        ? 'border-red-500 bg-red-50/70 shadow-md animate-pulse' 
+      isExceeded || isEndingSoon
+        ? 'border-red-500 bg-red-50/70 shadow-md animate-pulse'
         : 'border-brand-clay bg-white hover:shadow-xs'
     }`}>
       {/* Interactive Collapsed Header Area */}
@@ -402,10 +448,10 @@ const InProgressCard: React.FC<{
           </div>
 
           <div className="flex items-center gap-1">
-            {isExceeded && (
+            {(isExceeded || isEndingSoon) && (
               <div className="bg-red-100 border border-red-300 rounded-lg p-1 text-red-700 flex items-center gap-0.5 text-[9px] font-extrabold animate-bounce">
                 <AlertTriangle className="h-3 w-3" />
-                <span>OVERTIME</span>
+                <span>{isExceeded ? 'OVERTIME' : '5 MIN LEFT'}</span>
               </div>
             )}
             <div className="text-brand-charcoal/40 p-1">
@@ -467,23 +513,25 @@ const InProgressCard: React.FC<{
               </div>
 
               {/* Self guided Expected checkout details */}
-              {isWithoutInstructor && hasHours && (
+              {endTime && (
                 <div className={`p-2 rounded-xl text-[11px] border leading-relaxed ${
-                  isExceeded 
-                    ? 'bg-red-100 border-red-200 text-red-800' 
+                  isExceeded || isEndingSoon
+                    ? 'bg-red-100 border-red-200 text-red-800'
                     : 'bg-brand-sand/20 border-brand-clay/40 text-brand-charcoal/80'
                 }`}>
+                  {isWithoutInstructor && hasHours && (
+                    <div className="flex justify-between font-bold">
+                      <span>Paid Hours:</span>
+                      <span>{item.hours} hrs</span>
+                    </div>
+                  )}
                   <div className="flex justify-between font-bold">
-                    <span>Paid Hours:</span>
-                    <span>{item.hours} hrs</span>
-                  </div>
-                  <div className="flex justify-between font-bold">
-                    <span>Est Checkout:</span>
+                    <span>{isWithoutInstructor ? 'Est Checkout:' : 'Session Ends:'}</span>
                     <span>{expectedCheckout}</span>
                   </div>
                   <div className="flex justify-between font-extrabold border-t border-brand-clay/20 mt-1 pt-1">
                     <span>Status:</span>
-                    <span className={isExceeded ? 'text-red-600 animate-pulse' : 'text-brand-sage-hover'}>
+                    <span className={isExceeded || isEndingSoon ? 'text-red-600 animate-pulse' : 'text-brand-sage-hover'}>
                       {remainingTimeStr}
                     </span>
                   </div>
@@ -652,9 +700,10 @@ export const LiveQueueSection: React.FC = () => {
     queue, updateQueueStatus, updateQueueItem, addQueueItem, returnQueueItemToWaiting,
     todayDateStr, formattedTodayDate, appSettings,
     staff, workshops, workshopSessions, bookings, events,
-    customers, pieces, resolveCustomer, updateCustomer,
-    updateWorkshopSession, appendBookingTimeline
-  } = useApp();
+    customers, pieces, resolveCustomer, updateCustomer, addStaffNotification,
+    updateWorkshopSession, appendBookingTimeline,
+    birthdayPackages,
+} = useApp();
 
   // One shared view of the real records the queue depends on.
   const recordSources: QueueRecordSources = useMemo(
@@ -664,8 +713,8 @@ export const LiveQueueSection: React.FC = () => {
 
   // Same assignment sources the staff console uses, for schedule conflict checks.
   const assignmentSources: AssignmentSources = useMemo(
-    () => ({ staff, workshopSessions, workshops, events, queue }),
-    [staff, workshopSessions, workshops, events, queue]
+    () => ({ staff, workshopSessions, workshops, events, bookings, birthdayPackages, queue }),
+    [staff, workshopSessions, workshops, events, bookings, birthdayPackages, queue]
   );
 
   const capacityConfig = appSettings?.find(s => s.id === 'capacitySettings')?.value;
@@ -705,6 +754,55 @@ export const LiveQueueSection: React.FC = () => {
     const interval = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(interval);
   }, []);
+
+  /**
+   * Acts once when an In Progress visit reaches its end time.
+   *
+   *  - Without Instructor: the paid time is over, so the visit is completed
+   *    automatically through the same mutator the Complete button uses, and
+   *    staff are told.
+   *  - With Instructor: the card is deliberately left alone — staff finish the
+   *    class themselves — but staff are still told the session time is up.
+   *
+   * The ref records what has already been acted on, so the one-second tick
+   * cannot fire it repeatedly.
+   */
+  const timeUpHandled = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const active = queue.filter(q => q.date === todayDateStr && q.status === 'In Progress');
+
+    // Forget entries that are no longer running, so a returned guest can be
+    // acted on again on their next visit.
+    const activeIds = new Set(active.map(q => q.id));
+    timeUpHandled.current.forEach(id => {
+      if (!activeIds.has(id)) timeUpHandled.current.delete(id);
+    });
+
+    active.forEach(item => {
+      const { isExceeded } = getVisitTiming(item, todayDateStr, now);
+      if (!isExceeded || timeUpHandled.current.has(item.id)) return;
+
+      timeUpHandled.current.add(item.id);
+
+      if (item.type === 'Without Instructor') {
+        // Same transition as the Complete button, so history is appended.
+        updateQueueStatus(item.id, 'Completed');
+        addStaffNotification(
+          '⏱ Self-guided session ended',
+          `${item.name} (${item.id}) finished their ${item.hours ?? ''} hour session and was moved to Completed Today automatically.`,
+          { newStatus: 'Completed', highlighted: true }
+        );
+      } else {
+        // Instructor-led: notify only. The card stays In Progress.
+        addStaffNotification(
+          '⏱ Workshop session time is up',
+          `${item.name} (${item.id}) has reached the end of their session. Complete the visit when the class is finished.`,
+          { highlighted: true }
+        );
+      }
+    });
+  }, [now, queue, todayDateStr]);
 
   // Filter queue strictly for TODAY ONLY (Riyadh local time)
   const todayQueue = useMemo(() => {
@@ -1310,6 +1408,7 @@ export const LiveQueueSection: React.FC = () => {
                   onToggle={() => toggleExpand(item.id)}
                   updateQueueStatus={updateQueueStatus}
                   now={now}
+                  todayDateStr={todayDateStr}
                 />
               ))
             )}

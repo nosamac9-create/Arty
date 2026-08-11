@@ -10,11 +10,12 @@
  */
 
 import React, { useState } from 'react';
+import { PasswordField } from './PasswordField';
 import { useApp } from '../context/AppContext';
 import { Lock, LogIn, ShieldAlert, AlertCircle, Mail } from 'lucide-react';
 
 export const AdminLoginSection: React.FC = () => {
-  const { loginStaff, viewCustomerSite, staff } = useApp();
+  const { loginStaff, requestPasswordReset, viewCustomerSite, staff } = useApp();
 
   // Accounts that can actually sign in, so staff are never left guessing.
   const consoleAccounts = staff.filter(
@@ -26,6 +27,31 @@ export const AdminLoginSection: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showForgot, setShowForgot] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [resetSent, setResetSent] = useState<string | null>(null);
+  const [isSendingReset, setIsSendingReset] = useState(false);
+
+  /** Sends a reset link. Wording never reveals whether the address exists. */
+  const handleForgotPassword = async () => {
+    if (isSendingReset) return;
+    setError(null);
+    setResetSent(null);
+
+    if (!forgotEmail.trim()) {
+      setError('Enter your work email address.');
+      return;
+    }
+
+    setIsSendingReset(true);
+    const res = await requestPasswordReset(forgotEmail);
+    setIsSendingReset(false);
+
+    if (!res.success) {
+      setError(res.error || 'Could not send the reset link.');
+      return;
+    }
+    setResetSent(res.message || 'If an account exists for that address, a reset link is on its way.');
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,10 +114,9 @@ export const AdminLoginSection: React.FC = () => {
             <label className="text-xs font-bold text-brand-charcoal/80 block">Password</label>
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-brand-charcoal/35" />
-              <input
-                type="password"
+              <PasswordField
                 value={password}
-                onChange={e => { setPassword(e.target.value); setError(null); }}
+                onChange={ v => { setPassword(v); setError(null); }}
                 placeholder="••••••••"
                 className="w-full bg-brand-cream/40 border border-brand-clay rounded-xl py-3 pl-9 pr-3 text-sm font-semibold text-brand-charcoal focus:outline-none focus:ring-2 focus:ring-brand-terracotta/30"
               />
@@ -137,13 +162,43 @@ export const AdminLoginSection: React.FC = () => {
             </p>
           )}
 
-          {showForgot && (
-            <p className="text-[11px] text-brand-charcoal/65 bg-brand-cream/60 border border-brand-clay/50 rounded-xl p-3 leading-relaxed">
-              Password resets are handled by a Super Admin. Ask them to set a new password for your
-              account in Settings → Staff Registry.
-            </p>
-          )}
         </form>
+
+        {showForgot && (
+          <div className="space-y-2 bg-brand-cream/60 border border-brand-clay/50 rounded-xl p-3 mt-4">
+            <p className="text-[11px] text-brand-charcoal/70 leading-relaxed">
+              Enter your work email and we will send a link to set a new password.
+            </p>
+            <input
+              type="email"
+              placeholder="you@artycafe.sa"
+              value={forgotEmail}
+              onChange={e => { setForgotEmail(e.target.value); setResetSent(null); setError(null); }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleForgotPassword();
+                }
+              }}
+              className="w-full bg-white border border-brand-clay rounded-xl py-2.5 px-3 text-xs font-semibold text-brand-charcoal"
+            />
+            <button
+              type="button"
+              disabled={isSendingReset}
+              onClick={handleForgotPassword}
+              className="w-full bg-brand-charcoal text-brand-cream py-2.5 rounded-xl text-xs font-bold cursor-pointer disabled:opacity-50"
+            >
+              {isSendingReset ? 'Sending...' : 'Email me a reset link'}
+            </button>
+            {/* Same wording whether or not the address exists. */}
+            {resetSent && (
+              <p className="text-[11px] font-semibold text-brand-sage leading-relaxed">{resetSent}</p>
+            )}
+            <p className="text-[10px] text-brand-charcoal/50 leading-relaxed">
+              A Super Admin can also set one for you in Settings → Staff Registry.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

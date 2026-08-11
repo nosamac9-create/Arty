@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
+import { checkStaffMemberAvailability } from '../utils/staffAvailabilityUtils';
 import { Booking, BirthdayPackage, DEFAULT_CAKE_SIZES } from '../types';
 import { formatDateTime } from '../utils/calendarConfig';
 import { 
@@ -28,6 +29,12 @@ export const AdminEventsSection: React.FC = () => {
     updateBirthdayPackage,
     deleteBirthdayPackage,
     reorderBirthdayPackages,
+    assignBookingStaff,
+    staff,
+    workshopSessions,
+    workshops,
+    events,
+    queue,
     // Already provided by the shared data layer.
     bookings: liveBookings
   } = useApp();
@@ -172,6 +179,12 @@ export const AdminEventsSection: React.FC = () => {
     () => (selectedEventBookingId ? liveBookings.find(b => b.id === selectedEventBookingId) || null : null),
     [selectedEventBookingId, liveBookings]
   );
+  /** Everything an availability check needs, including other hosted bookings. */
+  const eventAssignmentSources = useMemo(
+    () => ({ staff, workshopSessions, workshops, events, bookings: liveBookings, birthdayPackages, queue }),
+    [staff, workshopSessions, workshops, events, liveBookings, birthdayPackages, queue]
+  );
+
   const eventDetails = selectedEventBooking?.birthdayDetails;
 
   /** The package this booking was made against, resolved from its stable id. */
@@ -862,6 +875,41 @@ export const AdminEventsSection: React.FC = () => {
                 <span className="px-2.5 py-1 rounded-lg font-bold bg-white border border-brand-clay/60 text-brand-charcoal">
                   Source: {selectedEventBooking.source}
                 </span>
+
+                {/* Assigned staff. Sized and styled as the pills beside it so
+                    the row stays one consistent line. Availability is checked
+                    against THIS booking's own date and time. */}
+                <label className="px-2.5 py-1 rounded-lg font-bold bg-white border border-brand-clay/60 text-brand-charcoal inline-flex items-center gap-1.5">
+                  <span>Staff:</span>
+                  <select
+                    value={selectedEventBooking.staffId || ''}
+                    onChange={e => assignBookingStaff(selectedEventBooking.id, e.target.value || null)}
+                    className="bg-transparent font-bold text-brand-charcoal cursor-pointer focus:outline-none max-w-[180px]"
+                  >
+                    <option value="">Unassigned</option>
+                    {staff
+                      .filter(m => m.status === 'Active' || m.id === selectedEventBooking.staffId)
+                      .map(member => {
+                        const avail = (selectedEventBooking.date && selectedEventBooking.time)
+                          ? checkStaffMemberAvailability({
+                              staff: member,
+                              date: selectedEventBooking.date,
+                              startTime: selectedEventBooking.time,
+                              duration: selectedEventPackage?.duration,
+                              sources: eventAssignmentSources,
+                              // This booking's own slot must not count against itself.
+                              exclude: { bookingIds: [selectedEventBooking.id] }
+                            })
+                          : null;
+                        const unavailable = avail ? !avail.isAvailable : false;
+                        return (
+                          <option key={member.id} value={member.id} disabled={unavailable}>
+                            {avail ? `${member.name} — ${avail.status}` : member.name}
+                          </option>
+                        );
+                      })}
+                  </select>
+                </label>
               </div>
 
               {/* Customer */}

@@ -56,8 +56,9 @@ export const AdminWorkshopFormSection: React.FC = () => {
     rawEvents,
     // Fresh reads for conflict checks and tutor resolution.
     getFreshAssignmentSources,
-    getFreshStaff
-  } = useApp();
+    getFreshStaff,
+    birthdayPackages,
+} = useApp();
 
   // `rawWorkshops === undefined` is purely the loading signal. The list the
   // page renders is the merged one, so the Sessions column and the Sessions
@@ -219,8 +220,11 @@ export const AdminWorkshopFormSection: React.FC = () => {
 
   // Shared assignment sources for every availability check on this page.
   const assignmentSources: AssignmentSources = useMemo(
-    () => ({ staff, workshopSessions, workshops, events: rawEvents || events || [], queue }),
-    [staff, workshopSessions, workshops, rawEvents, events, queue]
+    () => ({
+      staff, workshopSessions, workshops, events: rawEvents || events || [],
+      bookings, birthdayPackages, queue
+    }),
+    [staff, workshopSessions, workshops, rawEvents, events, bookings, birthdayPackages, queue]
   );
 
   /**

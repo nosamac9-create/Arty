@@ -4,6 +4,7 @@
  */
 
 import React, { useState } from 'react';
+import { PasswordField } from './PasswordField';
 import { useApp } from '../context/AppContext';
 import { ShieldCheck, LogOut } from 'lucide-react';
 import { passwordChecklist, validatePasswordRule, validatePasswordConfirmation } from '../utils/validation';
@@ -81,13 +82,12 @@ export const StaffPasswordChangeSection: React.FC = () => {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1">
             <label className="text-xs font-bold text-brand-charcoal/80">New password *</label>
-            <input
-              type="password"
+            <PasswordField
               required
               autoFocus
               placeholder="••••••••"
               value={password}
-              onChange={e => { setPassword(e.target.value); setError(null); }}
+              onChange={ v => { setPassword(v); setError(null); }}
               className="w-full bg-brand-cream border border-brand-clay rounded-xl py-3 px-4 text-sm font-semibold text-brand-charcoal"
             />
             <ul className="space-y-0.5 pt-1">
@@ -107,12 +107,11 @@ export const StaffPasswordChangeSection: React.FC = () => {
 
           <div className="space-y-1">
             <label className="text-xs font-bold text-brand-charcoal/80">Confirm password *</label>
-            <input
-              type="password"
+            <PasswordField
               required
               placeholder="••••••••"
               value={confirmPassword}
-              onChange={e => { setConfirmPassword(e.target.value); setError(null); }}
+              onChange={ v => { setConfirmPassword(v); setError(null); }}
               className="w-full bg-brand-cream border border-brand-clay rounded-xl py-3 px-4 text-sm font-semibold text-brand-charcoal"
             />
           </div>

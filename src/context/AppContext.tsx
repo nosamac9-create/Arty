@@ -71,8 +71,8 @@ interface AppContextType {
   viewCustomerSite: () => void;
   /** Returns a signed-in staff member to the console. */
   returnToStaffConsole: () => void;
-  customerTab: 'home' | 'workshops' | 'detail' | 'checkout-info' | 'checkout-payment' | 'confirmation' | 'my-bookings' | 'my-pieces' | 'auth' | 'birthday-booking';
-  setCustomerTab: (tab: 'home' | 'workshops' | 'detail' | 'checkout-info' | 'checkout-payment' | 'confirmation' | 'my-bookings' | 'my-pieces' | 'auth' | 'birthday-booking') => void;
+  customerTab: 'home' | 'workshops' | 'detail' | 'checkout-info' | 'checkout-payment' | 'confirmation' | 'my-bookings' | 'my-pieces' | 'auth' | 'birthday-booking' | 'reset-password';
+  setCustomerTab: (tab: 'home' | 'workshops' | 'detail' | 'checkout-info' | 'checkout-payment' | 'confirmation' | 'my-bookings' | 'my-pieces' | 'auth' | 'birthday-booking' | 'reset-password') => void;
   adminTab: 'dashboard' | 'queue' | 'customers' | 'staff' | 'bookings' | 'workshops-admin' | 'events-admin' | 'pieces-admin' | 'system-health' | 'settings';
   setAdminTab: (tab: 'dashboard' | 'queue' | 'customers' | 'staff' | 'bookings' | 'workshops-admin' | 'events-admin' | 'pieces-admin' | 'system-health' | 'settings') => void;
   
@@ -95,6 +95,16 @@ interface AppContextType {
   /** Attaches a password to an existing passwordless record and signs them in. */
   claimCustomerAccount: (emailOrPhone: string, password: string) =>
     Promise<{ success: boolean; error?: string; customerId?: string }>;
+  /** Sends a reset link. The reply never reveals whether the email exists. */
+  requestPasswordReset: (email: string) =>
+    Promise<{ success: boolean; error?: string; message?: string }>;
+  /** True once the emailed link's recovery session has been established. */
+  hasRecoverySession: () => Promise<boolean>;
+  /** Supabase's own explanation when it rejected a reset link. */
+  recoveryLinkError: string | null;
+  /** Sets the new password using the recovery session from the emailed link. */
+  completePasswordReset: (newPassword: string) =>
+    Promise<{ success: boolean; error?: string; expired?: boolean }>;
   resetCustomerPassword: (emailOrPhone: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
   logoutCustomer: () => void;
 
@@ -208,12 +218,21 @@ interface AppContextType {
   }>;
   /** Staff read straight from the database, bypassing the cached list. */
   getFreshStaff: () => Promise<StaffMember[]>;
+  /** Assigns or clears the staff member hosting a birthday/event booking. */
+  assignBookingStaff: (bookingId: string, staffId: string | null) =>
+    Promise<{ success: boolean; error?: string }>;
   /** Adds a category unless one with that name already exists. */
   addCategoryIfMissing: (name: string) => Promise<{ created: boolean; id?: string }>;
   /** Updates a single workshop session record. */
   updateWorkshopSession: (id: string, updates: Partial<WorkshopSessionRecord>) => Promise<void>;
   /** Appends one entry to a booking's timeline. */
   appendBookingTimeline: (bookingId: string, action: string) => Promise<void>;
+  /** Raises a staff notification through the shared notifications table. */
+  addStaffNotification: (
+    title: string,
+    message: string,
+    meta?: { newStatus?: string; performedBy?: string; highlighted?: boolean }
+  ) => Promise<void>;
   addQueueItem: (item: Omit<QueueItem, 'id' | 'checkInTime' | 'elapsedMinutes' | 'status' | 'date' | 'history'>) => Promise<void>;
   updateQueueStatus: (id: string, status: QueueItem['status']) => void;
   updateQueueItem: (id: string, updates: Partial<QueueItem>) => Promise<void>;
@@ -383,7 +402,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Navigation State
   // Everyone starts on the customer site.
   const [area, setArea] = useState<'customer' | 'staff'>('customer');
-  const [customerTab, setCustomerTab] = useState<'home' | 'workshops' | 'detail' | 'checkout-info' | 'checkout-payment' | 'confirmation' | 'my-bookings' | 'my-pieces' | 'auth' | 'birthday-booking'>('home');
+  /** What Supabase said about a reset link, when it refused one. */
+  const [recoveryLinkError, setRecoveryLinkError] = useState<string | null>(null);
+
+  /**
+   * A password-reset link opens the recovery screen.
+   *
+   * Supabase puts `type=recovery` in the URL fragment and raises
+   * PASSWORD_RECOVERY once it has exchanged it for a short-lived session.
+   * Either signal routes there.
+   */
+  useEffect(() => {
+    const hash = window.location.hash || '';
+    const search = window.location.search || '';
+
+    // Supabase reports a dead link as an error in the fragment. Capture it so
+    // the screen can say what went wrong rather than guessing.
+    const params = new URLSearchParams(hash.replace(/^#/, ''));
+    const linkError = params.get('error_description') || params.get('error');
+    if (linkError) setRecoveryLinkError(linkError.replace(/\+/g, ' '));
+
+    if (
+      hash.includes('type=recovery') ||
+      hash.includes('access_token') ||
+      search.includes('type=recovery') ||
+      linkError
+    ) {
+      setArea('customer');
+      setCustomerTab('reset-password');
+    }
+
+    if (!supabase) return;
+    const { data } = supabase.auth.onAuthStateChange(event => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setArea('customer');
+        setCustomerTab('reset-password');
+      }
+    });
+    return () => data.subscription.unsubscribe();
+  }, []);
+  const [customerTab, setCustomerTab] = useState<'home' | 'workshops' | 'detail' | 'checkout-info' | 'checkout-payment' | 'confirmation' | 'my-bookings' | 'my-pieces' | 'auth' | 'birthday-booking' | 'reset-password'>('home');
   const [adminTab, setAdminTab] = useState<'dashboard' | 'queue' | 'customers' | 'staff' | 'bookings' | 'workshops-admin' | 'events-admin' | 'pieces-admin' | 'system-health' | 'settings'>('dashboard');
   
   // Pending Checkout State
@@ -659,31 +717,109 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true, customerId: linkedId };
   };
 
-  const resetCustomerPassword = async (emailOrPhone: string, newPassword: string): Promise<{ success: boolean; error?: string }> => {
-    const input = emailOrPhone.trim();
-    if (!input) return { success: false, error: 'Email or phone number is required.' };
+  /**
+   * Sends a password-reset link.
+   *
+   * Supabase Auth owns the proof of ownership: only someone who can open the
+   * inbox can complete the reset. That is also why this is the correct path for
+   * an unclaimed customer record — no special case is needed or wanted.
+   *
+   * The response is deliberately identical whether or not the address is on
+   * file, so this cannot be used to discover which emails are registered.
+   */
+  const requestPasswordReset = async (email: string) => {
+    const address = canonicalEmail(email);
+    const generic = 'If an account exists for that address, a reset link is on its way. Check your inbox and spam folder.';
 
-    const normEmail = input.toLowerCase();
-    let customer = await db.customers.where('email').equalsIgnoreCase(normEmail).first();
+    if (!address.includes('@')) {
+      return { success: false, error: 'Enter a valid email address.' };
+    }
+    if (!supabase) return { success: false, error: SUPABASE_NOT_CONFIGURED };
 
-    if (!customer) {
-      // Try by phone number
-      const normPhone = normalisePhone('+966', input);
-      customer = await db.customers.where('phone').equals(normPhone).first();
+    const { error } = await supabase.auth.resetPasswordForEmail(address, {
+      // No fragment of our own: Supabase appends its token as the URL
+      // fragment, and a URL can only have one. Adding "#reset-password" here
+      // produced "#reset-password#access_token=..." — unparseable, so no
+      // session was ever created and every link looked expired.
+      // The reset screen is reached from `type=recovery` / PASSWORD_RECOVERY.
+      redirectTo: `${window.location.origin}${window.location.pathname}`
+    });
+
+    // A failure is logged but never distinguished to the caller: reporting
+    // "no such user" here would leak the account list.
+    if (error) console.error('Password reset request failed:', error.message);
+
+    return { success: true, message: generic };
+  };
+
+  /**
+   * Whether a recovery session exists yet.
+   *
+   * Reading the token out of the URL is asynchronous, so the reset screen can
+   * render before it lands. This is polled briefly rather than declaring a
+   * perfectly good link expired.
+   */
+  const hasRecoverySession = async (): Promise<boolean> => {
+    const clients = [supabase, supabaseStaff].filter(Boolean) as NonNullable<typeof supabase>[];
+    for (const client of clients) {
+      const { data } = await client.auth.getSession();
+      if (data.session) return true;
+    }
+    return false;
+  };
+
+  /**
+   * Completes a reset. Requires the recovery session Supabase establishes when
+   * the emailed link is opened; without it there is nothing to update.
+   */
+  const completePasswordReset = async (newPassword: string) => {
+    if (!supabase) return { success: false, error: SUPABASE_NOT_CONFIGURED };
+
+    const strength = validatePasswordRule(newPassword);
+    if (!strength.valid) return { success: false, error: strength.error };
+
+    // The recovery session belongs to whichever client read the link. The
+    // default client is the only one that reads the URL, but a staff member
+    // resetting while signed in to the console may hold it there instead, so
+    // both are checked before declaring the link dead.
+    const clients = [supabase, supabaseStaff].filter(Boolean) as NonNullable<typeof supabase>[];
+
+    let holder: (typeof clients)[number] | null = null;
+    for (const client of clients) {
+      const { data } = await client.auth.getSession();
+      if (data.session) { holder = client; break; }
     }
 
-    if (!customer) {
-      // General filter match
-      customer = await db.customers.filter(c => c.phone.includes(input) || c.email.toLowerCase() === normEmail).first();
+    if (!holder) {
+      return {
+        success: false,
+        expired: true,
+        error: 'This reset link has expired or has already been used. Request a new one.'
+      };
     }
 
-    if (!customer) {
-      return { success: false, error: 'No registered customer account found with these details.' };
-    }
+    const { error } = await holder.auth.updateUser({ password: newPassword });
+    if (error) return { success: false, error: friendlyAuthError(error.message) };
 
-    await db.customers.update(customer.id, { password: newPassword });
     return { success: true };
   };
+
+  /**
+   * Retired. It set a password from an identifier alone, which is exactly the
+   * unverified reset the fake "123456" flow relied on: knowing an email or a
+   * phone number was enough to take over an account.
+   *
+   * Resets now go through Supabase Auth — requestPasswordReset emails a link,
+   * completePasswordReset uses the recovery session it creates. Kept only so
+   * the context contract does not change; it never succeeds.
+   */
+  const resetCustomerPassword = async (
+    _emailOrPhone: string,
+    _newPassword: string
+  ): Promise<{ success: boolean; error?: string }> => ({
+    success: false,
+    error: 'Password resets are sent by email. Use "Forgot password?" to get a secure link.'
+  });
 
   const logoutCustomer = async () => {
     // Supabase owns the session; signing out clears it everywhere.
@@ -1454,6 +1590,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
    * The comparison is case-insensitive, so "Pottery" typed again never creates
    * a second row. Used by both Publish and Save Draft.
    */
+  /**
+   * Assigns (or clears) the staff member hosting a birthday/event booking.
+   *
+   * Stores the stable id with the name denormalised beside it, exactly as a
+   * workshop session does, and records the change on the booking's timeline.
+   * Passing null clears the assignment.
+   */
+  const assignBookingStaff = async (bookingId: string, staffId: string | null) => {
+    if (!bookingId) return { success: false, error: 'No booking selected.' };
+
+    const member = staffId ? (await fetchTable<StaffMember>('staff')).find(m => m.id === staffId) : null;
+    if (staffId && !member) return { success: false, error: 'That staff member no longer exists.' };
+
+    try {
+      await db.bookings.update(bookingId, {
+        staffId: staffId || null,
+        staffName: member?.name || null,
+        updatedAt: new Date().toISOString()
+      } as any);
+
+      await appendBookingTimeline(
+        bookingId,
+        member ? `Assigned to ${member.name}` : 'Staff assignment cleared'
+      );
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Could not save the assignment.' };
+    }
+  };
+
   const addCategoryIfMissing = async (name: string): Promise<{ created: boolean; id?: string }> => {
     const clean = String(name || '').trim();
     if (!clean) return { created: false };
@@ -1541,6 +1707,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           await db.queue.put(qItem);
         }
       }
+    }
+  };
+
+  /**
+   * Raises a staff notification. Same table and shape the pottery pipeline
+   * uses, exposed so pages never write to the notifications table themselves.
+   */
+  const addStaffNotification = async (
+    title: string,
+    message: string,
+    meta: { newStatus?: string; performedBy?: string; highlighted?: boolean } = {}
+  ) => {
+    try {
+      await db.notifications.add({
+        id: `NOTIF-STAFF-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        type: 'staff',
+        title,
+        message,
+        newStatus: meta.newStatus,
+        performedBy: meta.performedBy || 'System',
+        timestamp: new Date().toISOString(),
+        isRead: false,
+        highlighted: meta.highlighted === true
+      } as NotificationItem);
+    } catch (err) {
+      console.error('Failed to raise staff notification:', err);
     }
   };
 
@@ -2640,7 +2832,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       selectedBirthdayPackage, setSelectedBirthdayPackage,
       currentUser, setCurrentUser,
       authScreen, setAuthScreen,
-      registerCustomer, loginCustomer, claimCustomerAccount, resetCustomerPassword, logoutCustomer,
+      registerCustomer, loginCustomer, claimCustomerAccount,
+      requestPasswordReset, completePasswordReset, hasRecoverySession, recoveryLinkError,
+      resetCustomerPassword, logoutCustomer,
       selectedWorkshopId, setSelectedWorkshopId,
       lastBookingCreated, setLastBookingCreated,
       editingWorkshopId, setEditingWorkshopId,
@@ -2663,9 +2857,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       addWorkshop, updateWorkshop,
       addBooking, bookingError, clearBookingError: () => setBookingError(null),
       cancelBooking, updateBookingStatus,
-      addCategoryIfMissing, updateWorkshopSession, appendBookingTimeline,
+      addCategoryIfMissing, assignBookingStaff, updateWorkshopSession, appendBookingTimeline,
       getFreshAssignmentSources, getFreshStaff,
-      addQueueItem, updateQueueStatus, updateQueueItem, reorderQueue, returnQueueItemToWaiting,
+      addQueueItem, addStaffNotification, updateQueueStatus, updateQueueItem, reorderQueue, returnQueueItemToWaiting,
       updatePieceStatus, addPiece, updatePiece, markNotificationAsRead, clearAllNotifications,
       runAllTests, toggleTestResult,
       isTestRunning, testProgress, testsPassing,

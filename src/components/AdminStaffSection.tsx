@@ -30,8 +30,9 @@ export const AdminStaffSection: React.FC = () => {
     formattedTodayDate,
     setAdminTab,
     addStaffMember,
-    updateStaffMember
-  } = useApp();
+    updateStaffMember,
+    birthdayPackages,
+} = useApp();
 
   // Navigation / View Tabs inside Staff Section
   const [activeTab, setActiveTab] = useState<'roster' | 'calendar' | 'schedule'>('roster');
@@ -96,8 +97,9 @@ export const AdminStaffSection: React.FC = () => {
 
   // Shared assignment records — same source used by the availability checker.
   const assignmentSources = useMemo(
-    () => ({ staff, workshopSessions, workshops, events, queue }),
-    [staff, workshopSessions, workshops, events, queue]
+    // Bookings included: a staff member hosting a birthday is assigned then too.
+    () => ({ staff, workshopSessions, workshops, events, bookings, birthdayPackages, queue }),
+    [staff, workshopSessions, workshops, events, bookings, birthdayPackages, queue]
   );
 
   const staffAssignments = useMemo(

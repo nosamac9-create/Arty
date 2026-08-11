@@ -19,7 +19,10 @@
  * A test reports expected vs actual and a plain-English failure message.
  */
 
-import { db, ArtyCafeDatabase } from '../db';
+import { sdb } from '../lib/supabaseDb';
+import { supabase, getDataClient, readPublicEnv } from '../lib/supabase';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { checkMigrations } from '../lib/migrationCheck';
 import {
   checkDuplicateCustomerPhone, checkDuplicateCustomerEmail, validatePasswordRule,
   validateBookingForm, canonicalPhone, customerStorageFields, ValidationDb
@@ -37,10 +40,20 @@ import { TestResult, Booking, QueueItem, PotteryPiece, StaffMember, AppEvent } f
 export type TestCategory = TestResult['category'];
 
 export interface SystemTestContext {
-  /** Throwaway database, already open and empty. Deleted after the run. */
-  temp: ArtyCafeDatabase;
+  /**
+   * Scenario fixtures. Writes go to the real tables — there is one database now
+   * — but every id is prefixed TEST-, reads are narrowed to those rows, and
+   * everything with that prefix is deleted afterwards, including on a throw.
+   */
+  temp: typeof sdb;
   /** The live database, for read-only audits. */
-  live: ArtyCafeDatabase;
+  live: typeof sdb;
+  /**
+   * A validation source narrowed to the TEST- rows, so a duplicate check in a
+   * scenario cannot be answered by a real customer who happens to share a
+   * phone number. The rules being exercised are the real ones.
+   */
+  scoped: ValidationDb;
 }
 
 export interface TestOutcome {
@@ -109,21 +122,97 @@ const FIXTURE_SESSION = {
   status: 'Published' as const
 };
 
-/** Resets the temporary database to a known state before each scenario test. */
-async function seedTemp(temp: ArtyCafeDatabase): Promise<void> {
-  await Promise.all([
-    temp.customers.clear(), temp.staff.clear(), temp.workshops.clear(),
-    temp.workshopSessions.clear(), temp.bookings.clear(), temp.queue.clear(),
-    temp.pieces.clear(), temp.notifications.clear(), temp.events.clear(),
-    temp.categories.clear(), temp.pipelineStages.clear()
-  ]);
+/**
+ * A client with no session at all.
+ *
+ * Row Level Security is what actually protects the data, and it can only be
+ * proven by asking as somebody who is not signed in. The app's own clients
+ * carry a session, so a fresh anonymous one is created for these checks.
+ */
+function anonClient(): SupabaseClient | null {
+  const url = readPublicEnv('VITE_SUPABASE_URL');
+  const key = readPublicEnv('VITE_SUPABASE_ANON_KEY');
+  if (!url || !key) return null;
+  return createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+  });
+}
+
+/** Every id this suite writes starts with this. Nothing else is ever touched. */
+export const TEST_PREFIX = 'TEST-';
+
+const isTestRow = (row: any) => String(row?.id || '').startsWith(TEST_PREFIX);
+
+/**
+ * Ids written by an earlier version of this suite, before every fixture was
+ * namespaced. They went into the real tables and were never cleaned up, so
+ * they polluted the Live Queue and skewed the dashboard figures. Listed here
+ * so one run removes them; they can be deleted from this list afterwards.
+ */
+const LEGACY_TEST_IDS = [
+  'Q-001', 'Q-002', 'Q-003', 'Q-010', 'Q-101', 'Q-102', 'Q-201', 'Q-202', 'Q-301', 'Q-401',
+  'cat-1', 'cat-new', 'cat-dupe'
+];
+
+/**
+ * Tables the suite writes to, children before parents so foreign keys are not
+ * violated during cleanup.
+ */
+const WRITTEN_TABLES: Array<keyof typeof sdb> = [
+  'pieceHistory', 'notifications', 'queue', 'pieces', 'bookings',
+  'workshopSessions', 'workshops', 'customers', 'staff', 'events', 'categories'
+];
+
+/**
+ * Deletes every TEST- row. Runs after the suite whatever happened, and again
+ * before it, so a run interrupted by a crash cannot leave fixtures behind for
+ * staff to find in the console.
+ */
+export async function purgeTestRows(): Promise<number> {
+  let removed = 0;
+
+  // Children first: a queue entry referencing a booking blocks that booking's
+  // delete, which is how rows survived a purge and then collided on the next
+  // run as a duplicate key.
+  for (const table of WRITTEN_TABLES) {
+    try {
+      const api = sdb[table] as any;
+      const rows = await api.toArray();
+
+      const doomed = rows.filter((row: any) =>
+        isTestRow(row) ||
+        // piece_history has a generated uuid; it is matched by its parent.
+        String(row?.pieceId || '').startsWith(TEST_PREFIX) ||
+        // Rows written by an earlier version of this suite, before every
+        // fixture was namespaced. One-time cleanup; harmless afterwards.
+        LEGACY_TEST_IDS.includes(String(row?.id || ''))
+      );
+
+      for (const row of doomed) {
+        try {
+          await api.delete(row.id);
+          removed++;
+        } catch (err) {
+          console.warn(`Could not delete ${String(table)}/${row.id}:`, err);
+        }
+      }
+    } catch (err) {
+      console.warn(`Could not purge test rows from ${String(table)}:`, err);
+    }
+  }
+  return removed;
+}
+
+/** Puts the fixtures back to a known state before each scenario test. */
+async function seedTemp(temp: typeof sdb): Promise<void> {
+  await purgeTestRows();
   await temp.customers.put(FIXTURE_CUSTOMER as any);
   await temp.workshops.put(FIXTURE_WORKSHOP as any);
   await temp.workshopSessions.put(FIXTURE_SESSION as any);
 }
 
 /** Remaining seats for the fixture session, via the production helper. */
-async function fixtureRemaining(temp: ArtyCafeDatabase): Promise<number> {
+async function fixtureRemaining(temp: typeof sdb): Promise<number> {
   const [workshops, bookings, queue] = await Promise.all([
     temp.workshops.toArray(), temp.bookings.toArray(), temp.queue.toArray()
   ]);
@@ -131,12 +220,53 @@ async function fixtureRemaining(temp: ArtyCafeDatabase): Promise<number> {
 }
 
 /**
+ * A façade whose READS return only the suite's own rows.
+ *
+ * Scenario tests assert on counts — "2 bookings today", "one customer record"
+ * — and there is one database now, so without this they also count the
+ * studio's real records and fail for reasons that have nothing to do with the
+ * behaviour under test.
+ *
+ * Writes are untouched and go to the real tables; only what a test can SEE is
+ * narrowed. Audits deliberately use the unscoped `live` façade, because their
+ * whole purpose is to inspect real data.
+ */
+const belongsToSuite = (row: any) =>
+  isTestRow(row) || String(row?.pieceId || '').startsWith(TEST_PREFIX);
+
+function scopedFacade(): typeof sdb {
+  return new Proxy({} as any, {
+    get(_target, table: string) {
+      const api = (sdb as any)[table];
+      if (typeof api !== 'object' || api === null) return api;
+      return {
+        ...api,
+        toArray: async () => (await api.toArray()).filter(belongsToSuite),
+        filter: (predicate: (row: any) => boolean) => ({
+          toArray: async () => (await api.toArray()).filter(belongsToSuite).filter(predicate),
+          first: async () => (await api.toArray()).filter(belongsToSuite).filter(predicate)[0],
+          count: async () => (await api.toArray()).filter(belongsToSuite).filter(predicate).length
+        }),
+        orderBy: (field: string) => ({
+          toArray: async () => (await api.toArray())
+            .filter(belongsToSuite)
+            .sort((a: any, b: any) => String(a[field]).localeCompare(String(b[field])))
+        })
+      };
+    }
+  });
+}
+
+const scopedDb = scopedFacade();
+const scopedValidationDb = scopedDb as unknown as ValidationDb;
+
+/**
  * The warning an admin should see when a staff member is switched to Inactive
  * while they still hold assignments. Returns null when the console raises
  * nothing — which is what STF-03 checks for.
  */
 async function staffInactiveWarning(
-  source: ArtyCafeDatabase,
+  source: typeof sdb,
   staffId: string
 ): Promise<string | null> {
   // Mirrors the only guard that exists today: it lives on DELETE, not on the
@@ -170,9 +300,9 @@ export const SYSTEM_TESTS: SystemTestDefinition[] = [
     description: 'Adds a customer, then checks a second one with the same normalized phone written differently.',
     category: 'Validation',
     kind: 'scenario',
-    run: async ({ temp }) => {
+    run: async ({ temp, scoped }) => {
       await seedTemp(temp);
-      const result = await checkDuplicateCustomerPhone('+966 50 123 4567', undefined, temp as ValidationDb);
+      const result = await checkDuplicateCustomerPhone('+966 50 123 4567', undefined, scoped);
       return check(
         !result.valid && (result.error || '').includes('Fixture Customer'),
         'Rejected, naming the existing customer "Fixture Customer"',
@@ -187,9 +317,9 @@ export const SYSTEM_TESTS: SystemTestDefinition[] = [
     description: 'Checks an email that differs only by letter case from a stored one.',
     category: 'Validation',
     kind: 'scenario',
-    run: async ({ temp }) => {
+    run: async ({ temp, scoped }) => {
       await seedTemp(temp);
-      const result = await checkDuplicateCustomerEmail('FIXTURE@Example.com', undefined, temp as ValidationDb);
+      const result = await checkDuplicateCustomerEmail('FIXTURE@Example.com', undefined, scoped);
       return check(
         !result.valid,
         'Rejected — email match ignores letter case',
@@ -249,7 +379,7 @@ export const SYSTEM_TESTS: SystemTestDefinition[] = [
     description: 'Fills a 6-seat session to 5, then attempts to book 3 more.',
     category: 'Bookings',
     kind: 'scenario',
-    run: async ({ temp }) => {
+    run: async ({ temp, scoped }) => {
       await seedTemp(temp);
       await temp.bookings.put({
         id: 'TEST-BK-1', sessionId: FIXTURE_SESSION.id, workshopId: FIXTURE_WORKSHOP.id,
@@ -259,7 +389,7 @@ export const SYSTEM_TESTS: SystemTestDefinition[] = [
 
       const errors = await validateBookingForm(
         { sessionId: FIXTURE_SESSION.id, participants: 3 },
-        temp as ValidationDb
+        scoped
       );
       const message = errors.participants || errors.sessionId;
       return check(
@@ -276,7 +406,7 @@ export const SYSTEM_TESTS: SystemTestDefinition[] = [
     description: 'Adds a 2-person booking and re-reads remaining capacity from the shared seat helper.',
     category: 'Bookings',
     kind: 'scenario',
-    run: async ({ temp }) => {
+    run: async ({ temp, scoped }) => {
       await seedTemp(temp);
       const before = await fixtureRemaining(temp);
       await temp.bookings.put({
@@ -355,8 +485,8 @@ export const SYSTEM_TESTS: SystemTestDefinition[] = [
       await seedTemp(temp);
       const today = getRiyadhDateString();
       await temp.queue.bulkPut([
-        { id: 'Q-001', name: 'A', date: today, status: 'Completed' },
-        { id: 'Q-002', name: 'B', date: today, status: 'Waiting' }
+        { id: 'TEST-Q-001', name: 'A', date: today, status: 'Completed' },
+        { id: 'TEST-Q-002', name: 'B', date: today, status: 'Waiting' }
       ] as any);
 
       // The rule the app uses: one past the highest existing number.
@@ -383,16 +513,16 @@ export const SYSTEM_TESTS: SystemTestDefinition[] = [
     run: async ({ temp }) => {
       await seedTemp(temp);
       const today = getRiyadhDateString();
-      await temp.queue.put({ id: 'Q-010', name: 'Guest', date: today, status: 'Waiting' } as any);
-      await temp.queue.update('Q-010', { status: 'Completed' });
+      await temp.queue.put({ id: 'TEST-Q-010', name: 'Guest', date: today, status: 'Waiting' } as any);
+      await temp.queue.update('TEST-Q-010', { status: 'Completed' });
 
       const all: QueueItem[] = await temp.queue.toArray();
       const waiting = all.filter(q => q.date === today && q.status === 'Waiting');
       const completedToday = all.filter(q => q.date === today && q.status === 'Completed');
 
       return check(
-        waiting.length === 0 && completedToday.some(q => q.id === 'Q-010'),
-        'Q-010 leaves Waiting and appears in Completed Today',
+        waiting.length === 0 && completedToday.some(q => q.id === 'TEST-Q-010'),
+        'TEST-Q-010 leaves Waiting and appears in Completed Today',
         `Waiting: ${waiting.length}, Completed Today: ${completedToday.map(q => q.id).join(', ') || 'none'}`,
         'A completed visit either stayed in the waiting list or never reached Completed Today.'
       );
@@ -665,14 +795,14 @@ export const SYSTEM_TESTS: SystemTestDefinition[] = [
       await seedTemp(temp);
       const today = getRiyadhDateString();
       await temp.queue.bulkPut([
-        { id: 'Q-101', name: 'Today A', date: today, status: 'Waiting' },
-        { id: 'Q-102', name: 'Yesterday', date: '2020-01-01', status: 'Waiting' }
+        { id: 'TEST-Q-101', name: 'Today A', date: today, status: 'Waiting' },
+        { id: 'TEST-Q-102', name: 'Yesterday', date: '2020-01-01', status: 'Waiting' }
       ] as any);
 
       const board = (await temp.queue.toArray()).filter(q => q.date === today);
       return check(
-        board.length === 1 && board[0].id === 'Q-101',
-        "Only Q-101 (today) is on the board",
+        board.length === 1 && board[0].id === 'TEST-Q-101',
+        "Only TEST-Q-101 (today) is on the board",
         `Board shows: ${board.map(q => `${q.id}@${q.date}`).join(', ') || 'nothing'}`,
         "A visit from another day is showing on today's queue, inflating the waiting list."
       );
@@ -695,12 +825,12 @@ export const SYSTEM_TESTS: SystemTestDefinition[] = [
       };
 
       await temp.queue.bulkPut([
-        { id: 'Q-201', name: 'Old day', date: '2020-01-01', status: 'Completed' },
-        { id: 'Q-202', name: 'Old day', date: '2020-01-01', status: 'Completed' }
+        { id: 'TEST-Q-201', name: 'Old day', date: '2020-01-01', status: 'Completed' },
+        { id: 'TEST-Q-202', name: 'Old day', date: '2020-01-01', status: 'Completed' }
       ] as any);
       const firstToday = nextNumber(await temp.queue.toArray(), today);
 
-      await temp.queue.put({ id: 'Q-001', name: 'First today', date: today, status: 'Waiting' } as any);
+      await temp.queue.put({ id: 'TEST-Q-001', name: 'First today', date: today, status: 'Waiting' } as any);
       const secondToday = nextNumber(await temp.queue.toArray(), today);
 
       return check(
@@ -723,19 +853,19 @@ export const SYSTEM_TESTS: SystemTestDefinition[] = [
       const VALID: QueueItem['status'][] = ['Waiting', 'Called', 'In Progress', 'Completed', 'Cancelled'];
 
       await temp.queue.put({
-        id: 'Q-301', name: 'Guest', date: today, status: 'Waiting',
+        id: 'TEST-Q-301', name: 'Guest', date: today, status: 'Waiting',
         history: [{ status: 'Waiting', timestamp: new Date().toISOString() }]
       } as any);
 
       for (const next of ['Called', 'In Progress', 'Completed'] as QueueItem['status'][]) {
-        const item = await temp.queue.get('Q-301');
-        await temp.queue.update('Q-301', {
+        const item = await temp.queue.get('TEST-Q-301');
+        await temp.queue.update('TEST-Q-301', {
           status: next,
           history: [...(item!.history || []), { status: next, timestamp: new Date().toISOString() }]
         } as any);
       }
 
-      const final = await temp.queue.get('Q-301');
+      const final = await temp.queue.get('TEST-Q-301');
       const trail = (final!.history || []).map(h => h.status);
       const allValid = trail.every(st => VALID.includes(st as QueueItem['status']));
 
@@ -871,9 +1001,9 @@ export const SYSTEM_TESTS: SystemTestDefinition[] = [
       await seedTemp(temp);
       const today = getRiyadhDateString();
       await temp.bookings.bulkPut([
-        { id: 'TEST-C1', workshopId: 'w', date: today, time: '1', participants: 1, status: 'Pending', paymentStatus: 'Paid', customerName: 'Plain Name', customerPhone: '1', workshopTitle: 'Wheel', source: 'Website', createdAt: 'x' },
-        { id: 'TEST-C2', workshopId: 'w', date: today, time: '1', participants: 1, status: 'Completed', paymentStatus: 'Paid', customerName: 'Ali, Noura', customerPhone: '2', workshopTitle: 'Say "hello"', source: 'Website', createdAt: 'x' },
-        { id: 'TEST-C3', workshopId: 'w', date: '2020-01-01', time: '1', participants: 1, status: 'Pending', paymentStatus: 'Paid', customerName: 'Old', customerPhone: '3', workshopTitle: 'Old', source: 'Website', createdAt: 'x' }
+        { id: 'TEST-C1', workshopId: 'w', date: today, time: '1', participants: 1, status: 'Pending', paymentStatus: 'Paid', customerName: 'Plain Name', customerPhone: '1', workshopTitle: 'Wheel', source: 'Website', createdAt: '2026-01-01T00:00:00.000Z' },
+        { id: 'TEST-C2', workshopId: 'w', date: today, time: '1', participants: 1, status: 'Completed', paymentStatus: 'Paid', customerName: 'Ali, Noura', customerPhone: '2', workshopTitle: 'Say "hello"', source: 'Website', createdAt: '2026-01-01T00:00:00.000Z' },
+        { id: 'TEST-C3', workshopId: 'w', date: '2020-01-01', time: '1', participants: 1, status: 'Pending', paymentStatus: 'Paid', customerName: 'Old', customerPhone: '3', workshopTitle: 'Old', source: 'Website', createdAt: '2026-01-01T00:00:00.000Z' }
       ] as any);
 
       // The page exports processedBookings — the filtered set, not every booking.
@@ -914,7 +1044,7 @@ export const SYSTEM_TESTS: SystemTestDefinition[] = [
       await seedTemp(temp);
       const today = getRiyadhDateString();
       await temp.queue.put({
-        id: 'Q-401', name: 'Walk-in Guest', phone: '+966500000009', date: today,
+        id: 'TEST-Q-401', name: 'Walk-in Guest', phone: '+966500000009', date: today,
         status: 'In Progress', participants: 2, source: 'Walk-in', type: 'Without Instructor',
         checkInTime: '11:15 AM', activity: 'Clay play', history: []
       } as any);
@@ -934,7 +1064,7 @@ export const SYSTEM_TESTS: SystemTestDefinition[] = [
       const unified = [...bookings, ...mapped];
 
       return check(
-        mapped.length === 1 && mapped[0].id === 'Q-401' && mapped[0].status === 'Checked In' && unified.length === 1,
+        mapped.length === 1 && mapped[0].id === 'TEST-Q-401' && mapped[0].status === 'Checked In' && unified.length === 1,
         'The walk-in shows in Bookings as Checked In',
         mapped.length === 1
           ? `${mapped[0].id} shown as ${mapped[0].status}`
@@ -985,17 +1115,17 @@ export const SYSTEM_TESTS: SystemTestDefinition[] = [
     run: async ({ temp }) => {
       await seedTemp(temp);
       await temp.categories.clear();
-      await temp.categories.put({ id: 'cat-1', name: 'Pottery' } as any);
+      await temp.categories.put({ id: 'TEST-cat-1', name: 'Pottery' } as any);
 
       const typed = 'Glass Fusing';
       const existing = (await temp.categories.toArray())
         .find(c => c.name.toLowerCase() === typed.toLowerCase());
-      if (!existing) await temp.categories.put({ id: 'cat-new', name: typed } as any);
+      if (!existing) await temp.categories.put({ id: 'TEST-cat-new', name: typed } as any);
 
       // Re-typing one that exists must not add a second row.
       const again = (await temp.categories.toArray())
         .find(c => c.name.toLowerCase() === 'pottery');
-      if (!again) await temp.categories.put({ id: 'cat-dupe', name: 'Pottery' } as any);
+      if (!again) await temp.categories.put({ id: 'TEST-cat-dupe', name: 'Pottery' } as any);
 
       const all = await temp.categories.toArray();
       return check(
@@ -1256,16 +1386,19 @@ export const SYSTEM_TESTS: SystemTestDefinition[] = [
       await seedTemp(temp);
       await temp.pieces.put({
         id: 'TEST-PC-1', name: 'Bowl', status: 'Created', customerId: FIXTURE_CUSTOMER.id,
-        customerName: 'Fixture Customer', customerPhone: '+966501234567',
-        history: [{ status: 'Created', timestamp: new Date().toISOString(), user: 'Staff' }]
+        customerName: 'Fixture Customer', customerPhone: '+966501234567'
+      } as any);
+      // History lives in its own append-only table.
+      await temp.pieceHistory.add({
+        pieceId: 'TEST-PC-1', status: 'Created',
+        timestamp: new Date().toISOString(), user: 'Staff'
       } as any);
 
       const move = async (to: string, user: string, reason?: string) => {
-        const piece = await temp.pieces.get('TEST-PC-1');
-        await temp.pieces.update('TEST-PC-1', {
-          status: to,
-          history: [...(piece!.history || []),
-            { status: to, timestamp: new Date().toISOString(), user, reason }]
+        await temp.pieces.update('TEST-PC-1', { status: to } as any);
+        await temp.pieceHistory.add({
+          pieceId: 'TEST-PC-1', status: to,
+          timestamp: new Date().toISOString(), user, reason
         } as any);
       };
 
@@ -1273,7 +1406,9 @@ export const SYSTEM_TESTS: SystemTestDefinition[] = [
       await move('Drying', 'Manager', 'Needed more drying time');
 
       const final = await temp.pieces.get('TEST-PC-1');
-      const trail = final!.history || [];
+      const trail = (await temp.pieceHistory.toArray())
+        .filter((h: any) => h.pieceId === 'TEST-PC-1')
+        .sort((a: any, b: any) => String(a.timestamp).localeCompare(String(b.timestamp)));
       const backward = trail[trail.length - 1];
 
       return check(
@@ -1328,7 +1463,7 @@ export const SYSTEM_TESTS: SystemTestDefinition[] = [
     description: 'Registers a staff member, then tries a second one on the same number and the same email.',
     category: 'Staff',
     kind: 'scenario',
-    run: async ({ temp }) => {
+    run: async ({ temp, scoped }) => {
       await seedTemp(temp);
       await temp.staff.put({
         id: 'TEST-STF-A', name: 'Lina Al-Sudais', position: 'Instructor', status: 'Active',
@@ -1337,13 +1472,13 @@ export const SYSTEM_TESTS: SystemTestDefinition[] = [
 
       const dupePhone = await validateStaffForm(
         { name: 'New', position: 'Assistant', phone: '0533334444', email: 'new@artycafe.com' },
-        undefined, temp as ValidationDb);
+        undefined, scoped);
       const dupeEmail = await validateStaffForm(
         { name: 'New', position: 'Assistant', phone: '0577776666', email: 'LINA@artycafe.com' },
-        undefined, temp as ValidationDb);
+        undefined, scoped);
       const clean = await validateStaffForm(
         { name: 'New', position: 'Assistant', phone: '0577776666', email: 'new@artycafe.com' },
-        undefined, temp as ValidationDb);
+        undefined, scoped);
 
       return check(
         !!dupePhone.phone && !!dupeEmail.email && Object.keys(clean).length === 0,
@@ -1480,14 +1615,18 @@ export const SYSTEM_TESTS: SystemTestDefinition[] = [
     run: async ({ temp }) => {
       await seedTemp(temp);
       await temp.pieces.put({
-        id: 'TEST-PC-S', name: 'Bowl', status: 'Drying', customerName: 'X',
-        history: [{ status: 'Glazing', timestamp: '2026-01-01', user: 'Staff' }]
+        id: 'TEST-PC-S', name: 'Bowl', status: 'Drying', customerName: 'X'
+      } as any);
+      await temp.pieceHistory.add({
+        pieceId: 'TEST-PC-S', status: 'Glazing',
+        timestamp: '2026-01-01T00:00:00.000Z', user: 'Staff'
       } as any);
 
       const pieces = await temp.pieces.toArray();
+      const history = await temp.pieceHistory.toArray();
       const canDelete = (stageName: string) =>
         !pieces.some(p => p.status === stageName) &&
-        !pieces.some(p => (p.history || []).some(h => h.status === stageName));
+        !history.some((h: any) => h.status === stageName);
 
       const inUse = canDelete('Drying');
       const inHistory = canDelete('Glazing');
@@ -1626,35 +1765,297 @@ export const SYSTEM_TESTS: SystemTestDefinition[] = [
           : `${orphaned.length} orphaned: ${listSome(orphaned.map(s => `${s.id}→${s.staffId}`))}`,
         'A session is assigned to a staff member who no longer exists, so the class shows no instructor.'
       );
+    }  },
+
+  // ---------- SECURITY: what the database itself refuses ----------
+  {
+    id: 'SEC-01',
+    name: 'A signed-out visitor cannot read customer data',
+    description: 'Queries bookings, customers, queue, pieces and staff with no session at all.',
+    category: 'Roles & Access',
+    kind: 'audit',
+    run: async () => {
+      const anon = anonClient();
+      if (!anon) return pass('Skipped — Supabase is not configured', 'No client to test with');
+
+      const readable: string[] = [];
+      for (const table of ['bookings', 'customers', 'queue', 'pieces', 'staff', 'notifications']) {
+        const { data } = await anon.from(table).select('id').limit(1);
+        if (data && data.length > 0) readable.push(table);
+      }
+
+      return check(
+        readable.length === 0,
+        'No rows returned from any customer or staff table',
+        readable.length === 0
+          ? 'All six tables returned nothing to an anonymous reader'
+          : `Readable without signing in: ${readable.join(', ')}`,
+        'Anyone can read customer records straight from the API without signing in.'
+      );
+    }
+  },
+  {
+    id: 'SEC-02',
+    name: 'The public catalogue stays public',
+    description: 'The customer site must still browse workshops and packages while signed out.',
+    category: 'Roles & Access',
+    kind: 'audit',
+    run: async () => {
+      const anon = anonClient();
+      if (!anon) return pass('Skipped — Supabase is not configured', 'No client to test with');
+
+      const blocked: string[] = [];
+      for (const table of ['workshops', 'workshop_sessions', 'birthday_packages', 'pipeline_stages']) {
+        const { error } = await anon.from(table).select('id').limit(1);
+        if (error) blocked.push(`${table} (${error.message})`);
+      }
+
+      return check(
+        blocked.length === 0,
+        'All four catalogue tables are readable while signed out',
+        blocked.length === 0 ? 'Catalogue is browsable anonymously' : `Blocked: ${blocked.join('; ')}`,
+        'A signed-out visitor cannot browse the workshops, so the public site is empty.'
+      );
+    }
+  },
+  {
+    id: 'SEC-03',
+    name: 'damage_note never reaches a customer',
+    description: 'Checks the customer-facing pieces view does not expose the internal damage note.',
+    category: 'Pieces',
+    kind: 'audit',
+    run: async () => {
+      const anon = anonClient();
+      if (!anon) return pass('Skipped — Supabase is not configured', 'No client to test with');
+
+      // Asking the view for the column must fail: it is not in its column list.
+      const { error } = await anon.from('customer_pieces').select('damage_note').limit(1);
+      const refused = !!error;
+
+      // And the base table must not be readable at all without a session.
+      const { data: baseRows } = await anon.from('pieces').select('damage_note').limit(1);
+
+      return check(
+        refused && (!baseRows || baseRows.length === 0),
+        'customer_pieces has no damage_note column, and pieces is not readable',
+        refused
+          ? `View refused the column${baseRows?.length ? ', but the base table returned rows' : '; base table returned nothing'}`
+          : 'The customer view returned a damage_note column',
+        'The internal damage note — which is never meant to leave the console — can be read by a customer.'
+      );
+    }
+  },
+  {
+    id: 'SEC-04',
+    name: 'Claim and link cannot be used to discover accounts',
+    description: 'Calls both security-definer functions with an unknown identifier and with a claimed one.',
+    category: 'Roles & Access',
+    kind: 'audit',
+    run: async () => {
+      const anon = anonClient();
+      if (!anon) return pass('Skipped — Supabase is not configured', 'No client to test with');
+
+      const probe = async (fn: string, identifier: string) => {
+        const { data, error } = await anon.rpc(fn, { identifier, new_auth_id: null });
+        return { value: data ?? null, error: error?.message ?? null };
+      };
+
+      const unknown = await probe('claim_customer_account', '0500000000');
+      const blank = await probe('claim_customer_account', '');
+      const linkUnknown = await probe('link_existing_customer', '0500000000');
+
+      const indistinguishable =
+        unknown.value === null && blank.value === null && linkUnknown.value === null;
+
+      return check(
+        indistinguishable,
+        'Both functions return the same empty answer for every identifier',
+        indistinguishable
+          ? 'No identifier produced a distinguishable response'
+          : `claim: ${JSON.stringify(unknown.value)}, blank: ${JSON.stringify(blank.value)}, link: ${JSON.stringify(linkUnknown.value)}`,
+        'The claim function answers differently for a known number, so it can be used to discover which customers exist.'
+      );
+    }
+  },
+  {
+    id: 'SEC-05',
+    name: 'Claiming never creates a second customer',
+    description: 'Calls the claim function repeatedly and checks the customer count does not move.',
+    category: 'Customers',
+    kind: 'audit',
+    run: async ({ live }) => {
+      const anon = anonClient();
+      if (!anon) return pass('Skipped — Supabase is not configured', 'No client to test with');
+
+      const before = (await live.customers.toArray()).length;
+      for (let i = 0; i < 3; i++) {
+        await anon.rpc('claim_customer_account', { identifier: '0500000000', new_auth_id: null });
+      }
+      const after = (await live.customers.toArray()).length;
+
+      return check(
+        after === before,
+        `Customer count unchanged at ${before}`,
+        `${before} before, ${after} after three calls`,
+        'Calling the claim function created customer records, so it can be used to fill the table with junk.'
+      );
+    }
+  },
+
+  // ---------- MIGRATIONS ----------
+  {
+    id: 'MIG-01',
+    name: 'Every migration has been applied',
+    description: 'Probes each expected function, table and column by name.',
+    category: 'Data Integrity',
+    kind: 'audit',
+    run: async () => {
+      const result = await checkMigrations();
+      if (result.skipped) return pass('Skipped — Supabase is not configured', 'No client to probe');
+
+      return check(
+        result.ok,
+        'All expected database objects exist',
+        result.ok
+          ? 'Every function, table and column is present'
+          : result.problems.join(' | '),
+        `A migration has not been run: ${result.missingMigrations.join(', ')}. Parts of the app will fail until it is.`
+      );
+    }
+  },
+  {
+    id: 'MIG-02',
+    name: 'Seat allocation is atomic',
+    description: 'Books through the real RPC and checks it refuses to oversell the last seat.',
+    category: 'Bookings',
+    kind: 'scenario',
+    run: async ({ temp }) => {
+      await seedTemp(temp);
+      const client = getDataClient();
+      if (!client) return pass('Skipped — Supabase is not configured', 'No client to test with');
+
+      const booking = (id: string, participants: number) => ({
+        id, customer_name: 'Fixture', workshop_id: FIXTURE_WORKSHOP.id,
+        session_id: FIXTURE_SESSION.id, date: FIXTURE_SESSION.date,
+        time: FIXTURE_SESSION.startTime, participants, status: 'Pending', payment_status: 'Paid'
+      });
+
+      // Confirm the fixture is actually there before blaming the capacity
+      // rule: "refused" otherwise hides a missing session.
+      const seeded = await sdb.workshopSessions.get(FIXTURE_SESSION.id);
+      if (!seeded) {
+        return fail(
+          'The fixture session exists before booking against it',
+          `workshop_sessions has no row ${FIXTURE_SESSION.id} — the fixture was not written`,
+          'The test could not set up its own data, so the capacity rule was never exercised.'
+        );
+      }
+
+      // Fill 5 of the 6 seats, then ask for 2 — one seat short.
+      const first = await client.rpc('book_session_seats', {
+        p_booking: booking('TEST-BK-ATOMIC-1', 5), p_session_id: FIXTURE_SESSION.id
+      });
+      const overflow = await client.rpc('book_session_seats', {
+        p_booking: booking('TEST-BK-ATOMIC-2', 2), p_session_id: FIXTURE_SESSION.id
+      });
+      // The last seat on its own must still be allowed.
+      const lastSeat = await client.rpc('book_session_seats', {
+        p_booking: booking('TEST-BK-ATOMIC-3', 1), p_session_id: FIXTURE_SESSION.id
+      });
+
+      // Report what the database actually said. "refused" on its own hides
+      // whether the refusal was the capacity rule or an unrelated error.
+      const why = (r: { error: { message: string } | null }) =>
+        r.error ? `refused (${r.error.message})` : 'ok';
+
+      return check(
+        !first.error && !!overflow.error && !lastSeat.error,
+        '5 seats taken, a 2-seat request refused, the final seat allowed',
+        `first: ${why(first)}, overflow: ${why(overflow)}, last seat: ${why(lastSeat)}`,
+        'The database allowed a session to be oversold, so two customers can hold the same seat.'
+      );
+    }
+  },
+  {
+    id: 'MIG-03',
+    name: 'Queue numbers come from the database',
+    description: 'Asks the RPC for a number twice and checks it reflects rows written in between.',
+    category: 'Live Queue',
+    kind: 'scenario',
+    run: async ({ temp }) => {
+      await seedTemp(temp);
+      const client = getDataClient();
+      if (!client) return pass('Skipped — Supabase is not configured', 'No client to test with');
+
+      const day = '2026-12-02';
+      const before = await client.rpc('next_queue_id', { p_date: day });
+
+      await temp.queue.put({
+        id: 'TEST-Q-900', name: 'Fixture', date: day, status: 'Waiting',
+        participants: 1, type: 'Without Instructor', source: 'Walk-in'
+      } as any);
+
+      const after = await client.rpc('next_queue_id', { p_date: day });
+
+      const moved = typeof before.data === 'string' && typeof after.data === 'string'
+        && before.data !== after.data;
+
+      return check(
+        moved && String(after.data).startsWith('Q-'),
+        'The next number advances once an entry exists for that day',
+        `${before.data} then ${after.data}`,
+        'Queue numbering does not see other entries, so two walk-ins can be given the same number.'
+      );
+    }
+  },
+  {
+    id: 'MIG-04',
+    name: 'Piece history is append-only in its own table',
+    description: 'Writes two history entries for one piece and checks both survive.',
+    category: 'Pieces',
+    kind: 'scenario',
+    run: async ({ temp }) => {
+      await seedTemp(temp);
+      await temp.pieces.put({
+        id: 'TEST-PC-HIST', name: 'Bowl', status: 'Created',
+        customerName: 'Fixture Customer', customerId: FIXTURE_CUSTOMER.id
+      } as any);
+
+      await temp.pieceHistory.add({
+        pieceId: 'TEST-PC-HIST', status: 'Created', timestamp: new Date().toISOString(), user: 'Staff'
+      } as any);
+      await temp.pieceHistory.add({
+        pieceId: 'TEST-PC-HIST', status: 'Drying', timestamp: new Date().toISOString(), user: 'Staff'
+      } as any);
+
+      const rows = (await temp.pieceHistory.toArray())
+        .filter((h: any) => h.pieceId === 'TEST-PC-HIST');
+
+      return check(
+        rows.length === 2,
+        'Both entries stored as separate rows',
+        `${rows.length} history row(s): ${rows.map((r: any) => r.status).join(' → ')}`,
+        'A second status change overwrote the first, so the audit trail is being lost.'
+      );
     }
   }
 ];
+
 
 // ==========================================================
 // RUNNER
 // ==========================================================
 
-const TEMP_DB_NAME = 'ArtyCafeDatabase__systemtests';
-
-/** Opens a throwaway database built from the real schema. */
-async function openTempDatabase(): Promise<ArtyCafeDatabase> {
-  // Any leftover from an interrupted run is discarded first.
-  await ArtyCafeDatabase.delete(TEMP_DB_NAME).catch(() => undefined);
-  const temp = new ArtyCafeDatabase(TEMP_DB_NAME);
-  await temp.open();
-  return temp;
-}
-
-async function destroyTempDatabase(temp: ArtyCafeDatabase | null): Promise<void> {
-  if (!temp) return;
-  try {
-    temp.close();
-    await temp.delete();
-  } catch {
-    /* the run is over; a failed cleanup must not fail the suite */
-  }
-}
-
+/**
+ * TEST DATA ISOLATION
+ *
+ * There is one database now, so the suite writes into the real tables — but
+ * every row it creates is prefixed TEST-, and `purgeTestRows()` removes them
+ * before the run and again in a `finally` afterwards, so a crash mid-suite
+ * cannot leave fixtures where staff would see them.
+ *
+ * Audits read the real rows; they never write.
+ */
 /** Runs one definition and turns it into a TestResult row. */
 async function runOne(def: SystemTestDefinition, ctx: SystemTestContext): Promise<TestResult> {
   const started = performance.now();
@@ -1698,11 +2099,14 @@ export async function runSystemTests(
 ): Promise<TestResult[]> {
   const defs = options.only ? SYSTEM_TESTS.filter(t => t.id === options.only) : SYSTEM_TESTS;
   const results: TestResult[] = [];
-  let temp: ArtyCafeDatabase | null = null;
+
+  // Scenarios read through the scoped façade so they see only their own
+  // fixtures; audits read the real tables through `live`.
+  const ctx: SystemTestContext = { temp: scopedDb, live: sdb, scoped: scopedValidationDb };
 
   try {
-    temp = await openTempDatabase();
-    const ctx: SystemTestContext = { temp, live: db };
+    // Anything left by an interrupted run goes first.
+    await purgeTestRows();
 
     for (const def of defs) {
       const result = await runOne(def, ctx);
@@ -1710,7 +2114,8 @@ export async function runSystemTests(
       options.onProgress?.(results.length, defs.length, result);
     }
   } finally {
-    await destroyTempDatabase(temp);
+    // Guaranteed: the suite never leaves rows behind, even after a throw.
+    await purgeTestRows();
   }
 
   return results;
