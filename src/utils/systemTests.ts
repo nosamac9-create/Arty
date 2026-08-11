@@ -31,6 +31,7 @@ import { getSessionSeatUsage } from './queueUtils';
 import { getRiyadhDateString } from './dateUtils';
 import { getActivitiesForDate } from './activityUtils';
 import { checkStaffMemberAvailability } from './staffAvailabilityUtils';
+import { getUpcomingAssignments, describeInactiveWarning } from './staffAssignments';
 import { customerPhoneKey, findCustomerMatch, normalizeCustomerPhone } from './customerIdentity';
 import { validateWorkshopForm, validateEventForm, validateStaffForm } from './validation';
 import { canAccessPage, isSuperAdmin, ADMIN_PAGE_IDS, defaultPermissionsForRole } from './adminAccess';
@@ -242,6 +243,14 @@ function scopedFacade(): typeof sdb {
       return {
         ...api,
         toArray: async () => (await api.toArray()).filter(belongsToSuite),
+        count: async () => (await api.toArray()).filter(belongsToSuite).length,
+        // The unscoped clear() wipes the whole real table — it deleted the
+        // studio's actual pipeline stages and categories this way once
+        // already. A test's "clear" may only ever remove its own rows.
+        clear: async () => {
+          const rows = (await api.toArray()).filter(belongsToSuite);
+          for (const row of rows) await api.delete(row.id);
+        },
         filter: (predicate: (row: any) => boolean) => ({
           toArray: async () => (await api.toArray()).filter(belongsToSuite).filter(predicate),
           first: async () => (await api.toArray()).filter(belongsToSuite).filter(predicate)[0],
@@ -262,29 +271,31 @@ const scopedValidationDb = scopedDb as unknown as ValidationDb;
 
 /**
  * The warning an admin should see when a staff member is switched to Inactive
- * while they still hold assignments. Returns null when the console raises
- * nothing — which is what STF-03 checks for.
+ * while they still hold assignments. Calls the same production helper the
+ * Staff Registry's save guard uses, so this test exercises the real rule.
  */
 async function staffInactiveWarning(
   source: typeof sdb,
   staffId: string
 ): Promise<string | null> {
-  // Mirrors the only guard that exists today: it lives on DELETE, not on the
-  // status change. If a status-change guard is added later, point this at it.
-  const [workshops, pieces, member] = await Promise.all([
+  const [staffList, workshopSessions, workshops, events, bookings, birthdayPackages, queue] = await Promise.all([
+    source.staff.toArray(),
+    source.workshopSessions.toArray(),
     source.workshops.toArray(),
-    source.pieces.toArray(),
-    source.staff.get(staffId)
+    source.events.toArray(),
+    source.bookings.toArray(),
+    source.birthdayPackages.toArray(),
+    source.queue.toArray()
   ]);
+  const member = staffList.find((s: any) => s.id === staffId);
   if (!member) return null;
 
-  const assignedWorkshops = workshops.filter(
-    w => w.staffId === staffId || (!w.staffId && w.instructor === member.name)).length;
-  const assignedPieces = pieces.filter(p => p.assignedStaff === member.name).length;
-  if (assignedWorkshops === 0 && assignedPieces === 0) return null;
-
-  // Nothing in the app raises this on a status change today.
-  return null;
+  const held = getUpcomingAssignments(
+    staffId,
+    { staff: staffList, workshopSessions, workshops, events, bookings, birthdayPackages, queue } as any,
+    getRiyadhDateString()
+  );
+  return describeInactiveWarning(member.status, 'Inactive', held);
 }
 
 // ==========================================================
@@ -1115,22 +1126,25 @@ export const SYSTEM_TESTS: SystemTestDefinition[] = [
     run: async ({ temp }) => {
       await seedTemp(temp);
       await temp.categories.clear();
-      await temp.categories.put({ id: 'TEST-cat-1', name: 'Pottery' } as any);
+      // Names, not just ids, must stay clear of anything a real studio would
+      // plausibly use — "Pottery" collided with the studio's real category
+      // and the unique-on-name constraint refused the write.
+      await temp.categories.put({ id: 'TEST-cat-1', name: 'TEST Fixture Category' } as any);
 
-      const typed = 'Glass Fusing';
+      const typed = 'TEST Glass Fusing';
       const existing = (await temp.categories.toArray())
         .find(c => c.name.toLowerCase() === typed.toLowerCase());
       if (!existing) await temp.categories.put({ id: 'TEST-cat-new', name: typed } as any);
 
       // Re-typing one that exists must not add a second row.
       const again = (await temp.categories.toArray())
-        .find(c => c.name.toLowerCase() === 'pottery');
-      if (!again) await temp.categories.put({ id: 'TEST-cat-dupe', name: 'Pottery' } as any);
+        .find(c => c.name.toLowerCase() === 'test fixture category');
+      if (!again) await temp.categories.put({ id: 'TEST-cat-dupe', name: 'TEST Fixture Category' } as any);
 
       const all = await temp.categories.toArray();
       return check(
         all.length === 2 && all.some(c => c.name === typed),
-        '"Glass Fusing" is added; re-typing "Pottery" adds nothing',
+        '"TEST Glass Fusing" is added; re-typing "TEST Fixture Category" adds nothing',
         `${all.length} categories: ${all.map(c => c.name).join(', ')}`,
         'A category typed into the workshop form is lost, or duplicated on every save.'
       );
@@ -1586,9 +1600,9 @@ export const SYSTEM_TESTS: SystemTestDefinition[] = [
       await seedTemp(temp);
       await temp.pipelineStages.clear();
       await temp.pipelineStages.bulkPut([
-        { id: 'st-1', name: 'Created', color: '#a', order: 0, visibleToCustomer: true, enabled: true },
-        { id: 'st-2', name: 'Kiln Drying', color: '#b', order: 1, visibleToCustomer: false, enabled: true },
-        { id: 'st-3', name: 'Retired Stage', color: '#c', order: 2, visibleToCustomer: false, enabled: false }
+        { id: 'TEST-st-1', name: 'Created', color: '#a', order: 0, visibleToCustomer: true, enabled: true },
+        { id: 'TEST-st-2', name: 'Kiln Drying', color: '#b', order: 1, visibleToCustomer: false, enabled: true },
+        { id: 'TEST-st-3', name: 'Retired Stage', color: '#c', order: 2, visibleToCustomer: false, enabled: false }
       ] as any);
 
       const stages = (await temp.pipelineStages.toArray()).sort((a, b) => a.order - b.order);
@@ -1937,7 +1951,15 @@ export const SYSTEM_TESTS: SystemTestDefinition[] = [
       const booking = (id: string, participants: number) => ({
         id, customer_name: 'Fixture', workshop_id: FIXTURE_WORKSHOP.id,
         session_id: FIXTURE_SESSION.id, date: FIXTURE_SESSION.date,
-        time: FIXTURE_SESSION.startTime, participants, status: 'Pending', payment_status: 'Paid'
+        time: FIXTURE_SESSION.startTime, participants, status: 'Pending', payment_status: 'Paid',
+        // Every not-null bookings column needs a real value here:
+        // book_session_seats inserts via jsonb_populate_record, which fills
+        // an omitted key with NULL rather than the column default, so
+        // leaving any of these out fails before the capacity rule ever runs.
+        total_price: participants * 100,
+        source: 'Admin',
+        timeline: [],
+        created_at: new Date().toISOString()
       });
 
       // Confirm the fixture is actually there before blaming the capacity

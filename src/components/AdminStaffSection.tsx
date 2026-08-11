@@ -12,7 +12,7 @@ import {
   ChevronLeft, ChevronRight, Briefcase, Plus, UserCheck, Shield, Sparkles
 } from 'lucide-react';
 import { checkStaffMemberAvailability } from '../utils/staffAvailabilityUtils';
-import { buildStaffAssignmentMap } from '../utils/staffAssignments';
+import { buildStaffAssignmentMap, getUpcomingAssignments, describeInactiveWarning } from '../utils/staffAssignments';
 import { validateStaffForm, staffStorageFields } from '../utils/validation';
 import { WEEKDAYS, toDaySchedule, createShift, countScheduledDays } from '../utils/staffScheduleUtils';
 import { getRiyadhDateString } from '../utils/dateUtils';
@@ -150,6 +150,15 @@ export const AdminStaffSection: React.FC = () => {
     const canonical = staffStorageFields({ phone: formData.phone, email: formData.email });
 
     if (editStaffId) {
+      // Going Inactive/Former Staff while still holding upcoming sessions or
+      // events would silently leave them without an instructor — warn before
+      // saving, the same rule STF-03 checks in System Health.
+      const previous = staff.find(s => s.id === editStaffId);
+      const nextStatus = formData.status || previous?.status || 'Active';
+      const held = getUpcomingAssignments(editStaffId, assignmentSources, todayDateStr);
+      const warning = describeInactiveWarning(previous?.status, nextStatus, held);
+      if (warning && !window.confirm(`${warning}\n\nSave anyway?`)) return;
+
       // Persist the edited record (including the schedule) to the shared data layer.
       await updateStaffMember(editStaffId, {
         ...formData,

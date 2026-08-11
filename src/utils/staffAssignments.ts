@@ -280,3 +280,35 @@ export function getAssignmentsForStaff(
   const all = buildStaffAssignmentMap(sources).get(staffId) || [];
   return all.filter(a => !isExcluded(a, exclude));
 }
+
+/** A staff member's assignments today or later — what "still holds" means for a status-change warning. */
+export function getUpcomingAssignments(
+  staffId: string,
+  sources: AssignmentSources,
+  todayStr: string
+): StaffAssignment[] {
+  return getAssignmentsForStaff(staffId, sources).filter(a => a.date >= todayStr);
+}
+
+/**
+ * Warning to raise before saving a staff member as Inactive or Former Staff
+ * while they still hold upcoming assignments — those sessions and events
+ * would otherwise silently lose their instructor. Returns null when no
+ * warning is needed. Shared by the Staff Registry save guard and STF-03 in
+ * the System Health suite, so both agree on the same rule.
+ */
+export function describeInactiveWarning(
+  previousStatus: string | undefined,
+  nextStatus: string,
+  held: StaffAssignment[]
+): string | null {
+  const takesEffect = (nextStatus === 'Inactive' || nextStatus === 'Former Staff') && previousStatus !== nextStatus;
+  if (!takesEffect || held.length === 0) return null;
+
+  const preview = held.slice(0, 3).map(a => `${a.title} on ${a.date}`).join(', ');
+  const more = held.length > 3 ? `, and ${held.length - 3} more` : '';
+  const noun = held.length === 1 ? 'assignment' : 'assignments';
+  const pronoun = held.length === 1 ? 'it' : 'them';
+  return `This staff member still holds ${held.length} upcoming ${noun}: ${preview}${more}. `
+    + `Saving as ${nextStatus} will leave ${pronoun} without an instructor.`;
+}
