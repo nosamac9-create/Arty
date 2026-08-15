@@ -6,6 +6,7 @@
 import React from 'react';
 import { useApp } from './context/AppContext';
 import { CustomerHeader, CustomerFooter } from './components/CustomerHeader';
+import { LanguageProvider } from './context/LanguageContext';
 import { HomeSection } from './components/HomeSection';
 import { WorkshopsBrowsingSection } from './components/WorkshopsBrowsingSection';
 import { WorkshopDetailSection } from './components/WorkshopDetailSection';
@@ -18,6 +19,7 @@ import { BirthdayBookingSection } from './components/BirthdayBookingSection';
 import { MyPiecesSection } from './components/MyPiecesSection';
 import { ResetPasswordSection } from './components/ResetPasswordSection';
 import { MigrationWarning } from './components/MigrationWarning';
+import { PageTransition } from './components/PageTransition';
 
 import { AdminSidebar, AdminTopBar } from './components/AdminSidebar';
 import { AdminLoginSection } from './components/AdminLoginSection';
@@ -79,10 +81,12 @@ export default function App() {
       {area === 'customer' ? (
         
         /* 1. CUSTOMER SITE */
-        <div className="flex flex-col flex-1 justify-between min-h-screen">
+        <LanguageProvider>
+        <div className="flex flex-col flex-1 justify-between min-h-screen bg-brand-sand">
           <CustomerHeader />
           
-          <main className="flex-1 w-full bg-brand-cream">
+          <main className="flex-1 w-full">
+            <PageTransition pageKey={customerTab}>
             {customerTab === 'home' && <HomeSection />}
             {customerTab === 'workshops' && <WorkshopsBrowsingSection />}
             {customerTab === 'detail' && <WorkshopDetailSection />}
@@ -94,10 +98,12 @@ export default function App() {
             {customerTab === 'auth' && <AuthSection />}
             {customerTab === 'reset-password' && <ResetPasswordSection />}
             {customerTab === 'birthday-booking' && <BirthdayBookingSection />}
+            </PageTransition>
           </main>
 
           <CustomerFooter />
         </div>
+        </LanguageProvider>
       ) : (
         
         /* 2. STAFF CONSOLE — guarded */
@@ -117,7 +123,10 @@ export default function App() {
         <div className="flex flex-1 min-h-screen overflow-hidden">
           <AdminSidebar />
           
-          <div className="flex-1 flex flex-col overflow-y-auto min-h-screen bg-brand-cream">
+          {/* min-w-0 lets this column shrink below its content's natural width.
+              Without it a wide child (the Kanban board, the sessions table)
+              blows the layout out sideways instead of scrolling inside itself. */}
+          <div className="flex-1 min-w-0 flex flex-col overflow-y-auto min-h-screen bg-brand-cream">
             <AdminTopBar />
             
             <main className="flex-1">

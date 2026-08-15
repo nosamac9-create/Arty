@@ -244,7 +244,7 @@ export const AdminStaffSection: React.FC = () => {
   };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6 text-left">
+    <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6 min-w-0 text-left">
       
       {/* HEADER BAR */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-brand-clay/60 shadow-xs">

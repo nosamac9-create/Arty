@@ -86,12 +86,12 @@ export const MyPiecesSection: React.FC = () => {
   };
 
   return (
-    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 animate-in fade-in duration-300 text-left">
+    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 animate-in fade-in duration-300 text-start">
       
       {/* Header block */}
-      <div className="pb-8 border-b border-brand-clay/60 mb-8">
-        <h1 className="font-display text-3xl font-extrabold text-brand-charcoal">My Pottery Creations</h1>
-        <p className="text-sm text-brand-charcoal/70 mt-1">
+      <div className="pb-8 border-b border-brand-clay mb-8">
+        <h1 className="font-display text-3xl font-semibold text-brand-charcoal">My Pottery Creations</h1>
+        <p className="text-sm text-brand-ink mt-1">
           Track your handcrafted clay pieces as they move from wet clay crafting to our kiln firing and glazing stages.
         </p>
       </div>
@@ -102,10 +102,10 @@ export const MyPiecesSection: React.FC = () => {
           {customerNotifs.map((n) => (
             <div
               key={n.id}
-              className={`p-5 rounded-2xl border text-left flex justify-between items-start gap-4 transition-all duration-300 animate-in fade-in slide-in-from-left-4 ${
+              className={`p-5 rounded-2xl border text-start flex justify-between items-start gap-4 transition-all duration-300 animate-in fade-in slide-in-from-left-4 ${
                 n.highlighted
-                  ? 'bg-gradient-to-r from-amber-50 to-brand-sand/30 border-brand-terracotta ring-4 ring-brand-terracotta/5 shadow-md'
-                  : 'bg-white border-brand-clay/70 shadow-xs'
+                  ? 'bg-gradient-to-r from-amber-50 to-brand-sand/30 border-brand-terracotta ring-4 ring-brand-terracotta/5 shadow-card-sm'
+                  : 'bg-brand-cream border-brand-clay/70 shadow-card-sm'
               }`}
             >
               <div className="flex items-start gap-3.5">
@@ -115,10 +115,10 @@ export const MyPiecesSection: React.FC = () => {
                   <Sparkles className="h-5 w-5" />
                 </div>
                 <div>
-                  <h4 className={`text-sm font-bold ${n.highlighted ? 'text-brand-terracotta' : 'text-brand-charcoal'}`}>
+                  <h4 className={`text-sm font-semibold ${n.highlighted ? 'text-brand-terracotta' : 'text-brand-charcoal'}`}>
                     {n.title}
                   </h4>
-                  <p className="text-xs text-brand-charcoal/70 mt-1 leading-relaxed">
+                  <p className="text-xs text-brand-ink mt-1 leading-relaxed">
                     {n.message}
                   </p>
                   <span className="text-[9px] text-brand-charcoal/45 font-semibold block mt-1.5">
@@ -129,7 +129,7 @@ export const MyPiecesSection: React.FC = () => {
 
               <button
                 onClick={() => markNotificationAsRead(n.id)}
-                className="text-[10px] font-bold text-brand-sage hover:text-brand-terracotta bg-brand-sand/50 hover:bg-brand-sand px-3 py-1.5 rounded-lg border border-brand-clay/40 transition-colors cursor-pointer shrink-0"
+                className="text-[10px] font-semibold text-brand-sage hover:text-brand-terracotta bg-brand-sand/50 hover:bg-brand-sand px-3 py-1.5 rounded-lg border border-brand-clay transition-colors cursor-pointer shrink-0"
               >
                 Dismiss
               </button>
@@ -140,19 +140,19 @@ export const MyPiecesSection: React.FC = () => {
 
       {/* Not Logged In State */}
       {!currentUser ? (
-        <div className="bg-brand-sand/30 border border-brand-clay rounded-3xl py-16 px-6 text-center max-w-md mx-auto space-y-4">
+        <div className="bg-brand-sand/30 border border-brand-clay rounded-[28px] py-16 px-6 text-center max-w-md mx-auto space-y-4">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-terracotta/10 text-brand-terracotta">
             <Flame className="h-7 w-7" />
           </div>
           <div>
-            <h3 className="font-display text-xl font-bold text-brand-charcoal">Log in to view your pieces</h3>
-            <p className="text-sm text-brand-charcoal/70 mt-2 leading-relaxed">
+            <h3 className="font-display text-xl font-semibold text-brand-charcoal">Log in to view your pieces</h3>
+            <p className="text-sm text-brand-ink mt-2 leading-relaxed">
               Log in with your account or phone number to see live status updates for your ceramic pieces, kiln firing, and pickup dates.
             </p>
           </div>
           <button
             onClick={() => setCustomerTab('auth')}
-            className="inline-flex items-center gap-2 rounded-xl bg-brand-terracotta px-6 py-3 text-xs font-bold text-brand-cream hover:bg-brand-terracotta-hover shadow-sm cursor-pointer"
+            className="inline-flex items-center gap-2 rounded-xl bg-brand-terracotta px-6 py-3 text-xs font-semibold text-brand-cream hover:bg-brand-terracotta-hover shadow-card-sm cursor-pointer"
           >
             <LogIn className="h-4 w-4" />
             <span>Sign In to Account</span>
@@ -160,19 +160,19 @@ export const MyPiecesSection: React.FC = () => {
         </div>
       ) : userPieces.length === 0 ? (
         /* Empty State for Logged-In User */
-        <div className="bg-brand-sand/30 border border-brand-clay rounded-3xl py-16 px-6 text-center max-w-md mx-auto space-y-4">
+        <div className="bg-brand-sand/30 border border-brand-clay rounded-[28px] py-16 px-6 text-center max-w-md mx-auto space-y-4">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-terracotta/10 text-brand-terracotta">
             <Box className="h-7 w-7" />
           </div>
           <div>
-            <h3 className="font-display text-xl font-bold text-brand-charcoal">No pottery pieces registered yet</h3>
-            <p className="text-sm text-brand-charcoal/70 mt-2 leading-relaxed">
+            <h3 className="font-display text-xl font-semibold text-brand-charcoal">No pottery pieces registered yet</h3>
+            <p className="text-sm text-brand-ink mt-2 leading-relaxed">
               Your handcrafted pieces will appear here once logged by café staff after your workshop session!
             </p>
           </div>
           <button
             onClick={() => setCustomerTab('workshops')}
-            className="inline-flex items-center gap-2 rounded-xl bg-brand-terracotta px-5 py-3 text-xs font-bold text-brand-cream hover:bg-brand-terracotta-hover shadow-sm cursor-pointer"
+            className="inline-flex items-center gap-2 rounded-xl bg-brand-terracotta px-5 py-3 text-xs font-semibold text-brand-cream hover:bg-brand-terracotta-hover shadow-card-sm cursor-pointer"
           >
             <Compass className="h-4 w-4" />
             <span>Explore Workshops</span>
@@ -190,32 +190,32 @@ export const MyPiecesSection: React.FC = () => {
             return (
               <div
                 key={p.id}
-                className={`relative bg-white rounded-[32px] p-6 shadow-xl shadow-brand-charcoal/5 border flex flex-col justify-between transition-all duration-300 ${
+                className={`relative bg-brand-cream rounded-[32px] p-6 shadow-card shadow-brand-charcoal/5 border flex flex-col justify-between transition-all duration-300 ${
                   isBroken
                     ? 'border-2 border-red-300 ring-4 ring-red-100'
                     : isReady
                       ? 'border-2 border-brand-terracotta ring-4 ring-brand-terracotta/5'
-                      : 'border-brand-clay/60'
+                      : 'border-brand-clay'
                 }`}
               >
                 
                 {/* Ready Banner */}
                 {isReady && !isBroken && (
-                  <div className="absolute top-0 left-0 right-0 bg-brand-terracotta text-brand-cream text-center text-xs font-bold py-2 rounded-t-[30px] tracking-wider">
+                  <div className="absolute top-0 left-0 right-0 bg-brand-terracotta text-brand-cream text-center text-xs font-semibold py-2 rounded-t-[30px] tracking-wider">
                     🎉 Ready! Ready for collection at Arty Café shelf.
                   </div>
                 )}
 
                 {/* Broken Banner — states the status plainly, with no internal notes */}
                 {isBroken && (
-                  <div className="absolute top-0 left-0 right-0 bg-red-600 text-white text-center text-xs font-bold py-2 rounded-t-[30px] tracking-wider">
+                  <div className="absolute top-0 left-0 right-0 bg-red-600 text-white text-center text-xs font-semibold py-2 rounded-t-[30px] tracking-wider">
                     Broken — please contact Arty Café
                   </div>
                 )}
 
                 {/* Piece Image and Info */}
                 <div className={`space-y-4 ${isReady || isBroken ? 'pt-6' : ''}`}>
-                  <div className="aspect-video w-full rounded-2xl overflow-hidden bg-brand-sand border border-brand-clay/40">
+                  <div className="aspect-video w-full rounded-2xl overflow-hidden bg-brand-sand border border-brand-clay">
                     <img 
                       src={p.image || 'https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261?auto=format&fit=crop&w=600&q=80'} 
                       alt={p.name} 
@@ -224,30 +224,30 @@ export const MyPiecesSection: React.FC = () => {
                     />
                   </div>
                   
-                  <div className="text-left space-y-1.5">
+                  <div className="text-start space-y-1.5">
                     <div className="flex items-center justify-between">
                       {p.pieceCode ? (
-                        <span className="text-[10px] font-mono font-extrabold bg-brand-sand/80 text-brand-terracotta px-2 py-0.5 rounded border border-brand-clay/60 flex items-center gap-1">
+                        <span className="text-[10px] font-mono font-semibold bg-brand-sand/80 text-brand-terracotta px-2 py-0.5 rounded border border-brand-clay flex items-center gap-1">
                           <Hash className="h-3 w-3" />
                           Code: {p.pieceCode}
                         </span>
                       ) : (
-                        <span className="text-[9px] font-mono font-bold bg-brand-sand px-2 py-0.5 rounded border border-brand-clay/60 text-brand-charcoal/60">
+                        <span className="text-[9px] font-mono font-semibold bg-brand-sand px-2 py-0.5 rounded border border-brand-clay text-brand-muted">
                           ID: {p.id}
                         </span>
                       )}
-                      <span className="text-[10px] font-bold text-brand-sage flex items-center gap-1">
+                      <span className="text-[10px] font-semibold text-brand-sage flex items-center gap-1">
                         <Calendar className="h-3.5 w-3.5" />
                         Created: {p.dateCreated}
                       </span>
                     </div>
 
-                    <h3 className="font-display text-xl font-bold text-brand-charcoal line-clamp-1">{p.name}</h3>
+                    <h3 className="font-display text-xl font-semibold text-brand-charcoal line-clamp-1">{p.name}</h3>
                     <p className="text-xs font-semibold text-brand-terracotta line-clamp-1">{p.workshopName}</p>
 
                     {/* Expected Ready Date */}
                     {p.expectedReadyDate && (
-                      <div className="pt-2 flex items-center gap-1.5 text-xs text-brand-charcoal/80 font-bold bg-brand-sand/30 p-2 rounded-xl border border-brand-clay/40">
+                      <div className="pt-2 flex items-center gap-1.5 text-xs text-brand-ink font-semibold bg-brand-sand/30 p-2 rounded-xl border border-brand-clay">
                         <Clock className="h-3.5 w-3.5 text-brand-terracotta" />
                         <span>Expected Ready: {p.expectedReadyDate}</span>
                       </div>
@@ -257,8 +257,8 @@ export const MyPiecesSection: React.FC = () => {
 
                 {/* Broken status notice — no internal damage note is shown */}
                 {isBroken && (
-                  <div className="mt-4 p-3 rounded-2xl bg-red-50 border border-red-200 text-left">
-                    <p className="text-xs font-bold text-red-800">Status: Broken</p>
+                  <div className="mt-4 p-3 rounded-2xl bg-red-50 border border-red-200 text-start">
+                    <p className="text-xs font-semibold text-red-800">Status: Broken</p>
                     <p className="text-[11px] text-red-700 mt-0.5 leading-relaxed">
                       Unfortunately this piece was damaged. Please contact Arty Café so our team can assist you.
                     </p>
@@ -266,7 +266,7 @@ export const MyPiecesSection: React.FC = () => {
                 )}
 
                 {/* Progress Tracker Bar */}
-                <div className="mt-6 pt-5 border-t border-brand-clay/50 space-y-4">
+                <div className="mt-6 pt-5 border-t border-brand-clay space-y-4">
                   <div className="relative flex items-center justify-between">
                     <div className="absolute left-2.5 right-2.5 top-1/2 -translate-y-1/2 h-1 bg-brand-sand rounded-full"></div>
                     <div 
@@ -283,9 +283,9 @@ export const MyPiecesSection: React.FC = () => {
                           <div 
                             className={`h-5.5 w-5.5 rounded-full border flex items-center justify-center transition-all ${
                               isCompleted 
-                                ? 'bg-brand-terracotta border-brand-terracotta text-brand-cream text-[10px] font-bold' 
+                                ? 'bg-brand-terracotta border-brand-terracotta text-brand-cream text-[10px] font-semibold' 
                                 : isActive 
-                                  ? 'bg-brand-cream border-2 border-brand-terracotta text-brand-terracotta font-bold' 
+                                  ? 'bg-brand-cream border-2 border-brand-terracotta text-brand-terracotta font-semibold' 
                                   : 'bg-brand-sand border-brand-clay text-brand-charcoal/30 text-[10px]'
                             }`}
                           >
@@ -296,7 +296,7 @@ export const MyPiecesSection: React.FC = () => {
                     })}
                   </div>
 
-                  <div className="grid grid-cols-4 gap-1 text-[9px] font-bold text-center leading-tight">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-1 gap-y-2 text-[9px] font-semibold text-center leading-tight">
                     {STAGES.map((stage, idx) => {
                       const isActive = idx === currentStageIdx;
                       const isCompleted = idx < currentStageIdx;
@@ -305,9 +305,9 @@ export const MyPiecesSection: React.FC = () => {
                           key={stage}
                           className={
                             isActive 
-                              ? 'text-brand-terracotta font-extrabold uppercase scale-105 block' 
+                              ? 'text-brand-terracotta font-semibold uppercase scale-105 block' 
                               : isCompleted 
-                                ? 'text-brand-charcoal/80 block' 
+                                ? 'text-brand-ink block' 
                                 : 'text-brand-charcoal/35 block'
                           }
                         >

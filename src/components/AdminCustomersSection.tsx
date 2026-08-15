@@ -542,7 +542,7 @@ export const AdminCustomersSection: React.FC = () => {
   };
 
   return (
-    <div className="p-6 space-y-6 text-left bg-brand-cream min-h-full animate-in fade-in duration-300">
+    <div className="p-4 sm:p-6 space-y-6 min-w-0 text-left bg-brand-cream min-h-full animate-in fade-in duration-300">
       
       {/* =========================================================
           IF A SPECIFIC CUSTOMER IS SELECTED -> SHOW DETAILED PROFILE VIEW

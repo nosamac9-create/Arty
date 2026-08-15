@@ -1,57 +1,135 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Quicksand:wght@300..700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
+/* =============================================================================
+   ARTY CAFÉ — visual identity
+   Warm espresso and sand, with sage as the single accent. One typeface,
+   IBM Plex Sans, with its Arabic sibling for RTL.
+
+   The token NAMES are unchanged so every existing className keeps working;
+   only their values moved. That is what re-skins the whole app coherently
+   rather than screen by screen.
+   ============================================================================= */
+
 @theme {
-  --color-brand-cream: #F9F6F1; /* Warm off-white/cream background */
-  --color-brand-terracotta: #D46A43; /* Clay-orange primary accent */
-  --color-brand-terracotta-hover: #c05d39;
-  --color-brand-sage: #A3B18A; /* Soft sage green */
-  --color-brand-blue: #708D9C; /* Dusty blue */
-  --color-brand-charcoal: #2D2D2D; /* Deep charcoal text */
-  --color-brand-sand: #EAE7E1; /* Rich warm sand */
-  --color-brand-clay: #E3D9C9; /* Soft organic borders */
-  
-  --font-sans: "Quicksand", system-ui, -apple-system, sans-serif;
-  --font-display: "Playfair Display", Georgia, serif;
+  /* Surfaces */
+  --color-brand-cream: #FAF6EF;   /* cards, headers, raised surfaces */
+  --color-brand-sand: #EFE9DE;    /* the page itself */
+  --color-brand-clay: #E5DCCE;    /* borders and hairlines */
+  --color-brand-clay-soft: #F1EADD;
+
+  /* Ink */
+  --color-brand-charcoal: #2E211A; /* headings and primary text */
+  --color-brand-ink: #6B5B4B;      /* body copy */
+  --color-brand-muted: #8A7A69;    /* captions, meta */
+
+  /* Primary — coffee */
+  --color-brand-terracotta: #5A4132;
+  --color-brand-terracotta-hover: #3E2C22;
+  --color-brand-terracotta-dark: #2E211A;
+
+  /* Accent — sage */
+  --color-brand-sage: #7C8F80;
+  --color-brand-sage-hover: #4A5B4E;
+  --color-brand-sage-soft: #E7EBE4;
+  --color-brand-sage-line: #C8D2C6;
+
+  --color-brand-blue: #708D9C;
+
+  --font-sans: "IBM Plex Sans", "IBM Plex Sans Arabic", system-ui, -apple-system, sans-serif;
+  --font-display: "IBM Plex Sans", "IBM Plex Sans Arabic", system-ui, sans-serif;
+  --font-arabic: "IBM Plex Sans Arabic", "IBM Plex Sans", system-ui, sans-serif;
 }
 
-/* High contrast custom baseline styles */
 body {
-  background-color: var(--color-brand-cream);
+  background-color: var(--color-brand-sand);
   color: var(--color-brand-charcoal);
   font-family: var(--font-sans);
   font-size: 16px;
   line-height: 1.7;
   overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
 }
 
+/* Headings are the same family, set tighter and heavier — the contrast comes
+   from weight and tracking rather than a second typeface. */
 h1, h2, h3, h4, h5, h6, .font-display {
   font-family: var(--font-display);
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
 }
 
-/* Custom interactive outline and ring */
+h1 { letter-spacing: -0.035em; }
+
+/* =============================================================================
+   RIGHT-TO-LEFT
+   Arabic mirrors the layout wholesale. Only the handful of things that must
+   not flip — latin numerals, the language switch itself — are pinned.
+   ============================================================================= */
+
+[dir="rtl"] {
+  font-family: var(--font-arabic);
+}
+
+[dir="rtl"] .ltr-numerals {
+  direction: ltr;
+  unicode-bidi: embed;
+}
+
+/* Arrows and chevrons point the other way once mirrored. */
+[dir="rtl"] .flip-rtl {
+  transform: scaleX(-1);
+}
+
 input:focus, select:focus, textarea:focus {
-  outline: 2px solid var(--color-brand-terracotta);
+  outline: 2px solid var(--color-brand-sage);
   outline-offset: 1px;
 }
 
-/* Horizontal scrollbar removal for categories */
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
-}
-.no-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-/* Progress bar pulse */
 @keyframes softPulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.8; transform: scale(1.05); }
 }
 
-.pulse-accent {
-  animation: softPulse 2s infinite ease-in-out;
+.pulse-accent { animation: softPulse 2s infinite ease-in-out; }
+
+/* The warm, low, wide shadow the redesign uses on every raised card. */
+.shadow-card {
+  box-shadow: 0 1px 2px rgba(46, 33, 26, .06), 0 18px 44px rgba(46, 33, 26, .10);
+}
+.shadow-card-sm {
+  box-shadow: 0 1px 2px rgba(46, 33, 26, .06), 0 8px 20px rgba(46, 33, 26, .07);
+}
+.shadow-button {
+  box-shadow: 0 2px 6px rgba(46, 33, 26, .16);
+}
+
+/* =============================================================================
+   PAGE TRANSITIONS
+   A short fade-and-rise on every customer-site navigation. Deliberately quick:
+   anything slower gets in the way of someone who knows where they are going.
+   ============================================================================= */
+
+@keyframes pageEnter {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.page-transition {
+  animation: pageEnter 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-transition { animation: none; }
+  * { scroll-behavior: auto !important; }
+}
+
+/* An extra-small breakpoint: phones below ~400px need one more step down
+   than Tailwind's default `sm`, which only starts at 640px. */
+@theme {
+  --breakpoint-xs: 25rem;
 }

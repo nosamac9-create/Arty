@@ -403,7 +403,7 @@ export const AdminBookingsSection: React.FC = () => {
   };
 
   return (
-    <div className="p-6 space-y-6 text-left bg-brand-cream min-h-full relative overflow-hidden">
+    <div className="p-4 sm:p-6 space-y-6 min-w-0 text-left bg-brand-cream min-h-full relative overflow-hidden">
       
       {/* Header and top triggers */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-brand-clay/30 pb-4">

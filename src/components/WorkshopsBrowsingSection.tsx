@@ -92,27 +92,28 @@ export const WorkshopsBrowsingSection: React.FC = () => {
   };
 
   return (
-    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pb-20 animate-in fade-in duration-300 text-left">
+    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pb-20 animate-in fade-in duration-300 text-start">
       
       {/* Header Title */}
-      <div className="pt-6 pb-8 border-b border-brand-clay/60">
-        <h1 className="font-display text-4xl font-extrabold text-brand-charcoal">Creative Workshops</h1>
-        <p className="text-brand-charcoal/70 mt-2 max-w-2xl text-base">
+      <div className="pt-10 pb-8">
+        <span className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-sage">Catalogue</span>
+        <h1 className="mt-3 font-display text-4xl sm:text-5xl font-semibold text-brand-charcoal max-w-lg">Creative Workshops</h1>
+        <p className="text-brand-ink mt-4 max-w-xl text-base leading-[1.7]">
           Discover Jeddah’s premier pottery and painting workshops. Center clay on the wheel, explore watercolor glazes, or paint canvases under guidance of Saudi artists.
         </p>
 
         {/* State Simulator Switcher - requested in the prompt */}
-        <div className="mt-6 flex flex-wrap items-center gap-3 bg-brand-sand/40 p-3 rounded-2xl border border-brand-clay max-w-2xl">
-          <span className="text-xs font-bold text-brand-sage uppercase tracking-wider block mr-2">
+        <div className="mt-6 flex flex-wrap items-center gap-3 bg-brand-sand/40 p-3 rounded-[22px] border border-brand-clay max-w-2xl">
+          <span className="text-xs font-semibold text-brand-sage uppercase tracking-wider block mr-2">
             View Variants:
           </span>
-          <div className="inline-flex rounded-xl bg-brand-cream border border-brand-clay p-0.5 shadow-xs">
+          <div className="inline-flex rounded-xl bg-brand-cream border border-brand-clay p-0.5 shadow-card-sm">
             <button
               onClick={() => setSimulatorMode('live')}
               className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
                 simulatorMode === 'live' 
                   ? 'bg-brand-terracotta text-brand-cream' 
-                  : 'text-brand-charcoal/70 hover:text-brand-terracotta'
+                  : 'text-brand-ink hover:text-brand-terracotta'
               }`}
             >
               🟢 Live Grid ({filteredWorkshops.length})
@@ -122,7 +123,7 @@ export const WorkshopsBrowsingSection: React.FC = () => {
               className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
                 simulatorMode === 'loading' 
                   ? 'bg-brand-terracotta text-brand-cream' 
-                  : 'text-brand-charcoal/70 hover:text-brand-terracotta'
+                  : 'text-brand-ink hover:text-brand-terracotta'
               }`}
             >
               🟡 Loading Skeleton
@@ -132,7 +133,7 @@ export const WorkshopsBrowsingSection: React.FC = () => {
               className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
                 simulatorMode === 'empty' 
                   ? 'bg-brand-terracotta text-brand-cream' 
-                  : 'text-brand-charcoal/70 hover:text-brand-terracotta'
+                  : 'text-brand-ink hover:text-brand-terracotta'
               }`}
             >
               🔴 Empty State
@@ -147,7 +148,7 @@ export const WorkshopsBrowsingSection: React.FC = () => {
           
           {/* Search Box */}
           <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-charcoal/50" />
+            <Search className="absolute start-4 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-muted" />
             <input
               type="text"
               placeholder="Search by workshop, theme, or tutor..."
@@ -156,21 +157,21 @@ export const WorkshopsBrowsingSection: React.FC = () => {
                 setSearchQuery(e.target.value);
                 if (simulatorMode !== 'live') setSimulatorMode('live');
               }}
-              className="w-full bg-brand-cream border border-brand-clay rounded-2xl py-3.5 pl-10 pr-4 text-sm font-semibold text-brand-charcoal placeholder-brand-charcoal/40 shadow-xs focus:ring-1 focus:ring-brand-terracotta"
+              className="w-full bg-brand-cream border border-brand-clay rounded-full py-3.5 ps-11 pe-4 text-sm font-medium text-brand-charcoal placeholder-brand-muted focus:ring-1 focus:ring-brand-sage"
             />
           </div>
 
           {/* Sort Dropdown */}
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-3">
-              <span className="text-xs font-bold text-brand-charcoal/60 whitespace-nowrap">Skill Level</span>
+              <span className="text-xs font-semibold text-brand-muted whitespace-nowrap">Skill Level</span>
               <select
                 value={selectedSkillLevel}
                 onChange={(e) => {
                   setSelectedSkillLevel(e.target.value);
                   if (simulatorMode !== 'live') setSimulatorMode('live');
                 }}
-                className="bg-brand-cream border border-brand-clay rounded-2xl py-3 px-4 text-sm font-semibold text-brand-charcoal shadow-xs cursor-pointer focus:ring-1 focus:ring-brand-terracotta"
+                className="bg-brand-cream border border-brand-clay rounded-full py-3 px-4 text-sm font-medium text-brand-charcoal cursor-pointer focus:ring-1 focus:ring-brand-sage"
               >
                 <option value="All">All Levels</option>
                 <option value="Beginner">Beginner</option>
@@ -181,11 +182,11 @@ export const WorkshopsBrowsingSection: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-3">
-              <span className="text-xs font-bold text-brand-charcoal/60 whitespace-nowrap">Sort by</span>
+              <span className="text-xs font-semibold text-brand-muted whitespace-nowrap">Sort by</span>
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as any)}
-                className="bg-brand-cream border border-brand-clay rounded-2xl py-3 px-4 text-sm font-semibold text-brand-charcoal shadow-xs cursor-pointer focus:ring-1 focus:ring-brand-terracotta"
+                className="bg-brand-cream border border-brand-clay rounded-full py-3 px-4 text-sm font-medium text-brand-charcoal cursor-pointer focus:ring-1 focus:ring-brand-sage"
               >
                 <option value="Popularity">Popularity (Filling Fast)</option>
                 <option value="PriceLow">Price: Low to High</option>
@@ -197,7 +198,8 @@ export const WorkshopsBrowsingSection: React.FC = () => {
         </div>
 
         {/* Scrollable Category Chips on Mobile */}
-        <div className="w-full overflow-x-auto no-scrollbar py-2 -mx-4 px-4 sm:mx-0 sm:px-0 flex gap-2">
+        <div className="flex items-center justify-between gap-4 border-t border-brand-clay pt-5">
+        <div className="min-w-0 overflow-x-auto no-scrollbar py-1 flex gap-2">
           {categories.map((cat) => {
             const isActive = selectedCategory === cat;
             return (
@@ -207,16 +209,21 @@ export const WorkshopsBrowsingSection: React.FC = () => {
                   setSelectedCategory(cat);
                   if (simulatorMode !== 'live') setSimulatorMode('live');
                 }}
-                className={`px-5 py-2.5 rounded-2xl text-xs font-bold whitespace-nowrap transition-all duration-150 border cursor-pointer active:scale-95 shadow-2xs ${
+                className={`px-5 py-2 rounded-full text-[13px] font-medium whitespace-nowrap transition-colors duration-150 border cursor-pointer active:scale-[0.97] ${
                   isActive
-                    ? 'bg-brand-terracotta border-brand-terracotta text-brand-cream'
-                    : 'bg-brand-cream border-brand-clay hover:border-brand-terracotta hover:text-brand-terracotta text-brand-charcoal'
+                    ? 'bg-brand-terracotta border-brand-terracotta text-brand-cream font-semibold'
+                    : 'bg-brand-cream border-brand-clay text-brand-ink hover:text-brand-charcoal hover:border-brand-muted'
                 }`}
               >
                 {cat}
               </button>
             );
           })}
+        </div>
+
+        <span className="hidden sm:block shrink-0 text-[13px] text-brand-muted ltr-numerals">
+          {filteredWorkshops.length} workshops
+        </span>
         </div>
       </div>
 
@@ -227,7 +234,7 @@ export const WorkshopsBrowsingSection: React.FC = () => {
         {simulatorMode === 'loading' && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {[1, 2, 3, 4, 5, 6].map((idx) => (
-              <div key={idx} className="bg-brand-sand/40 border border-brand-clay/50 rounded-2xl p-4 space-y-4 animate-pulse">
+              <div key={idx} className="bg-brand-sand/40 border border-brand-clay rounded-2xl p-4 space-y-4 animate-pulse">
                 <div className="aspect-video w-full bg-brand-clay rounded-xl"></div>
                 <div className="h-6 bg-brand-clay rounded-md w-3/4"></div>
                 <div className="h-4 bg-brand-clay rounded-md w-full"></div>
@@ -247,13 +254,13 @@ export const WorkshopsBrowsingSection: React.FC = () => {
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-terracotta/10 text-brand-terracotta mb-4">
               <SlidersHorizontal className="h-7 w-7" />
             </div>
-            <h3 className="font-display text-xl font-bold text-brand-charcoal">No workshops match your filters</h3>
-            <p className="text-sm text-brand-charcoal/70 mt-2 max-w-sm mx-auto leading-relaxed">
+            <h3 className="font-display text-xl font-semibold text-brand-charcoal">No workshops match your filters</h3>
+            <p className="text-sm text-brand-ink mt-2 max-w-sm mx-auto leading-relaxed">
               We couldn’t find any clay or painting classes matching your search query or selected category chip. Try clearing the query.
             </p>
             <button
               onClick={resetFilters}
-              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-brand-terracotta px-5 py-3 text-xs font-bold text-brand-cream hover:bg-brand-terracotta-hover shadow-sm cursor-pointer"
+              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-brand-terracotta px-5 py-3 text-xs font-semibold text-brand-cream hover:bg-brand-terracotta-hover shadow-card-sm cursor-pointer"
             >
               <RefreshCw className="h-3.5 w-3.5" />
               <span>Reset All Filters</span>
@@ -270,7 +277,7 @@ export const WorkshopsBrowsingSection: React.FC = () => {
                 <div
                   key={ws.id}
                   onClick={() => handleCardClick(ws)}
-                  className={`group relative bg-white rounded-[32px] p-6 shadow-xl shadow-brand-charcoal/5 border border-brand-terracotta/5 transition-all duration-300 flex flex-col h-full text-left ${
+                  className={`group relative bg-brand-cream rounded-[32px] p-6 shadow-card shadow-brand-charcoal/5 border border-brand-terracotta/5 transition-all duration-300 flex flex-col h-full text-start ${
                     isFull 
                       ? 'opacity-70 saturate-75 cursor-not-allowed' 
                       : 'cursor-pointer hover:shadow-2xl hover:shadow-brand-terracotta/10 hover:-translate-y-1'
@@ -286,18 +293,18 @@ export const WorkshopsBrowsingSection: React.FC = () => {
                     />
                     
                     {/* Floating category tag */}
-                    <div className="absolute bottom-3 right-3 bg-brand-cream/90 backdrop-blur-xs px-2.5 py-1 rounded-lg text-xs font-bold text-brand-charcoal shadow-2xs">
+                    <div className="absolute bottom-3 right-3 bg-brand-cream/90 backdrop-blur-xs px-2.5 py-1 rounded-lg text-xs font-semibold text-brand-charcoal shadow-2xs">
                       {ws.category}
                     </div>
 
                     {/* Muted or highlight Spots Pill */}
                     <div className="absolute top-3 left-3">
                       {isFull ? (
-                        <span className="inline-flex items-center rounded-lg bg-brand-charcoal/85 text-brand-cream px-2.5 py-1 text-xs font-bold tracking-wide shadow-sm">
+                        <span className="inline-flex items-center rounded-lg bg-brand-charcoal/85 text-brand-cream px-2.5 py-1 text-xs font-semibold tracking-wide shadow-card-sm">
                           FULLY BOOKED
                         </span>
                       ) : (
-                        <span className="inline-flex items-center rounded-lg bg-brand-terracotta text-brand-cream px-2.5 py-1 text-xs font-bold tracking-wide shadow-sm">
+                        <span className="inline-flex items-center rounded-lg bg-brand-terracotta text-brand-cream px-2.5 py-1 text-xs font-semibold tracking-wide shadow-card-sm">
                           {ws.spotsLeft} SPOTS LEFT
                         </span>
                       )}
@@ -307,17 +314,17 @@ export const WorkshopsBrowsingSection: React.FC = () => {
                   {/* Core details */}
                   <div className="flex-1 flex flex-col justify-between">
                     <div>
-                      <h3 className="font-display text-xl font-bold text-brand-charcoal group-hover:text-brand-terracotta transition-colors">
+                      <h3 className="font-display text-xl font-semibold text-brand-charcoal group-hover:text-brand-terracotta transition-colors">
                         {ws.title}
                       </h3>
-                      <p className="text-sm text-brand-charcoal/70 mt-1.5 line-clamp-2">
+                      <p className="text-sm text-brand-ink mt-1.5 line-clamp-2">
                         {ws.hook}
                       </p>
                     </div>
 
                     {/* Meta and Price row */}
-                    <div className="mt-6 pt-4 border-t border-brand-clay/60 flex items-center justify-between">
-                      <div className="text-xs text-brand-charcoal/65 space-y-1">
+                    <div className="mt-6 pt-4 border-t border-brand-clay flex items-center justify-between">
+                      <div className="text-xs text-brand-muted space-y-1">
                         <div className="flex items-center gap-1">
                           <Calendar className="h-3.5 w-3.5 text-brand-sage shrink-0" />
                           <span>{ws.duration}</span>
@@ -335,8 +342,8 @@ export const WorkshopsBrowsingSection: React.FC = () => {
                       </div>
                       
                       <div className="text-right">
-                        <span className="text-[10px] font-bold text-brand-sage block uppercase tracking-wider">Total</span>
-                        <span className="text-lg font-bold text-brand-charcoal">{ws.price} SAR</span>
+                        <span className="text-[10px] font-semibold text-brand-sage block uppercase tracking-wider">Total</span>
+                        <span className="text-lg font-semibold text-brand-charcoal">{ws.price} SAR</span>
                       </div>
                     </div>
                   </div>
@@ -344,7 +351,7 @@ export const WorkshopsBrowsingSection: React.FC = () => {
                   {/* Visual full indicator banner overlay */}
                   {isFull && (
                     <div className="absolute inset-0 bg-brand-cream/10 flex items-center justify-center rounded-2xl pointer-events-none">
-                      <div className="bg-brand-charcoal text-brand-cream px-4 py-2 rounded-xl text-xs font-bold tracking-widest uppercase shadow-md rotate-12">
+                      <div className="bg-brand-charcoal text-brand-cream px-4 py-2 rounded-xl text-xs font-semibold tracking-widest uppercase shadow-card-sm rotate-12">
                         Class Full
                       </div>
                     </div>

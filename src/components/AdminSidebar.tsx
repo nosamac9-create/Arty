@@ -43,8 +43,8 @@ export const AdminSidebar: React.FC = () => {
 
   return (
     <aside 
-      className={`bg-brand-charcoal text-brand-cream border-r border-brand-clay/10 flex flex-col justify-between transition-all duration-300 shrink-0 ${
-        collapsed ? 'w-20' : 'w-64'
+      className={`bg-brand-charcoal text-brand-cream border-r border-brand-clay/10 flex flex-col justify-between transition-all duration-300 shrink-0 overflow-hidden ${
+        collapsed ? 'w-20' : 'w-16 lg:w-64'
       }`}
     >
       <div className="flex-1">
@@ -55,7 +55,7 @@ export const AdminSidebar: React.FC = () => {
               <Palette className="h-4.5 w-4.5" />
             </div>
             {!collapsed && (
-              <div className="text-left animate-in fade-in duration-200">
+              <div className="hidden lg:block text-left animate-in fade-in duration-200">
                 <span className="font-display text-sm font-bold block">Arty Portal</span>
                 <span className="text-[9px] text-brand-sage uppercase font-bold tracking-wider block">Staff Console</span>
               </div>
@@ -96,17 +96,17 @@ export const AdminSidebar: React.FC = () => {
                   >
                     <Icon className={`h-5 w-5 shrink-0 ${isActive ? 'text-brand-cream' : 'text-brand-sage'}`} />
                     {!collapsed && (
-                      <>
+                      <span className="hidden lg:flex items-center flex-1">
                         <span className="ml-3 text-left leading-none flex-1">{item.label}</span>
                         <ChevronDown
                           className={`h-4 w-4 shrink-0 transition-transform ${settingsOpen ? 'rotate-180' : ''}`}
                         />
-                      </>
+                      </span>
                     )}
                   </button>
 
                   {!collapsed && settingsOpen && (
-                    <div className="ml-4 pl-3 border-l border-brand-cream/15 space-y-0.5">
+                    <div className="hidden lg:block ml-4 pl-3 border-l border-brand-cream/15 space-y-0.5">
                       {SETTINGS_SECTIONS.map(section => {
                         const isSectionActive = isActive && settingsSection === section.id;
                         return (
@@ -148,7 +148,7 @@ export const AdminSidebar: React.FC = () => {
                 }`}
               >
                 <Icon className={`h-5 w-5 shrink-0 ${isActive ? 'text-brand-cream' : 'text-brand-sage'}`} />
-                {!collapsed && <span className="ml-3 text-left leading-none">{item.label}</span>}
+                {!collapsed && <span className="hidden lg:inline ml-3 text-left leading-none">{item.label}</span>}
               </button>
             );
           })}
@@ -158,7 +158,7 @@ export const AdminSidebar: React.FC = () => {
       {/* Signed-in account, then sign out / back to the customer site */}
       <div className="p-3 border-t border-brand-clay/10 space-y-1">
         {currentStaff && !collapsed && (
-          <div className="px-3 py-2 mb-1">
+          <div className="hidden lg:block px-3 py-2 mb-1">
             <p className="text-xs font-bold text-brand-cream truncate">{currentStaff.name}</p>
             <p className="text-[10px] font-semibold text-brand-sage">{currentStaff.role || 'Staff'}</p>
           </div>
@@ -169,7 +169,7 @@ export const AdminSidebar: React.FC = () => {
           className="flex items-center w-full rounded-xl p-3 text-xs font-bold text-brand-cream/70 hover:text-brand-cream hover:bg-brand-terracotta/20 transition-all cursor-pointer"
         >
           <LogOut className="h-4 w-4 shrink-0 text-brand-terracotta" />
-          {!collapsed && <span className="ml-3 text-left">Customer Site</span>}
+          {!collapsed && <span className="hidden lg:inline ml-3 text-left">Customer Site</span>}
         </button>
 
         <button
@@ -177,7 +177,7 @@ export const AdminSidebar: React.FC = () => {
           className="flex items-center w-full rounded-xl p-3 text-xs font-bold text-brand-cream/70 hover:text-brand-cream hover:bg-red-500/20 transition-all cursor-pointer"
         >
           <LogOut className="h-4 w-4 shrink-0 text-red-400" />
-          {!collapsed && <span className="ml-3 text-left">Sign Out</span>}
+          {!collapsed && <span className="hidden lg:inline ml-3 text-left">Sign Out</span>}
         </button>
       </div>
     </aside>

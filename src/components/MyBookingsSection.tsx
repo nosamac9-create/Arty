@@ -91,18 +91,18 @@ export const MyBookingsSection: React.FC = () => {
   if (!currentUser) {
     return (
       <div className="mx-auto max-w-4xl px-4 py-12 animate-in fade-in duration-300 text-center">
-        <div className="bg-brand-cream border border-brand-clay rounded-3xl p-8 sm:p-12 shadow-sm max-w-md mx-auto space-y-4">
+        <div className="bg-brand-cream border border-brand-clay rounded-[28px] p-8 sm:p-12 shadow-card-sm max-w-md mx-auto space-y-4">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-terracotta/10 text-brand-terracotta mx-auto">
             <Calendar className="h-8 w-8" />
           </div>
-          <h2 className="font-display text-xl font-bold text-brand-charcoal">Sign In to View Your Reservations</h2>
-          <p className="text-xs text-brand-charcoal/70 leading-relaxed">
+          <h2 className="font-display text-xl font-semibold text-brand-charcoal">Sign In to View Your Reservations</h2>
+          <p className="text-xs text-brand-ink leading-relaxed">
             Please log in or register an account to manage your workshop bookings, view reservation details, or request cancellations.
           </p>
           <div className="pt-2">
             <button
               onClick={() => { setAuthScreen('login'); setCustomerTab('auth'); }}
-              className="cursor-pointer bg-brand-terracotta hover:bg-brand-terracotta-hover text-brand-cream font-bold py-3 px-6 rounded-2xl shadow-sm text-xs transition-colors"
+              className="cursor-pointer bg-brand-terracotta hover:bg-brand-terracotta-hover text-brand-cream font-semibold py-3 px-6 rounded-2xl shadow-card-sm text-xs transition-colors"
             >
               Sign In or Create Account
             </button>
@@ -113,12 +113,12 @@ export const MyBookingsSection: React.FC = () => {
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8 animate-in fade-in duration-300 text-left">
+    <div className="mx-auto max-w-4xl px-4 py-8 animate-in fade-in duration-300 text-start">
       
       {/* Title */}
       <div className="mb-8">
-        <h1 className="font-display text-3xl font-extrabold text-brand-charcoal">My Reservations</h1>
-        <p className="text-sm text-brand-charcoal/70 mt-1">
+        <h1 className="font-display text-3xl font-semibold text-brand-charcoal">My Reservations</h1>
+        <p className="text-sm text-brand-ink mt-1">
           Review, reschedule, or cancel your upcoming creative sessions at Arty Café.
         </p>
       </div>
@@ -129,15 +129,15 @@ export const MyBookingsSection: React.FC = () => {
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`px-6 py-3.5 text-sm font-bold border-b-2 transition-colors relative cursor-pointer ${
+            className={`px-6 py-3.5 text-sm font-semibold border-b-2 transition-colors relative cursor-pointer ${
               activeTab === tab
                 ? 'border-brand-terracotta text-brand-terracotta'
-                : 'border-transparent text-brand-charcoal/60 hover:text-brand-terracotta'
+                : 'border-transparent text-brand-muted hover:text-brand-terracotta'
             }`}
           >
             <span>{tab} Tab</span>
             {categorizedBookings[tab].length > 0 && (
-              <span className="ml-2 inline-flex items-center rounded-full bg-brand-terracotta/10 px-2 py-0.5 text-xs font-bold text-brand-terracotta">
+              <span className="ml-2 inline-flex items-center rounded-full bg-brand-terracotta/10 px-2 py-0.5 text-xs font-semibold text-brand-terracotta">
                 {categorizedBookings[tab].length}
               </span>
             )}
@@ -153,10 +153,10 @@ export const MyBookingsSection: React.FC = () => {
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-terracotta/10 text-brand-terracotta mb-4">
               <CalendarX className="h-7 w-7" />
             </div>
-            <h3 className="font-display text-lg font-bold text-brand-charcoal">
+            <h3 className="font-display text-lg font-semibold text-brand-charcoal">
               {activeTab === 'Past' ? 'No past bookings yet' : 'No upcoming bookings'}
             </h3>
-            <p className="text-sm text-brand-charcoal/70 mt-2 leading-relaxed">
+            <p className="text-sm text-brand-ink mt-2 leading-relaxed">
               {activeTab === 'Past' 
                 ? "You haven't completed any art classes with us yet. Let's make something beautiful!"
                 : "You don't have any sessions booked. Check our interactive timetable to join."
@@ -164,7 +164,7 @@ export const MyBookingsSection: React.FC = () => {
             </p>
             <button
               onClick={() => setCustomerTab('workshops')}
-              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-brand-terracotta px-5 py-3 text-xs font-bold text-brand-cream hover:bg-brand-terracotta-hover shadow-sm cursor-pointer"
+              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-brand-terracotta px-5 py-3 text-xs font-semibold text-brand-cream hover:bg-brand-terracotta-hover shadow-card-sm cursor-pointer"
             >
               <Compass className="h-4 w-4" />
               <span>Browse Workshops</span>
@@ -179,7 +179,7 @@ export const MyBookingsSection: React.FC = () => {
             return (
               <div
                 key={b.id}
-                className={`flex flex-col sm:flex-row items-start sm:items-center justify-between p-5 rounded-2xl border border-brand-clay bg-brand-cream shadow-2xs gap-4 transition-all hover:shadow-xs relative ${
+                className={`flex flex-col sm:flex-row items-start sm:items-center justify-between p-5 rounded-[22px] border border-brand-clay bg-brand-cream shadow-2xs gap-4 transition-all hover:shadow-card-sm relative ${
                   isCancelled ? 'opacity-65' : ''
                 }`}
               >
@@ -189,14 +189,14 @@ export const MyBookingsSection: React.FC = () => {
                     <img src={imageUrl} alt={b.workshopTitle} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
                   </div>
                   <div className="space-y-1">
-                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold border ${getStatusBadgeColor(b.status)}`}>
+                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${getStatusBadgeColor(b.status)}`}>
                       {b.status}
                     </span>
-                    <h3 className="font-display text-lg font-bold text-brand-charcoal leading-tight line-clamp-1">
+                    <h3 className="font-display text-lg font-semibold text-brand-charcoal leading-tight line-clamp-1">
                       {b.workshopTitle}
                     </h3>
                     
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-brand-charcoal/60 font-medium">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-brand-muted font-medium">
                       <span className="flex items-center gap-1">
                         <Calendar className="h-3.5 w-3.5 text-brand-sage" />
                         <span>{b.date} at {b.time}</span>
@@ -210,7 +210,7 @@ export const MyBookingsSection: React.FC = () => {
                         <span className="text-brand-sage">🎓</span>
                         <span>{resolveBookingInstructor(b, { staff, workshopSessions }).name}</span>
                       </span>
-                      <span className="flex items-center gap-1 font-mono font-bold text-brand-terracotta">
+                      <span className="flex items-center gap-1 font-mono font-semibold text-brand-terracotta">
                         <Hash className="h-3 w-3" />
                         <span>{b.id}</span>
                       </span>
@@ -219,10 +219,10 @@ export const MyBookingsSection: React.FC = () => {
                 </div>
 
                 {/* Right block: total price & actions */}
-                <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between sm:justify-center w-full sm:w-auto border-t sm:border-t-0 pt-3 sm:pt-0 border-brand-clay/50 gap-2">
-                  <div className="text-left sm:text-right">
-                    <span className="text-[10px] font-bold text-brand-sage block uppercase tracking-wider">Paid amount</span>
-                    <span className="text-base font-bold text-brand-charcoal">{b.totalPrice} SAR</span>
+                <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between sm:justify-center w-full sm:w-auto border-t sm:border-t-0 pt-3 sm:pt-0 border-brand-clay gap-2">
+                  <div className="text-start sm:text-right">
+                    <span className="text-[10px] font-semibold text-brand-sage block uppercase tracking-wider">Paid amount</span>
+                    <span className="text-base font-semibold text-brand-charcoal">{b.totalPrice} SAR</span>
                   </div>
 
                   {/* Cancel Booking Action Trigger with Hover Tooltip simulation */}
@@ -235,7 +235,7 @@ export const MyBookingsSection: React.FC = () => {
                             onMouseEnter={() => setHoveredTooltipId(b.id)}
                             onMouseLeave={() => setHoveredTooltipId(null)}
                             onClick={() => alert("Cancellation closed. It is less than 24 hours before class start. Please contact the front desk at +966 12 654 3210.")}
-                            className="text-xs font-bold text-gray-400 bg-gray-100 border border-gray-200 px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-not-allowed"
+                            className="text-xs font-semibold text-gray-400 bg-gray-100 border border-gray-200 px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-not-allowed"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                             <span>Cancel booking</span>
@@ -244,7 +244,7 @@ export const MyBookingsSection: React.FC = () => {
 
                           {/* Hover Tooltip - requested in the prompt */}
                           {hoveredTooltipId === b.id && (
-                            <div className="absolute right-0 bottom-full mb-2 z-50 w-64 p-3 bg-brand-charcoal text-brand-cream rounded-xl text-[11px] leading-relaxed shadow-lg border border-brand-clay animate-in fade-in slide-in-from-bottom-2 duration-200 font-semibold">
+                            <div className="absolute right-0 bottom-full mb-2 z-50 w-64 p-3 bg-brand-charcoal text-brand-cream rounded-xl text-[11px] leading-relaxed shadow-card border border-brand-clay animate-in fade-in slide-in-from-bottom-2 duration-200 font-semibold">
                               <div className="flex items-start gap-1.5">
                                 <AlertCircle className="h-4 w-4 text-brand-terracotta shrink-0 mt-0.5" />
                                 <span>Cancellation closed — less than 24 hours before start</span>
@@ -261,7 +261,7 @@ export const MyBookingsSection: React.FC = () => {
                               cancelBooking(b.id);
                             }
                           }}
-                          className="text-xs font-bold text-brand-terracotta hover:text-brand-terracotta-hover hover:underline py-1.5 px-3 rounded-lg border border-transparent hover:border-brand-clay/40 flex items-center gap-1.5 cursor-pointer"
+                          className="text-xs font-semibold text-brand-terracotta hover:text-brand-terracotta-hover hover:underline py-1.5 px-3 rounded-lg border border-transparent hover:border-brand-clay flex items-center gap-1.5 cursor-pointer"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                           <span>Cancel booking</span>
@@ -272,7 +272,7 @@ export const MyBookingsSection: React.FC = () => {
 
                   {/* Cancelled placeholder marker */}
                   {isCancelled && (
-                    <span className="text-xs font-bold text-brand-charcoal/40 italic block py-1">
+                    <span className="text-xs font-semibold text-brand-charcoal/40 italic block py-1">
                       Refund complete
                     </span>
                   )}

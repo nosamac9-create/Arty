@@ -417,7 +417,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
   }, [pieces, selectedPieceId]);
 
   return (
-    <div className="p-6 space-y-6 text-left bg-brand-cream min-h-full">
+    <div className="p-4 sm:p-6 space-y-6 min-w-0 text-left bg-brand-cream min-h-full">
       
       {/* Header with Title and Mode Switcher */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-brand-clay/60 pb-4">
@@ -609,14 +609,17 @@ export const AdminPiecesTrackingSection: React.FC = () => {
 
       {/* VIEW PANEL: KANBAN BOARD */}
       {viewMode === 'Board' ? (
-        <div className="flex flex-row flex-nowrap gap-4 overflow-x-auto pb-4 w-full select-none no-scrollbar items-start">
+        /* One horizontal row of fixed-width columns that scrolls inside itself.
+           flex-nowrap + shrink-0 keep them side by side at every width; min-w-0
+           on the track is what allows it to scroll rather than push the page. */
+        <div className="flex flex-row flex-nowrap gap-4 overflow-x-auto overscroll-x-contain pb-4 w-full min-w-0 max-w-full select-none no-scrollbar items-stretch">
           {COLUMNS.map((col) => {
             const columnPieces = processedPieces.filter(p => p.status === col);
             
             return (
               <div 
                 key={col} 
-                className="flex flex-col shrink-0 w-[260px] bg-brand-cream/35 border border-brand-clay rounded-2xl p-3 h-[620px]"
+                className="flex flex-col shrink-0 grow-0 basis-[260px] w-[260px] bg-brand-cream/35 border border-brand-clay rounded-2xl p-3 h-[70vh] min-h-[420px] max-h-[620px]"
               >
                 
                 {/* Column header title. A stage renamed or added in Settings still

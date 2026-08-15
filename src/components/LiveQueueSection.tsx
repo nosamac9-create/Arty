@@ -1202,7 +1202,7 @@ export const LiveQueueSection: React.FC = () => {
   const completedItems = useMemo(() => todayQueue.filter(q => q.status === 'Completed'), [todayQueue]);
 
   return (
-    <div className="p-6 space-y-6 text-left bg-brand-cream min-h-full">
+    <div className="p-4 sm:p-6 space-y-6 min-w-0 text-left bg-brand-cream min-h-full">
       
       {/* High-visibility Tablet Friendly Header - Read-only static date */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center p-6 bg-brand-charcoal text-brand-cream rounded-3xl shadow-md gap-4">

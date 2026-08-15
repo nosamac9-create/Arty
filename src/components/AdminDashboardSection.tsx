@@ -158,7 +158,7 @@ export const AdminDashboardSection: React.FC = () => {
   }, [queue, bookings, todayDateStr]);
 
   return (
-    <div className="p-6 space-y-6 text-left animate-in fade-in duration-300 bg-brand-cream min-h-full">
+    <div className="p-4 sm:p-6 space-y-6 min-w-0 text-left animate-in fade-in duration-300 bg-brand-cream min-h-full">
       
       {/* Toast Notification Banner */}
       {toastMessage && (

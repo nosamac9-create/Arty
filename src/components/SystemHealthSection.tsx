@@ -104,7 +104,7 @@ export const SystemHealthSection: React.FC = () => {
   const hasRun = results.length > 0;
 
   return (
-    <div className="p-6 space-y-6 text-left bg-brand-cream min-h-full">
+    <div className="p-4 sm:p-6 space-y-6 min-w-0 text-left bg-brand-cream min-h-full">
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-brand-clay/60">

@@ -1084,7 +1084,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
   };
 
   return (
-    <div className="p-6 text-left bg-brand-cream min-h-full pb-36 relative animate-in fade-in duration-300">
+    <div className="p-4 sm:p-6 text-left bg-brand-cream min-h-full min-w-0 pb-36 relative animate-in fade-in duration-300">
       
       {/* Page Title & Edit Mode indicator */}
       <div className="mb-8 pb-4 border-b border-brand-clay/60 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -1567,9 +1567,9 @@ export const AdminWorkshopFormSection: React.FC = () => {
           </div>
 
           {/* Section: Sessions repeating rows */}
-          <div className="bg-white border border-brand-clay/70 rounded-2xl p-5 shadow-2xs space-y-4">
-            <div className="flex justify-between items-center">
-              <h4 className="text-xs font-bold text-brand-charcoal uppercase tracking-widest text-brand-sage">Sessions Calendar</h4>
+          <div className="bg-white border border-brand-clay/70 rounded-2xl p-4 sm:p-5 shadow-2xs space-y-4 min-w-0 overflow-hidden">
+            <div className="flex flex-wrap gap-2 justify-between items-center">
+              <h4 className="text-xs font-bold uppercase tracking-widest text-brand-sage">Sessions Calendar</h4>
               <button
                 type="button"
                 onClick={handleAddSession}
@@ -1584,14 +1584,14 @@ export const AdminWorkshopFormSection: React.FC = () => {
               {sessions.map((sess) => (
                 <div 
                   key={sess.id}
-                  className={`p-3 rounded-xl border flex items-center justify-between gap-3 text-xs ${
+                  className={`p-3 rounded-xl border flex items-start justify-between gap-3 text-xs overflow-hidden ${
                     sess.isFull 
                       ? 'bg-red-50/50 border-red-200' 
                       : 'bg-brand-cream/35 border-brand-clay/60 hover:bg-brand-sand/15'
                   }`}
                 >
-                  <div className="space-y-1.5 flex-1">
-                    <div className="flex items-center gap-2">
+                  <div className="space-y-1.5 flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
                       <DateInput
                         value={sess.date}
                         onChange={(e) => {
@@ -1610,7 +1610,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
                         className="bg-brand-cream border border-brand-clay p-1 rounded font-semibold text-xs text-brand-charcoal w-24"
                       />
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
                       <span className="text-[10px] font-bold text-brand-charcoal/50">Room:</span>
                       <select
                         value={sess.roomId || ''}
@@ -1621,7 +1621,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
                             ? { ...s, roomId: nextId || undefined, room: space?.name || '' }
                             : s));
                         }}
-                        className="bg-brand-cream border border-brand-clay p-0.5 rounded font-semibold text-[10px] text-brand-charcoal max-w-[150px]"
+                        className="bg-brand-cream border border-brand-clay p-0.5 rounded font-semibold text-[10px] text-brand-charcoal max-w-[150px] min-w-0 flex-shrink"
                       >
                         <option value="">Workshop default</option>
                         {studioSpaces.map(space => {
@@ -1658,7 +1658,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
                             ? { ...s, staffId: nextId || undefined, instructor: member?.name || '' }
                             : s));
                         }}
-                        className="bg-brand-cream border border-brand-clay p-0.5 rounded font-semibold text-[10px] text-brand-charcoal max-w-[150px]"
+                        className="bg-brand-cream border border-brand-clay p-0.5 rounded font-semibold text-[10px] text-brand-charcoal max-w-[150px] min-w-0 flex-shrink"
                       >
                         <option value="">Workshop default</option>
                         {staff
@@ -1726,7 +1726,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => handleRemoveSession(sess.id)}
-                    className="p-1.5 hover:bg-brand-clay/20 text-brand-charcoal/40 hover:text-brand-terracotta rounded"
+                    className="p-1.5 shrink-0 hover:bg-brand-clay/20 text-brand-charcoal/40 hover:text-brand-terracotta rounded cursor-pointer"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>

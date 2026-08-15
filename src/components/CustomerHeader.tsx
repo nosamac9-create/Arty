@@ -6,17 +6,26 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Palette, Coffee, Menu, X, User, Calendar, Flame } from 'lucide-react';
+import { useLanguage } from '../context/LanguageContext';
+import { LanguageToggle } from './LanguageToggle';
 
 export const CustomerHeader: React.FC = () => {
   const { customerTab, setCustomerTab, currentUser } = useApp();
+  const { t } = useLanguage();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // shortLabel is what fits under an icon in the mobile tab bar.
   const navItems = [
-    { id: 'home', label: 'Home', icon: Coffee },
-    { id: 'workshops', label: 'Workshops', icon: Palette },
-    { id: 'my-bookings', label: 'My Bookings', icon: Calendar },
-    { id: 'my-pieces', label: 'My Pieces', icon: Flame },
-    { id: 'auth', label: currentUser ? 'My Account' : 'Login', icon: User },
+    { id: 'home', label: t('Home', 'الرئيسية'), shortLabel: t('Home', 'الرئيسية'), icon: Coffee },
+    { id: 'workshops', label: t('Workshops', 'الورش'), shortLabel: t('Workshops', 'الورش'), icon: Palette },
+    { id: 'my-bookings', label: t('My Bookings', 'حجوزاتي'), shortLabel: t('Bookings', 'حجوزاتي'), icon: Calendar },
+    { id: 'my-pieces', label: t('My Pieces', 'أعمالي'), shortLabel: t('Pieces', 'أعمالي'), icon: Flame },
+    {
+      id: 'auth',
+      label: currentUser ? t('My Account', 'حسابي') : t('Login', 'تسجيل الدخول'),
+      shortLabel: t('Account', 'حسابي'),
+      icon: User
+    },
   ] as const;
 
   const handleNavClick = (tabId: typeof navItems[number]['id']) => {
@@ -25,179 +34,209 @@ export const CustomerHeader: React.FC = () => {
   };
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-brand-terracotta/10 bg-brand-cream/90 backdrop-blur-md">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        
-        {/* Logo left */}
-        <button 
-          onClick={() => handleNavClick('home')}
-          className="flex items-center gap-2 text-left group focus:outline-none"
-        >
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-terracotta text-brand-cream shadow-md transition-transform duration-300 group-hover:rotate-12">
-            <Palette className="h-4.5 w-4.5" />
-          </div>
-          <div>
-            <span className="font-display text-xl font-bold text-brand-charcoal tracking-tight block leading-none">Arty Café</span>
-            <span className="text-[9px] font-bold text-brand-sage uppercase tracking-wider block">Jeddah Art & Clay</span>
-          </div>
-        </button>
+    <>
+      <header className="sticky top-0 z-40 w-full border-b border-brand-clay bg-brand-cream/92 backdrop-blur-md">
+        <div className="mx-auto flex h-[78px] max-w-7xl items-center justify-between gap-6 px-4 sm:px-6 lg:px-12">
 
-        {/* Desktop Navigation */}
-        <nav className="hidden md:flex items-center gap-8">
-          {navItems.map((item) => {
+          {/* Wordmark */}
+          <button
+            onClick={() => handleNavClick('home')}
+            className="flex items-center gap-3 text-left group focus:outline-none cursor-pointer shrink-0"
+          >
+            <div className="flex h-[38px] w-[38px] items-center justify-center rounded-[14px] bg-brand-terracotta text-brand-cream font-semibold text-[17px] transition-transform duration-300 group-hover:-rotate-6">
+              A
+            </div>
+            <div className="leading-none">
+              <span className="block font-display text-[18px] font-semibold tracking-tight text-brand-charcoal">Arty Café</span>
+              <span className="mt-0.5 block text-[10px] font-medium uppercase tracking-[0.14em] text-brand-sage">
+                Jeddah Art &amp; Clay
+              </span>
+            </div>
+          </button>
+
+          {/* Desktop navigation — plain words, weight marks the active one */}
+          <nav className="hidden lg:flex items-center gap-[30px]">
+            {navItems.map(item => {
+              const isActive = customerTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => handleNavClick(item.id)}
+                  className={`text-sm transition-colors cursor-pointer ${
+                    isActive
+                      ? 'font-semibold text-brand-charcoal'
+                      : 'font-normal text-brand-ink hover:text-brand-charcoal'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
+          </nav>
+
+          <div className="flex items-center gap-3 shrink-0">
+            <LanguageToggle />
+
+            <button
+              onClick={() => handleNavClick('workshops')}
+              className="hidden sm:block cursor-pointer rounded-[14px] bg-brand-terracotta px-[22px] py-3 text-sm font-semibold text-brand-cream shadow-button transition-colors hover:bg-brand-terracotta-hover active:scale-[0.98]"
+            >
+              {t('Book Now', 'احجز الآن')}
+            </button>
+
+            {/* Mobile menu */}
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="lg:hidden p-2 rounded-xl text-brand-charcoal hover:bg-brand-sand focus:outline-none cursor-pointer"
+              aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+            >
+              {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+            </button>
+          </div>
+        </div>
+
+        {/* Mobile drawer */}
+        {mobileMenuOpen && (
+          <div className="lg:hidden border-t border-brand-clay bg-brand-cream px-4 py-4 space-y-1 shadow-card-sm animate-in fade-in slide-in-from-top-4 duration-200">
+            {navItems.map(item => {
+              const Icon = item.icon;
+              const isActive = customerTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => handleNavClick(item.id)}
+                  className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-base cursor-pointer ${
+                    isActive
+                      ? 'bg-brand-sand font-semibold text-brand-charcoal'
+                      : 'font-medium text-brand-ink hover:bg-brand-sand/60'
+                  }`}
+                >
+                  <Icon className="h-5 w-5 text-brand-sage" />
+                  {item.label}
+                </button>
+              );
+            })}
+            <button
+              onClick={() => handleNavClick('workshops')}
+              className="mt-2 w-full cursor-pointer rounded-2xl bg-brand-terracotta px-4 py-3.5 text-sm font-semibold text-brand-cream"
+            >
+              Book Now
+            </button>
+          </div>
+        )}
+      </header>
+
+      {/* Mobile bottom tab bar — the design's primary mobile navigation */}
+      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 border-t border-brand-clay bg-brand-cream/95 backdrop-blur-md px-2 pb-[env(safe-area-inset-bottom)]">
+        <div className="flex items-stretch justify-around">
+          {navItems.map(item => {
             const Icon = item.icon;
             const isActive = customerTab === item.id;
             return (
               <button
                 key={item.id}
                 onClick={() => handleNavClick(item.id)}
-                className={`flex items-center gap-1.5 px-1 py-2 text-sm font-medium transition-all cursor-pointer relative ${
-                  isActive 
-                    ? 'text-brand-terracotta font-bold' 
-                    : 'text-brand-charcoal/80 hover:text-brand-terracotta'
+                className={`flex flex-1 flex-col items-center gap-1 py-2.5 text-[10px] font-semibold cursor-pointer transition-colors ${
+                  isActive ? 'text-brand-terracotta' : 'text-brand-muted'
                 }`}
               >
-                <Icon className="h-4 w-4" />
-                <span>{item.label}</span>
-                {isActive && (
-                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-terracotta rounded-full"></span>
-                )}
-              </button>
-            );
-          })}
-        </nav>
-
-        {/* Prominent CTA / Booking Right */}
-        <div className="hidden md:flex items-center gap-4">
-          <button
-            onClick={() => handleNavClick('workshops')}
-            className="cursor-pointer px-6 py-2 bg-brand-terracotta text-brand-cream rounded-full text-sm font-semibold shadow-md shadow-brand-terracotta/25 hover:bg-brand-terracotta-hover transition-all duration-200 active:scale-95"
-          >
-            Book Now
-          </button>
-        </div>
-
-        {/* Mobile Hamburger */}
-        <div className="flex md:hidden items-center gap-2">
-          <button
-            onClick={() => handleNavClick('workshops')}
-            className="rounded-lg bg-brand-terracotta px-3.5 py-1.5 text-xs font-semibold text-brand-cream shadow-sm hover:bg-brand-terracotta-hover"
-          >
-            Book
-          </button>
-          <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="p-2 rounded-xl text-brand-charcoal hover:bg-brand-sand focus:outline-none"
-            aria-label="Toggle menu"
-          >
-            {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-          </button>
-        </div>
-      </div>
-
-      {/* Mobile Drawer */}
-      {mobileMenuOpen && (
-        <div className="md:hidden border-t border-brand-clay bg-brand-cream px-4 py-4 space-y-1.5 shadow-lg animate-in fade-in slide-in-from-top-4 duration-200">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = customerTab === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => handleNavClick(item.id)}
-                className={`flex w-full items-center gap-3 px-4 py-3 text-base font-semibold rounded-xl cursor-pointer ${
-                  isActive 
-                    ? 'text-brand-terracotta bg-brand-sand' 
-                    : 'text-brand-charcoal/85 hover:bg-brand-sand/50 hover:text-brand-terracotta'
-                }`}
-              >
-                <Icon className="h-5 w-5 text-brand-sage" />
-                {item.label}
+                <Icon className={`h-[18px] w-[18px] ${isActive ? '' : 'opacity-70'}`} />
+                <span>{item.shortLabel || item.label}</span>
               </button>
             );
           })}
         </div>
-      )}
-    </header>
+      </nav>
+
+      {/* Keeps page content clear of the fixed bar */}
+      <div className="lg:hidden h-[62px]" aria-hidden="true" />
+    </>
   );
 };
 
 export const CustomerFooter: React.FC = () => {
   const { setCustomerTab, goToStaffLogin, currentStaff, returnToStaffConsole } = useApp();
-  
+  const { t } = useLanguage();
+
+  const link = 'text-start transition-colors hover:text-brand-charcoal cursor-pointer';
+
   return (
-    <footer className="border-t border-brand-clay bg-brand-sand/40 py-12 text-brand-charcoal/90">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-          
-          {/* Brand Info */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-terracotta text-brand-cream">
-                <Palette className="h-4 w-4" />
+    /* pb clears the mobile tab bar so the last line is never hidden behind it. */
+    <footer className="border-t border-brand-clay bg-brand-cream pt-16 pb-24 lg:pb-16">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-12">
+        <div className="grid grid-cols-1 gap-10 md:grid-cols-4 md:gap-8">
+
+          {/* Identity */}
+          <div className="space-y-4 md:pe-8">
+            <div className="flex items-center gap-3">
+              <div className="flex h-[38px] w-[38px] items-center justify-center rounded-[14px] bg-brand-terracotta font-semibold text-[17px] text-brand-cream">
+                A
               </div>
-              <span className="font-display text-lg font-bold">Arty Café</span>
+              <div className="leading-none">
+                <span className="block font-display text-[18px] font-semibold tracking-tight text-brand-charcoal">Arty Café</span>
+                <span className="mt-0.5 block text-[10px] font-medium uppercase tracking-[0.14em] text-brand-sage">
+                  {t('Jeddah Art & Clay', 'جدة للفن والطين')}
+                </span>
+              </div>
             </div>
-            <p className="text-sm text-brand-charcoal/70">
-              Jeddah’s cozy creative sanctuary. Crafting memories, pouring fine coffee, and molding mud into masterworks since 2021.
+            <p className="text-sm leading-relaxed text-brand-ink">
+              {t(
+                'Jeddah’s cozy creative sanctuary. Crafting memories, pouring fine coffee, and molding mud into masterworks since 2021.',
+                'ملاذ جدة الإبداعي. نصنع الذكريات، ونقدّم قهوة مختصة، ونحوّل الطين إلى تحف منذ ٢٠٢١.'
+              )}
             </p>
           </div>
 
-          {/* Quick Links */}
+          {/* Explore */}
           <div>
-            <h3 className="font-display font-semibold text-brand-charcoal mb-4">Explore</h3>
-            <ul className="space-y-2.5 text-sm">
-              <li>
-                <button onClick={() => setCustomerTab('workshops')} className="hover:text-brand-terracotta transition-colors text-left">
-                  Pottery Workshops
-                </button>
-              </li>
-              <li>
-                <button onClick={() => setCustomerTab('workshops')} className="hover:text-brand-terracotta transition-colors text-left">
-                  Acrylic Painting
-                </button>
-              </li>
-              <li>
-                <button onClick={() => setCustomerTab('workshops')} className="hover:text-brand-terracotta transition-colors text-left">
-                  Kids & Couples Classes
-                </button>
-              </li>
+            <h3 className="mb-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-sage">
+              {t('Explore', 'تصفّح')}
+            </h3>
+            <ul className="space-y-2.5 text-sm text-brand-ink">
+              <li><button onClick={() => setCustomerTab('workshops')} className={link}>{t('Pottery Workshops', 'ورش الفخار')}</button></li>
+              <li><button onClick={() => setCustomerTab('workshops')} className={link}>{t('Acrylic Painting', 'الرسم بالأكريليك')}</button></li>
+              <li><button onClick={() => setCustomerTab('workshops')} className={link}>{t('Kids & Couples Classes', 'جلسات الأطفال والأزواج')}</button></li>
+              <li><button onClick={() => setCustomerTab('my-bookings')} className={link}>{t('My Bookings', 'حجوزاتي')}</button></li>
             </ul>
           </div>
 
-          {/* Opening Hours */}
+          {/* Hours */}
           <div>
-            <h3 className="font-display font-semibold text-brand-charcoal mb-4">Hours</h3>
-            <ul className="space-y-2 text-sm text-brand-charcoal/75">
-              <li>Saturday – Thursday</li>
-              <li className="font-semibold">09:00 AM – 11:00 PM</li>
-              <li className="pt-1">Friday</li>
-              <li className="font-semibold">02:00 PM – 11:00 PM</li>
+            <h3 className="mb-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-sage">
+              {t('Hours', 'أوقات العمل')}
+            </h3>
+            <ul className="space-y-2 text-sm text-brand-ink">
+              <li>{t('Saturday – Thursday', 'السبت – الخميس')}</li>
+              <li className="font-semibold text-brand-charcoal ltr-numerals">09:00 AM – 11:00 PM</li>
+              <li className="pt-1">{t('Friday', 'الجمعة')}</li>
+              <li className="font-semibold text-brand-charcoal ltr-numerals">02:00 PM – 11:00 PM</li>
             </ul>
           </div>
 
-          {/* Location */}
+          {/* Contact */}
           <div>
-            <h3 className="font-display font-semibold text-brand-charcoal mb-4">Say Hello</h3>
-            <p className="text-sm text-brand-charcoal/75">
-              Al-Rawdah District, Jeddah, KSA
+            <h3 className="mb-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-sage">
+              {t('Say Hello', 'تواصل معنا')}
+            </h3>
+            <p className="text-sm leading-relaxed text-brand-ink">
+              {t('Al-Rawdah District, Jeddah, KSA', 'حي الروضة، جدة، المملكة العربية السعودية')}
             </p>
-            <p className="text-sm font-semibold text-brand-terracotta mt-2">
+            <a href="tel:+966126543210" className="mt-3 block text-sm font-semibold text-brand-terracotta hover:underline ltr-numerals">
               +966 12 654 3210
-            </p>
-            <p className="text-xs text-brand-charcoal/50 mt-1">
+            </a>
+            <a href="mailto:hello@artycafe.sa" className="mt-1 block text-xs text-brand-muted hover:text-brand-charcoal">
               hello@artycafe.sa
-            </p>
+            </a>
           </div>
 
         </div>
 
-        <div className="mt-12 pt-8 border-t border-brand-clay/60 flex flex-col sm:flex-row items-center justify-between text-xs text-brand-charcoal/60 gap-4">
-          <p>© 2026 Arty Café Jeddah. All rights reserved.</p>
-          <div className="flex gap-6 items-center">
-            <span className="hover:text-brand-terracotta cursor-pointer">Instagram</span>
-            <span className="hover:text-brand-terracotta cursor-pointer">X (Twitter)</span>
-            <span className="hover:text-brand-terracotta cursor-pointer">TikTok</span>
+        <div className="mt-14 flex flex-col items-center justify-between gap-4 border-t border-brand-clay pt-8 text-xs text-brand-muted sm:flex-row">
+          <p>{t('© 2026 Arty Café Jeddah. All rights reserved.', '© ٢٠٢٦ آرتي كافيه جدة. جميع الحقوق محفوظة.')}</p>
+          <div className="flex items-center gap-6">
+            <span className="cursor-pointer hover:text-brand-charcoal">Instagram</span>
+            <span className="cursor-pointer hover:text-brand-charcoal">X (Twitter)</span>
+            <span className="cursor-pointer hover:text-brand-charcoal">TikTok</span>
 
             {/* The only way into the staff area. Signing in is still required —
                 this opens the staff login, it grants nothing. */}
@@ -205,17 +244,17 @@ export const CustomerFooter: React.FC = () => {
               <button
                 type="button"
                 onClick={() => returnToStaffConsole()}
-                className="font-bold text-brand-terracotta hover:underline cursor-pointer"
+                className="cursor-pointer font-semibold text-brand-terracotta hover:underline"
               >
-                Back to Staff Console
+                {t('Back to Staff Console', 'العودة إلى لوحة الموظفين')}
               </button>
             ) : (
               <button
                 type="button"
                 onClick={() => goToStaffLogin()}
-                className="hover:text-brand-terracotta cursor-pointer"
+                className="cursor-pointer hover:text-brand-charcoal"
               >
-                Staff Login
+                {t('Staff Login', 'دخول الموظفين')}
               </button>
             )}
           </div>

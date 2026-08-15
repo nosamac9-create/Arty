@@ -289,7 +289,7 @@ export const BirthdayBookingSection: React.FC = () => {
         : 'border-brand-clay/70 focus:border-brand-terracotta focus:ring-brand-terracotta/20'
     }`;
 
-  const labelClass = 'block text-xs font-bold uppercase tracking-wider text-brand-charcoal/70 mb-1.5';
+  const labelClass = 'block text-xs font-semibold uppercase tracking-wider text-brand-ink mb-1.5';
 
   /** Renders one configured field, preserving the existing form styling. */
   const renderField = (field: BirthdayFormField) => {
@@ -344,7 +344,7 @@ export const BirthdayBookingSection: React.FC = () => {
               <Users className="absolute right-3 top-3.5 h-4 w-4 text-brand-charcoal/40 pointer-events-none" />
             </div>
             {selectedPackage && (
-              <p className="text-[11px] text-brand-charcoal/60 mt-1 font-semibold">
+              <p className="text-[11px] text-brand-muted mt-1 font-semibold">
                 This package hosts {selectedPackage.minGuests}–{selectedPackage.maxGuests} guests.
               </p>
             )}
@@ -362,7 +362,7 @@ export const BirthdayBookingSection: React.FC = () => {
                 setSelectedPkgId(e.target.value);
                 setSelectedBirthdayPackage(e.target.value);
               }}
-              className="w-full rounded-xl border border-brand-clay/70 p-3 text-sm text-brand-charcoal focus:outline-none focus:border-brand-terracotta focus:ring-2 focus:ring-brand-terracotta/20 bg-white"
+              className="w-full rounded-xl border border-brand-clay/70 p-3 text-sm text-brand-charcoal focus:outline-none focus:border-brand-terracotta focus:ring-2 focus:ring-brand-terracotta/20 bg-brand-cream"
             >
               {publishedBirthdayPackages.length === 0 && <option value="">No packages available</option>}
               {/* Options come from the shared package records */}
@@ -390,7 +390,7 @@ export const BirthdayBookingSection: React.FC = () => {
               📌 Birthday packages must be booked at least {minNoticeDays} days in advance.
             </p>
             {selectedPackage?.availableDays?.length ? (
-              <p className="text-[11px] text-brand-charcoal/60 font-semibold mt-0.5">
+              <p className="text-[11px] text-brand-muted font-semibold mt-0.5">
                 Available days: {selectedPackage.availableDays.join(', ')}
               </p>
             ) : null}
@@ -405,7 +405,7 @@ export const BirthdayBookingSection: React.FC = () => {
             <select
               value={bookingTime}
               onChange={e => setBookingTime(e.target.value)}
-              className="w-full rounded-xl border border-brand-clay/70 p-3 text-sm text-brand-charcoal focus:outline-none focus:border-brand-terracotta focus:ring-2 focus:ring-brand-terracotta/20 bg-white"
+              className="w-full rounded-xl border border-brand-clay/70 p-3 text-sm text-brand-charcoal focus:outline-none focus:border-brand-terracotta focus:ring-2 focus:ring-brand-terracotta/20 bg-brand-cream"
             >
               {timeOptions.map(t => (
                 <option key={t} value={t}>{t}</option>
@@ -440,12 +440,12 @@ export const BirthdayBookingSection: React.FC = () => {
                   <img src={cakePhotoUrl} alt="Cake Design" className="h-full w-full object-cover" />
                 </div>
               ) : (
-                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-sand/60 text-brand-charcoal/50 shrink-0">
+                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-sand/60 text-brand-muted shrink-0">
                   <Upload className="h-6 w-6" />
                 </div>
               )}
 
-              <div className="flex-1 text-center sm:text-left">
+              <div className="flex-1 text-center sm:text-start">
                 <input
                   type="file"
                   id="cake-photo-upload"
@@ -455,12 +455,12 @@ export const BirthdayBookingSection: React.FC = () => {
                 />
                 <label
                   htmlFor="cake-photo-upload"
-                  className="inline-flex items-center gap-2 text-xs font-bold text-brand-terracotta bg-white border border-brand-clay/60 px-4 py-2 rounded-xl cursor-pointer hover:bg-brand-sand/50 transition-colors"
+                  className="inline-flex items-center gap-2 text-xs font-semibold text-brand-terracotta bg-brand-cream border border-brand-clay px-4 py-2 rounded-xl cursor-pointer hover:bg-brand-sand/50 transition-colors"
                 >
                   <Upload className="h-3.5 w-3.5" />
                   <span>{cakePhotoUrl ? 'Change Cake Photo' : 'Upload Cake Design Image'}</span>
                 </label>
-                <p className="text-[11px] text-brand-charcoal/60 mt-1">
+                <p className="text-[11px] text-brand-muted mt-1">
                   {field.helpText || 'Send us your customized cake design photo and we will prepare it for you!'}
                 </p>
               </div>
@@ -478,7 +478,7 @@ export const BirthdayBookingSection: React.FC = () => {
                 <select
                   value={valueOf(field)}
                   onChange={e => setValueOf(field.key, e.target.value)}
-                  className="w-full rounded-xl border border-brand-clay/70 p-3 text-sm text-brand-charcoal focus:outline-none focus:border-brand-terracotta focus:ring-2 focus:ring-brand-terracotta/20 bg-white"
+                  className="w-full rounded-xl border border-brand-clay/70 p-3 text-sm text-brand-charcoal focus:outline-none focus:border-brand-terracotta focus:ring-2 focus:ring-brand-terracotta/20 bg-brand-cream"
                 >
                   {(field.options || []).map(opt => (
                     <option key={opt} value={opt}>{opt}</option>
@@ -512,7 +512,7 @@ export const BirthdayBookingSection: React.FC = () => {
                 className={inputClass(errors[field.key])}
               />
             )}
-            {field.helpText && <p className="text-[11px] text-brand-charcoal/60 mt-1">{field.helpText}</p>}
+            {field.helpText && <p className="text-[11px] text-brand-muted mt-1">{field.helpText}</p>}
             {errors[field.key] && <p className="text-[11px] text-red-500 mt-1 font-medium">{errors[field.key]}</p>}
           </div>
         );
@@ -520,70 +520,64 @@ export const BirthdayBookingSection: React.FC = () => {
   };
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8 animate-in fade-in duration-300 text-left">
+    <div className="mx-auto max-w-3xl px-4 py-8 animate-in fade-in duration-300 text-start">
 
       {/* Back to Home button */}
       <button
         onClick={() => setCustomerTab('home')}
-        className="inline-flex items-center gap-2 text-xs font-bold text-brand-terracotta bg-brand-cream border border-brand-clay hover:bg-brand-sand px-3.5 py-2 rounded-xl cursor-pointer mb-6"
+        className="inline-flex items-center gap-2 text-xs font-semibold text-brand-terracotta bg-brand-cream border border-brand-clay hover:bg-brand-sand px-3.5 py-2 rounded-xl cursor-pointer mb-6"
       >
         <ArrowLeft className="h-4 w-4" />
         <span>Back to Home</span>
       </button>
 
-      {/* Header Banner */}
-      <div className="bg-brand-cream border-2 border-brand-clay rounded-3xl p-6 sm:p-8 shadow-sm mb-8 relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-32 h-32 bg-brand-terracotta/10 rounded-full blur-2xl pointer-events-none"></div>
-        <div className="flex items-center gap-3 mb-2">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-brand-terracotta text-brand-cream shrink-0">
-            <Gift className="h-5 w-5" />
-          </div>
-          <div>
-            <span className="text-[10px] font-extrabold uppercase tracking-widest text-brand-terracotta block">Private Celebration</span>
-            <h1 className="font-display text-2xl sm:text-3xl font-bold text-brand-charcoal">Birthday Package Reservation</h1>
-          </div>
-        </div>
-        <p className="text-xs sm:text-sm text-brand-charcoal/70 mt-2">
-          Complete the form below to reserve your studio celebration space. A <strong className="text-brand-terracotta font-bold">{depositAmount} SAR deposit</strong> is required to confirm your date.
+      {/* Page title — plain type on the page, no banner box. */}
+      <div className="mb-10">
+        <span className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-sage">Private Celebration</span>
+        <h1 className="mt-3 font-display text-3xl sm:text-[42px] font-semibold text-brand-charcoal">
+          Birthday Package Reservation
+        </h1>
+        <p className="text-sm text-brand-ink mt-4 max-w-2xl leading-relaxed">
+          Complete the form below to reserve your studio celebration space. A <strong className="text-brand-terracotta font-semibold">{depositAmount} SAR deposit</strong> is required to confirm your date.
         </p>
       </div>
 
       {/* Booking Form */}
       <form onSubmit={handleSubmit} className="space-y-8">
 
-        <div className="bg-white border border-brand-clay/80 rounded-3xl p-6 sm:p-8 shadow-xs space-y-6">
-          <h2 className="font-display text-xl font-bold text-brand-charcoal pb-3 border-b border-brand-clay/50 flex items-center gap-2">
+        <div className="bg-brand-cream border border-brand-clay rounded-[28px] p-6 sm:p-8 shadow-card-sm space-y-6">
+          <h2 className="font-display text-xl font-semibold text-brand-charcoal pb-3 border-b border-brand-clay flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-brand-terracotta" />
             <span>Reservation Details</span>
           </h2>
 
           {/* Selected package summary, straight from the shared record */}
           {selectedPackage && (
-            <div className="bg-brand-sand/25 border border-brand-clay/50 rounded-2xl p-4 flex flex-col sm:flex-row gap-4">
+            <div className="bg-brand-sand/25 border border-brand-clay rounded-2xl p-4 flex flex-col sm:flex-row gap-4">
               {selectedPackage.image && (
                 <img
                   src={selectedPackage.image}
                   alt={selectedPackage.name}
-                  className="h-24 w-full sm:w-32 rounded-xl object-cover border border-brand-clay/40 shrink-0"
+                  className="h-24 w-full sm:w-32 rounded-xl object-cover border border-brand-clay shrink-0"
                   referrerPolicy="no-referrer"
                 />
               )}
-              <div className="text-xs text-brand-charcoal/80 space-y-1">
-                <p className="font-display text-base font-bold text-brand-charcoal">{selectedPackage.name}</p>
+              <div className="text-xs text-brand-ink space-y-1">
+                <p className="font-display text-base font-semibold text-brand-charcoal">{selectedPackage.name}</p>
                 <p>{selectedPackage.shortDescription}</p>
-                <p className="font-bold text-brand-terracotta">
+                <p className="font-semibold text-brand-terracotta">
                   {selectedPackage.price} SAR {selectedPackage.pricingLabel || selectedPackage.pricingType}
                   {selectedPackage.duration ? ` · ${selectedPackage.duration}` : ''}
                   {selectedPackage.ageInformation ? ` · ${selectedPackage.ageInformation}` : ''}
                 </p>
                 {/* Reservation summary reads the same shared package record */}
                 {selectedPackage.cakeSizes.length > 0 && (
-                  <p className="text-[11px] text-brand-charcoal/70">
+                  <p className="text-[11px] text-brand-ink">
                     Cake: {selectedPackage.cakeSizes.map(c => `${c.label} ${c.price} SAR`).join(' · ')}
                   </p>
                 )}
                 {selectedPackage.trainerInfo && (
-                  <p className="text-[11px] text-brand-charcoal/70">{selectedPackage.trainerInfo}</p>
+                  <p className="text-[11px] text-brand-ink">{selectedPackage.trainerInfo}</p>
                 )}
               </div>
             </div>
@@ -596,8 +590,8 @@ export const BirthdayBookingSection: React.FC = () => {
 
         {/* Event Terms and Guidelines — content from Settings, deposit and
             cancellation window filled in from the configured values. */}
-        <div className="bg-brand-cream border-2 border-brand-terracotta/40 rounded-3xl p-6 sm:p-8 space-y-4 text-brand-charcoal shadow-xs">
-          <div className="flex items-center gap-2 text-brand-terracotta font-bold text-sm">
+        <div className="bg-brand-cream border-2 border-brand-terracotta/40 rounded-[28px] p-6 sm:p-8 space-y-4 text-brand-charcoal shadow-card-sm">
+          <div className="flex items-center gap-2 text-brand-terracotta font-semibold text-sm">
             <ShieldAlert className="h-5 w-5" />
             <h3 className="font-display text-lg">{terms.title}</h3>
           </div>
@@ -614,7 +608,7 @@ export const BirthdayBookingSection: React.FC = () => {
                 <p className="font-semibold text-brand-charcoal mb-1">
                   {renderTermsLine(terms.suppliesIntro, { deposit: depositAmount, cancellationDays })}
                 </p>
-                <ol className="list-decimal pl-5 space-y-0.5 text-brand-charcoal/80 font-medium">
+                <ol className="list-decimal pl-5 space-y-0.5 text-brand-ink font-medium">
                   {terms.supplies.map(item => <li key={item}>{item}</li>)}
                 </ol>
               </div>
@@ -630,7 +624,7 @@ export const BirthdayBookingSection: React.FC = () => {
           {/* Acceptance is required before the reservation can be submitted */}
           <label
             className={`flex items-start gap-3 p-3 rounded-2xl border cursor-pointer transition-colors ${
-              errors.terms ? 'border-red-400 bg-red-50/50' : 'border-brand-clay bg-white/70 hover:bg-white'
+              errors.terms ? 'border-red-400 bg-red-50/50' : 'border-brand-clay bg-brand-cream/70 hover:bg-brand-cream'
             }`}
           >
             <input
@@ -642,18 +636,18 @@ export const BirthdayBookingSection: React.FC = () => {
               }}
               className="mt-0.5 h-4 w-4 accent-brand-terracotta cursor-pointer shrink-0"
             />
-            <span className="text-xs font-bold text-brand-charcoal">
+            <span className="text-xs font-semibold text-brand-charcoal">
               I have read and accept the event terms and guidelines. <span className="text-red-500">*</span>
             </span>
           </label>
-          {errors.terms && <p className="text-[11px] text-red-600 font-bold">{errors.terms}</p>}
+          {errors.terms && <p className="text-[11px] text-red-600 font-semibold">{errors.terms}</p>}
         </div>
 
         {/* Submit Button */}
         <div className="pt-2 flex justify-end">
           <button
             type="submit"
-            className="w-full sm:w-auto cursor-pointer bg-brand-terracotta hover:bg-brand-terracotta-hover text-brand-cream text-base font-bold px-10 py-4 rounded-2xl shadow-md transition-all duration-200 active:scale-95 flex items-center justify-center gap-2"
+            className="w-full sm:w-auto cursor-pointer bg-brand-terracotta hover:bg-brand-terracotta-hover text-brand-cream text-base font-semibold px-10 py-4 rounded-2xl shadow-card-sm transition-all duration-200 active:scale-95 flex items-center justify-center gap-2"
           >
             <span>Proceed to Payment ({depositAmount} SAR Deposit)</span>
             <ArrowLeft className="h-5 w-5 rotate-180" />
