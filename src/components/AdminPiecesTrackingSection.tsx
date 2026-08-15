@@ -469,12 +469,12 @@ export const AdminPiecesTrackingSection: React.FC = () => {
       </div>
 
       {/* Filter Toolbar */}
-      <div className="bg-white border border-brand-clay/70 rounded-2xl p-4 shadow-2xs flex flex-col xl:flex-row gap-4 justify-between items-stretch xl:items-center">
-        
+      <div className="bg-white border border-brand-clay/70 rounded-2xl p-4 shadow-2xs flex flex-col xl:flex-row flex-wrap gap-4 justify-between items-stretch xl:items-center">
+
         {/* Search and Toggles */}
-        <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-center flex-1">
+        <div className="flex flex-col md:flex-row flex-wrap gap-4 items-stretch md:items-center flex-1">
           {/* Search by piece, customer, phone, code */}
-          <div className="relative max-w-sm flex-1">
+          <div className="relative max-w-sm min-w-[220px] flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-brand-charcoal/40" />
             <input
               type="text"
@@ -496,7 +496,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
           </div>
 
           {/* Toggles */}
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => setOverdueOnly(!overdueOnly)}
               className={`cursor-pointer px-3 py-1.5 rounded-xl text-[11px] font-bold border transition-colors flex items-center gap-1.5 ${

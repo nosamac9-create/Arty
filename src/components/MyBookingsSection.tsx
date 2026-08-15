@@ -91,7 +91,7 @@ export const MyBookingsSection: React.FC = () => {
   if (!currentUser) {
     return (
       <div className="mx-auto max-w-4xl px-4 py-12 animate-in fade-in duration-300 text-center">
-        <div className="bg-brand-cream border border-brand-clay rounded-[28px] p-8 sm:p-12 shadow-card-sm max-w-md mx-auto space-y-4">
+        <div className="bg-white border border-brand-clay rounded-[28px] p-8 sm:p-12 shadow-card-sm max-w-md mx-auto space-y-4">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-terracotta/10 text-brand-terracotta mx-auto">
             <Calendar className="h-8 w-8" />
           </div>
@@ -149,7 +149,7 @@ export const MyBookingsSection: React.FC = () => {
       <div className="space-y-6">
         {activeList.length === 0 ? (
           /* PAST TAB EMPTY STATE or GENERAL EMPTY STATE */
-          <div className="bg-brand-sand/30 border border-brand-clay rounded-2xl p-12 text-center max-w-md mx-auto">
+          <div className="bg-white border border-brand-clay rounded-2xl p-8 sm:p-12 text-center max-w-md mx-auto shadow-card-sm">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-terracotta/10 text-brand-terracotta mb-4">
               <CalendarX className="h-7 w-7" />
             </div>

@@ -126,7 +126,7 @@ export const ResetPasswordSection: React.FC = () => {
 
   return (
     <div className="mx-auto max-w-md px-4 py-16">
-      <div className="bg-white border border-brand-clay rounded-3xl p-8 shadow-sm text-left space-y-5">
+      <div className="bg-white border border-brand-clay rounded-[28px] p-8 shadow-card-sm text-left space-y-5">
 
         {done ? (
           <>

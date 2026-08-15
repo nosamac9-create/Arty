@@ -123,7 +123,7 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
 
           {/* Searchable Country Code Dropdown */}
           {isOpen && (
-            <div className="absolute left-0 top-full mt-1.5 w-72 bg-white border border-brand-clay rounded-2xl shadow-xl z-50 overflow-hidden animate-in fade-in duration-150">
+            <div className="absolute left-0 top-full mt-1.5 w-[min(18rem,calc(100vw-2rem))] bg-white border border-brand-clay rounded-2xl shadow-xl z-50 overflow-hidden animate-in fade-in duration-150">
               
               {/* Search Header */}
               <div className="p-2.5 border-b border-brand-clay/50 bg-brand-sand/20">

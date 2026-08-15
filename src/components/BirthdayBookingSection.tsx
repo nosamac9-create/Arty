@@ -520,7 +520,7 @@ export const BirthdayBookingSection: React.FC = () => {
   };
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8 animate-in fade-in duration-300 text-start">
+    <div className="mx-auto max-w-6xl px-4 py-8 animate-in fade-in duration-300 text-start">
 
       {/* Back to Home button */}
       <button
@@ -545,27 +545,39 @@ export const BirthdayBookingSection: React.FC = () => {
       {/* Booking Form */}
       <form onSubmit={handleSubmit} className="space-y-8">
 
-        <div className="bg-brand-cream border border-brand-clay rounded-[28px] p-6 sm:p-8 shadow-card-sm space-y-6">
-          <h2 className="font-display text-xl font-semibold text-brand-charcoal pb-3 border-b border-brand-clay flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-brand-terracotta" />
-            <span>Reservation Details</span>
-          </h2>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
 
-          {/* Selected package summary, straight from the shared record */}
+          {/* Reservation Details — same fields, same order, same validation. */}
+          <div className="lg:col-span-7 bg-brand-cream border border-brand-clay rounded-[28px] p-6 sm:p-8 shadow-card-sm space-y-6">
+            <h2 className="font-display text-xl font-semibold text-brand-charcoal pb-3 border-b border-brand-clay flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-brand-terracotta" />
+              <span>Reservation Details</span>
+            </h2>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              {activeFields.map(renderField)}
+            </div>
+          </div>
+
+          {/* Selected package summary — same information as before, now an
+              image-led card that stays in view alongside the form. */}
           {selectedPackage && (
-            <div className="bg-brand-sand/25 border border-brand-clay rounded-2xl p-4 flex flex-col sm:flex-row gap-4">
+            <div className="lg:col-span-5 lg:sticky lg:top-24 bg-brand-cream border border-brand-clay rounded-[28px] overflow-hidden shadow-card">
               {selectedPackage.image && (
-                <img
-                  src={selectedPackage.image}
-                  alt={selectedPackage.name}
-                  className="h-24 w-full sm:w-32 rounded-xl object-cover border border-brand-clay shrink-0"
-                  referrerPolicy="no-referrer"
-                />
+                <div className="aspect-video w-full bg-brand-sand">
+                  <img
+                    src={selectedPackage.image}
+                    alt={selectedPackage.name}
+                    className="h-full w-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
               )}
-              <div className="text-xs text-brand-ink space-y-1">
-                <p className="font-display text-base font-semibold text-brand-charcoal">{selectedPackage.name}</p>
+              <div className="p-6 space-y-2 text-xs text-brand-ink">
+                <span className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-sage">Selected Package</span>
+                <p className="font-display text-xl font-semibold text-brand-charcoal">{selectedPackage.name}</p>
                 <p>{selectedPackage.shortDescription}</p>
-                <p className="font-semibold text-brand-terracotta">
+                <p className="pt-3 mt-1 border-t border-brand-clay font-semibold text-brand-terracotta text-sm">
                   {selectedPackage.price} SAR {selectedPackage.pricingLabel || selectedPackage.pricingType}
                   {selectedPackage.duration ? ` · ${selectedPackage.duration}` : ''}
                   {selectedPackage.ageInformation ? ` · ${selectedPackage.ageInformation}` : ''}
@@ -583,9 +595,6 @@ export const BirthdayBookingSection: React.FC = () => {
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            {activeFields.map(renderField)}
-          </div>
         </div>
 
         {/* Event Terms and Guidelines — content from Settings, deposit and

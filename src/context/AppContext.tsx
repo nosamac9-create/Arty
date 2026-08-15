@@ -83,7 +83,12 @@ interface AppContextType {
   // Birthday Package State
   selectedBirthdayPackage: string;
   setSelectedBirthdayPackage: (pkg: string) => void;
-  
+  /** Category chip the Workshops page should open on, e.g. set to 'Birthday Packages'
+   *  before navigating there from the home page. Callers that navigate to the
+   *  Workshops page for a general browse should reset this to 'All' first. */
+  workshopsInitialCategory: string;
+  setWorkshopsInitialCategory: (category: string) => void;
+
   // Auth state
   currentUser: { id?: string; name: string; email: string; phone: string } | null;
   setCurrentUser: (user: { id?: string; name: string; email: string; phone: string } | null) => void;
@@ -456,7 +461,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Birthday Package Selection State
   // Holds the id of the package the customer picked; resolved from the shared record.
   const [selectedBirthdayPackage, setSelectedBirthdayPackage] = useState<string>('');
-  
+  const [workshopsInitialCategory, setWorkshopsInitialCategory] = useState<string>('All');
+
   // Auth State (Initialized ONLY from localStorage session, defaults strictly to null)
   // Derived from the Supabase session on load, never trusted from storage.
   const [currentUser, setCurrentUser] = useState<{ id?: string; name: string; email: string; phone: string } | null>(null);
@@ -2830,6 +2836,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       adminTab, setAdminTab,
       pendingBooking, setPendingBooking,
       selectedBirthdayPackage, setSelectedBirthdayPackage,
+      workshopsInitialCategory, setWorkshopsInitialCategory,
       currentUser, setCurrentUser,
       authScreen, setAuthScreen,
       registerCustomer, loginCustomer, claimCustomerAccount,

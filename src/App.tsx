@@ -130,6 +130,9 @@ export default function App() {
             <AdminTopBar />
             
             <main className="flex-1">
+              {/* Same fade-and-rise + scroll-to-top treatment as the customer
+                  site, keyed on the admin tab so it replays on every switch. */}
+              <PageTransition pageKey={adminTab}>
               {/* Every page is gated: the component is not rendered at all unless
                   the signed-in account is authorized for it. */}
               {!canAccessAdminPage(adminTab) ? (
@@ -148,6 +151,7 @@ export default function App() {
                   {adminTab === 'settings' && <AdminSettingsSection />}
                 </>
               )}
+              </PageTransition>
             </main>
           </div>
         </div>

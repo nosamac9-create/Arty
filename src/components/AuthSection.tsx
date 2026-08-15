@@ -167,7 +167,7 @@ export const AuthSection: React.FC = () => {
       
       {/* Already Logged In Panel */}
       {currentUser ? (
-        <div className="max-w-md mx-auto bg-brand-cream border border-brand-clay rounded-[28px] p-8 text-center space-y-6 shadow-card-sm">
+        <div className="max-w-md mx-auto bg-white border border-brand-clay rounded-[28px] p-8 text-center space-y-6 shadow-card-sm">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-terracotta text-brand-cream">
             <User className="h-7 w-7" />
           </div>
@@ -203,7 +203,7 @@ export const AuthSection: React.FC = () => {
         </div>
       ) : (
         /* SPLIT SCREEN LAYOUT */
-        <div className="grid grid-cols-1 lg:grid-cols-12 rounded-[28px] border border-brand-clay overflow-hidden shadow-card-sm max-w-5xl mx-auto min-h-[550px]">
+        <div className="grid grid-cols-1 lg:grid-cols-12 rounded-[28px] border border-brand-clay overflow-hidden shadow-card-sm max-w-5xl mx-auto lg:min-h-[550px]">
           
           {/* Left Column: Warm Cafe Photo with Overlay */}
           <div className="lg:col-span-5 relative hidden lg:block bg-brand-sand min-h-full">

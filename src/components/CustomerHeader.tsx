@@ -10,7 +10,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { LanguageToggle } from './LanguageToggle';
 
 export const CustomerHeader: React.FC = () => {
-  const { customerTab, setCustomerTab, currentUser } = useApp();
+  const { customerTab, setCustomerTab, currentUser, setWorkshopsInitialCategory } = useApp();
   const { t } = useLanguage();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -29,6 +29,9 @@ export const CustomerHeader: React.FC = () => {
   ] as const;
 
   const handleNavClick = (tabId: typeof navItems[number]['id']) => {
+    // A general nav click always means "browse everything" — clears any
+    // category filter left over from a deep link like the birthday band.
+    if (tabId === 'workshops') setWorkshopsInitialCategory('All');
     setCustomerTab(tabId);
     setMobileMenuOpen(false);
   };
@@ -147,22 +150,23 @@ export const CustomerHeader: React.FC = () => {
           })}
         </div>
       </nav>
-
-      {/* Keeps page content clear of the fixed bar */}
-      <div className="lg:hidden h-[62px]" aria-hidden="true" />
     </>
   );
 };
 
 export const CustomerFooter: React.FC = () => {
-  const { setCustomerTab, goToStaffLogin, currentStaff, returnToStaffConsole } = useApp();
+  const { setCustomerTab, goToStaffLogin, currentStaff, returnToStaffConsole, setWorkshopsInitialCategory } = useApp();
   const { t } = useLanguage();
 
   const link = 'text-start transition-colors hover:text-brand-charcoal cursor-pointer';
+  const goToWorkshops = () => {
+    setWorkshopsInitialCategory('All');
+    setCustomerTab('workshops');
+  };
 
   return (
     /* pb clears the mobile tab bar so the last line is never hidden behind it. */
-    <footer className="border-t border-brand-clay bg-brand-cream pt-16 pb-24 lg:pb-16">
+    <footer className="border-t border-brand-clay bg-white pt-16 pb-24 lg:pb-16">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-12">
         <div className="grid grid-cols-1 gap-10 md:grid-cols-4 md:gap-8">
 
@@ -193,9 +197,9 @@ export const CustomerFooter: React.FC = () => {
               {t('Explore', 'تصفّح')}
             </h3>
             <ul className="space-y-2.5 text-sm text-brand-ink">
-              <li><button onClick={() => setCustomerTab('workshops')} className={link}>{t('Pottery Workshops', 'ورش الفخار')}</button></li>
-              <li><button onClick={() => setCustomerTab('workshops')} className={link}>{t('Acrylic Painting', 'الرسم بالأكريليك')}</button></li>
-              <li><button onClick={() => setCustomerTab('workshops')} className={link}>{t('Kids & Couples Classes', 'جلسات الأطفال والأزواج')}</button></li>
+              <li><button onClick={goToWorkshops} className={link}>{t('Pottery Workshops', 'ورش الفخار')}</button></li>
+              <li><button onClick={goToWorkshops} className={link}>{t('Acrylic Painting', 'الرسم بالأكريليك')}</button></li>
+              <li><button onClick={goToWorkshops} className={link}>{t('Kids & Couples Classes', 'جلسات الأطفال والأزواج')}</button></li>
               <li><button onClick={() => setCustomerTab('my-bookings')} className={link}>{t('My Bookings', 'حجوزاتي')}</button></li>
             </ul>
           </div>

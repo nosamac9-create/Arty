@@ -86,7 +86,7 @@ export const BookingConfirmationSection: React.FC = () => {
 
   return (
     <div className="mx-auto max-w-xl px-4 py-12 animate-in zoom-in-95 duration-300 text-start">
-      <div className="rounded-[28px] border border-brand-clay bg-brand-cream p-8 shadow-card-sm relative overflow-hidden">
+      <div className="rounded-[28px] border border-brand-clay bg-white p-8 shadow-card-sm relative overflow-hidden">
         
         {/* Subtle decorative clay background motif */}
         <div className="absolute top-0 right-0 w-32 h-32 bg-brand-terracotta/5 rounded-full blur-2xl"></div>

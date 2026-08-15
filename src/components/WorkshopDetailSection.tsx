@@ -281,7 +281,7 @@ export const WorkshopDetailSection: React.FC = () => {
   };
 
   return (
-    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 animate-in fade-in duration-300 text-start">
+    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-8 pb-44 lg:pb-8 animate-in fade-in duration-300 text-start">
       
       {/* Back button */}
       <button 
@@ -350,7 +350,7 @@ export const WorkshopDetailSection: React.FC = () => {
           </div>
 
           {/* Fact grid — boxed cells, label over value, no icons. */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 rounded-[22px] border border-brand-clay bg-brand-cream overflow-hidden">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 rounded-[22px] border border-brand-clay bg-brand-cream overflow-hidden">
             {[
               { label: 'Duration', value: workshop.duration },
               { label: 'Ages', value: workshop.ageRange },
@@ -368,7 +368,7 @@ export const WorkshopDetailSection: React.FC = () => {
             ].map(cell => (
               <div
                 key={cell.label}
-                className="border-b border-e border-brand-clay p-5 last:border-e-0 text-start"
+                className="border-b sm:border-e border-brand-clay p-5 last:border-e-0 text-start"
               >
                 <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-muted">
                   {cell.label}
@@ -447,7 +447,7 @@ export const WorkshopDetailSection: React.FC = () => {
                     type="button"
                     disabled={isPrevMonthDisabled}
                     onClick={handlePrevMonth}
-                    className="p-1.5 rounded-xl hover:bg-brand-sand border border-brand-clay disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer text-brand-charcoal"
+                    className="p-2.5 rounded-xl hover:bg-brand-sand border border-brand-clay disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer text-brand-charcoal"
                     title="Previous Month"
                   >
                     <ChevronLeft className="h-4 w-4" />
@@ -458,7 +458,7 @@ export const WorkshopDetailSection: React.FC = () => {
                   <button
                     type="button"
                     onClick={handleNextMonth}
-                    className="p-1.5 rounded-xl hover:bg-brand-sand border border-brand-clay cursor-pointer text-brand-charcoal"
+                    className="p-2.5 rounded-xl hover:bg-brand-sand border border-brand-clay cursor-pointer text-brand-charcoal"
                     title="Next Month"
                   >
                     <ChevronRight className="h-4 w-4" />
@@ -638,7 +638,7 @@ export const WorkshopDetailSection: React.FC = () => {
                 <button
                   disabled={participants <= 1}
                   onClick={() => setParticipants(prev => Math.max(1, prev - 1))}
-                  className="w-6 h-6 flex items-center justify-center text-brand-charcoal/40 hover:text-brand-charcoal disabled:opacity-30 cursor-pointer text-lg font-semibold"
+                  className="w-9 h-9 flex items-center justify-center text-brand-charcoal/40 hover:text-brand-charcoal disabled:opacity-30 cursor-pointer text-lg font-semibold"
                 >
                   −
                 </button>
@@ -646,7 +646,7 @@ export const WorkshopDetailSection: React.FC = () => {
                 <button
                   disabled={participants >= 6}
                   onClick={() => setParticipants(prev => Math.min(6, prev + 1))}
-                  className="w-6 h-6 flex items-center justify-center text-brand-terracotta hover:text-brand-terracotta-hover disabled:opacity-30 cursor-pointer text-lg font-semibold"
+                  className="w-9 h-9 flex items-center justify-center text-brand-terracotta hover:text-brand-terracotta-hover disabled:opacity-30 cursor-pointer text-lg font-semibold"
                 >
                   +
                 </button>
@@ -691,8 +691,11 @@ export const WorkshopDetailSection: React.FC = () => {
         </div>
       </div>
 
-      {/* Persistent Mobile Bottom Bar */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-brand-cream border-t border-brand-clay p-4 flex items-center justify-between shadow-2xl animate-in slide-in-from-bottom-24">
+      {/* Persistent Mobile Bottom Bar — sits directly above the global tab
+          bar (not on top of it) so both stay reachable on a phone. The
+          offset matches the tab bar's own height, including its safe-area
+          inset, so they never overlap even on notched phones. */}
+      <div className="lg:hidden fixed bottom-[calc(62px+env(safe-area-inset-bottom))] left-0 right-0 z-30 bg-brand-cream border-t border-brand-clay p-4 flex items-center justify-between shadow-2xl animate-in slide-in-from-bottom-24">
         <div>
           <span className="text-[10px] font-semibold text-brand-sage uppercase block">Selected Date: {selectedDate.split('-')[2]}/{selectedDate.split('-')[1]}</span>
           <span className="text-lg font-semibold text-brand-charcoal">

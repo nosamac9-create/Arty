@@ -140,7 +140,7 @@ export const MyPiecesSection: React.FC = () => {
 
       {/* Not Logged In State */}
       {!currentUser ? (
-        <div className="bg-brand-sand/30 border border-brand-clay rounded-[28px] py-16 px-6 text-center max-w-md mx-auto space-y-4">
+        <div className="bg-white border border-brand-clay rounded-[28px] py-16 px-6 text-center max-w-md mx-auto space-y-4 shadow-card-sm">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-terracotta/10 text-brand-terracotta">
             <Flame className="h-7 w-7" />
           </div>
@@ -160,7 +160,7 @@ export const MyPiecesSection: React.FC = () => {
         </div>
       ) : userPieces.length === 0 ? (
         /* Empty State for Logged-In User */
-        <div className="bg-brand-sand/30 border border-brand-clay rounded-[28px] py-16 px-6 text-center max-w-md mx-auto space-y-4">
+        <div className="bg-white border border-brand-clay rounded-[28px] py-16 px-6 text-center max-w-md mx-auto space-y-4 shadow-card-sm">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-terracotta/10 text-brand-terracotta">
             <Box className="h-7 w-7" />
           </div>
@@ -296,7 +296,13 @@ export const MyPiecesSection: React.FC = () => {
                     })}
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-1 gap-y-2 text-[9px] font-semibold text-center leading-tight">
+                  {/* Always one row, matching the dots row above it — a
+                      responsive column count would fall out of alignment
+                      with the dots, which never wrap. */}
+                  <div
+                    className="grid gap-x-1 gap-y-2 text-[9px] font-semibold text-center leading-tight"
+                    style={{ gridTemplateColumns: `repeat(${STAGES.length}, minmax(0, 1fr))` }}
+                  >
                     {STAGES.map((stage, idx) => {
                       const isActive = idx === currentStageIdx;
                       const isCompleted = idx < currentStageIdx;
