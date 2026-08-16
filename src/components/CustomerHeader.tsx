@@ -223,7 +223,7 @@ export const CustomerFooter: React.FC = () => {
               {t('Say Hello', 'تواصل معنا')}
             </h3>
             <p className="text-sm leading-relaxed text-brand-ink">
-              {t('Al-Rawdah District, Jeddah, KSA', 'حي الروضة، جدة، المملكة العربية السعودية')}
+              {t('3331 Ahmad Al Attas, Al Zahra District, Jeddah 23521, KSA', '3331 أحمد العطاس، حي الزهراء، جدة 23521، المملكة العربية السعودية')}
             </p>
             <a href="tel:+966126543210" className="mt-3 block text-sm font-semibold text-brand-terracotta hover:underline ltr-numerals">
               +966 12 654 3210

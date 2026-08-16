@@ -174,7 +174,7 @@ export const BookingConfirmationSection: React.FC = () => {
             <div className="text-right">
               <span className="font-semibold text-brand-charcoal block">{matchingWorkshop?.room || 'Studio A'}</span>
               <span className="text-[10px] text-brand-muted flex items-center justify-end gap-1 mt-0.5">
-                <MapPin className="h-3 w-3" /> Al-Rawdah Street, Jeddah
+                <MapPin className="h-3 w-3" /> Ahmad Al Attas St, Jeddah
               </span>
             </div>
           </div>
