@@ -46,9 +46,11 @@ export const CustomerHeader: React.FC = () => {
             onClick={() => handleNavClick('home')}
             className="flex items-center gap-3 text-left group focus:outline-none cursor-pointer shrink-0"
           >
-            <div className="flex h-[38px] w-[38px] items-center justify-center rounded-[14px] bg-brand-terracotta text-brand-cream font-semibold text-[17px] transition-transform duration-300 group-hover:-rotate-6">
-              A
-            </div>
+            <img
+              src="/images/arty-logo-wordmark.png"
+              alt="Arty Café"
+              className="h-10 w-auto object-contain transition-transform duration-300 group-hover:-rotate-6"
+            />
             <div className="leading-none">
               <span className="block font-display text-[18px] font-semibold tracking-tight text-brand-charcoal">Arty Café</span>
               <span className="mt-0.5 block text-[10px] font-medium uppercase tracking-[0.14em] text-brand-sage">
@@ -155,27 +157,23 @@ export const CustomerHeader: React.FC = () => {
 };
 
 export const CustomerFooter: React.FC = () => {
-  const { setCustomerTab, goToStaffLogin, currentStaff, returnToStaffConsole, setWorkshopsInitialCategory } = useApp();
+  const { goToStaffLogin, currentStaff, returnToStaffConsole } = useApp();
   const { t } = useLanguage();
-
-  const link = 'text-start transition-colors hover:text-brand-charcoal cursor-pointer';
-  const goToWorkshops = () => {
-    setWorkshopsInitialCategory('All');
-    setCustomerTab('workshops');
-  };
 
   return (
     /* pb clears the mobile tab bar so the last line is never hidden behind it. */
     <footer className="border-t border-brand-clay bg-white pt-16 pb-24 lg:pb-16">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-12">
-        <div className="grid grid-cols-1 gap-10 md:grid-cols-4 md:gap-8">
+        <div className="grid grid-cols-1 gap-10 md:grid-cols-3 md:gap-8">
 
           {/* Identity */}
           <div className="space-y-4 md:pe-8">
             <div className="flex items-center gap-3">
-              <div className="flex h-[38px] w-[38px] items-center justify-center rounded-[14px] bg-brand-terracotta font-semibold text-[17px] text-brand-cream">
-                A
-              </div>
+              <img
+                src="/images/arty-logo-wordmark.png"
+                alt="Arty Café"
+                className="h-10 w-auto object-contain"
+              />
               <div className="leading-none">
                 <span className="block font-display text-[18px] font-semibold tracking-tight text-brand-charcoal">Arty Café</span>
                 <span className="mt-0.5 block text-[10px] font-medium uppercase tracking-[0.14em] text-brand-sage">
@@ -191,29 +189,14 @@ export const CustomerFooter: React.FC = () => {
             </p>
           </div>
 
-          {/* Explore */}
-          <div>
-            <h3 className="mb-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-sage">
-              {t('Explore', 'تصفّح')}
-            </h3>
-            <ul className="space-y-2.5 text-sm text-brand-ink">
-              <li><button onClick={goToWorkshops} className={link}>{t('Pottery Workshops', 'ورش الفخار')}</button></li>
-              <li><button onClick={goToWorkshops} className={link}>{t('Acrylic Painting', 'الرسم بالأكريليك')}</button></li>
-              <li><button onClick={goToWorkshops} className={link}>{t('Kids & Couples Classes', 'جلسات الأطفال والأزواج')}</button></li>
-              <li><button onClick={() => setCustomerTab('my-bookings')} className={link}>{t('My Bookings', 'حجوزاتي')}</button></li>
-            </ul>
-          </div>
-
           {/* Hours */}
           <div>
             <h3 className="mb-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-sage">
               {t('Hours', 'أوقات العمل')}
             </h3>
             <ul className="space-y-2 text-sm text-brand-ink">
-              <li>{t('Saturday – Thursday', 'السبت – الخميس')}</li>
-              <li className="font-semibold text-brand-charcoal ltr-numerals">09:00 AM – 11:00 PM</li>
-              <li className="pt-1">{t('Friday', 'الجمعة')}</li>
-              <li className="font-semibold text-brand-charcoal ltr-numerals">02:00 PM – 11:00 PM</li>
+              <li>{t('Every day', 'يوميًا')}</li>
+              <li className="font-semibold text-brand-charcoal ltr-numerals">05:00 PM – 12:00 AM</li>
             </ul>
           </div>
 
@@ -225,8 +208,11 @@ export const CustomerFooter: React.FC = () => {
             <p className="text-sm leading-relaxed text-brand-ink">
               {t('3331 Ahmad Al Attas, Al Zahra District, Jeddah 23521, KSA', '3331 أحمد العطاس، حي الزهراء، جدة 23521، المملكة العربية السعودية')}
             </p>
-            <a href="tel:+966126543210" className="mt-3 block text-sm font-semibold text-brand-terracotta hover:underline ltr-numerals">
-              +966 12 654 3210
+            <a href="tel:+966548222055" className="mt-3 block text-sm font-semibold text-brand-terracotta hover:underline ltr-numerals">
+              +966 54 822 2055
+            </a>
+            <a href="https://wa.me/966548182404" target="_blank" rel="noopener noreferrer" className="mt-1 block text-sm font-semibold text-brand-terracotta hover:underline ltr-numerals">
+              {t('WhatsApp', 'واتساب')}: +966 54 818 2404
             </a>
             <a href="mailto:hello@artycafe.sa" className="mt-1 block text-xs text-brand-muted hover:text-brand-charcoal">
               hello@artycafe.sa
@@ -238,9 +224,9 @@ export const CustomerFooter: React.FC = () => {
         <div className="mt-14 flex flex-col items-center justify-between gap-4 border-t border-brand-clay pt-8 text-xs text-brand-muted sm:flex-row">
           <p>{t('© 2026 Arty Café Jeddah. All rights reserved.', '© ٢٠٢٦ آرتي كافيه جدة. جميع الحقوق محفوظة.')}</p>
           <div className="flex items-center gap-6">
-            <span className="cursor-pointer hover:text-brand-charcoal">Instagram</span>
-            <span className="cursor-pointer hover:text-brand-charcoal">X (Twitter)</span>
-            <span className="cursor-pointer hover:text-brand-charcoal">TikTok</span>
+            <a href="https://www.instagram.com/arty.cafe" target="_blank" rel="noopener noreferrer" className="hover:text-brand-charcoal">Instagram</a>
+            <a href="https://www.tiktok.com/@artycafe" target="_blank" rel="noopener noreferrer" className="hover:text-brand-charcoal">TikTok</a>
+            <a href="https://www.facebook.com/people/Arty-Cafe/100041894486483/" target="_blank" rel="noopener noreferrer" className="hover:text-brand-charcoal">Facebook</a>
 
             {/* The only way into the staff area. Signing in is still required —
                 this opens the staff login, it grants nothing. */}

@@ -590,7 +590,7 @@ export const AuthSection: React.FC = () => {
                       <p className="leading-relaxed">
                         We can only reset a password once we can confirm the account is yours.
                         SMS verification is not switched on yet, so please use email recovery.
-                        If there is no email on your record, call the studio on +966 12 654 3210.
+                        If there is no email on your record, call the studio on +966 54 822 2055.
                       </p>
                     </div>
                     <button

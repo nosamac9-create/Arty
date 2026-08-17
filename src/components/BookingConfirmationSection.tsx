@@ -72,7 +72,7 @@ export const BookingConfirmationSection: React.FC = () => {
         <p className="text-sm text-brand-ink leading-relaxed">{bookingError}</p>
         <p className="text-xs text-brand-charcoal/55">
           Nothing has been reserved and you have not been charged. Please try again,
-          or call the studio on +966 12 654 3210.
+          or call the studio on +966 54 822 2055.
         </p>
         <button
           onClick={() => setCustomerTab('workshops')}

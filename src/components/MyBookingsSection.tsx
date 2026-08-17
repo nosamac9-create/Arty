@@ -234,7 +234,7 @@ export const MyBookingsSection: React.FC = () => {
                           <button
                             onMouseEnter={() => setHoveredTooltipId(b.id)}
                             onMouseLeave={() => setHoveredTooltipId(null)}
-                            onClick={() => alert("Cancellation closed. It is less than 24 hours before class start. Please contact the front desk at +966 12 654 3210.")}
+                            onClick={() => alert("Cancellation closed. It is less than 24 hours before class start. Please contact the front desk at +966 54 822 2055.")}
                             className="text-xs font-semibold text-gray-400 bg-gray-100 border border-gray-200 px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-not-allowed"
                           >
                             <Trash2 className="h-3.5 w-3.5" />

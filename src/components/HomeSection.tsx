@@ -451,14 +451,14 @@ export const HomeSection: React.FC = () => {
                 <div className="border-t border-brand-clay py-4">
                   <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-muted">Opening Hours</dt>
                   <dd className="mt-1.5 text-brand-charcoal ltr-numerals">
-                    Sat – Thu: 09:00 AM – 11:00 PM · Fri: 02:00 PM – 11:00 PM
+                    Every day: 05:00 PM – 12:00 AM
                   </dd>
                 </div>
 
                 <div className="border-t border-b border-brand-clay py-4">
                   <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-muted">Call Front Desk</dt>
                   <dd className="mt-1.5 text-brand-charcoal ltr-numerals">
-                    +966 12 654 3210 (Walk-ins welcome!)
+                    +966 54 822 2055 (Walk-ins welcome!)
                   </dd>
                 </div>
               </dl>
