@@ -90,8 +90,17 @@ export const MyBookingsSection: React.FC = () => {
 
   if (!currentUser) {
     return (
-      <div className="mx-auto max-w-4xl px-4 py-12 animate-in fade-in duration-300 text-center">
-        <div className="bg-white border border-brand-clay rounded-[28px] p-8 sm:p-12 shadow-card-sm max-w-md mx-auto space-y-4">
+      <div className="mx-auto max-w-4xl px-4 py-8 animate-in fade-in duration-300 text-start">
+
+        {/* Title */}
+        <div className="pb-8 border-b border-brand-clay mb-8">
+          <h1 className="font-display text-3xl font-semibold text-brand-charcoal">My Reservations</h1>
+          <p className="text-sm text-brand-ink mt-1">
+            Review, reschedule, or cancel your upcoming creative sessions at Arty Café.
+          </p>
+        </div>
+
+        <div className="bg-white border border-brand-clay rounded-[28px] p-8 sm:p-12 shadow-card-sm max-w-md mx-auto space-y-4 text-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-terracotta/10 text-brand-terracotta mx-auto">
             <Calendar className="h-8 w-8" />
           </div>
@@ -114,9 +123,9 @@ export const MyBookingsSection: React.FC = () => {
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8 animate-in fade-in duration-300 text-start">
-      
+
       {/* Title */}
-      <div className="mb-8">
+      <div className="pb-8 border-b border-brand-clay mb-8">
         <h1 className="font-display text-3xl font-semibold text-brand-charcoal">My Reservations</h1>
         <p className="text-sm text-brand-ink mt-1">
           Review, reschedule, or cancel your upcoming creative sessions at Arty Café.

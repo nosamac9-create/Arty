@@ -57,7 +57,7 @@ export const Footer: React.FC<FooterProps> = ({
   copyright
 }) => {
   return (
-    <footer className="border-t border-brand-clay bg-brand-cream pt-14 pb-24 lg:pb-10">
+    <footer className="border-t border-brand-clay bg-brand-cream pt-10 pb-16 lg:pb-8">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-12">
 
         <div className="md:flex md:items-start md:justify-between md:gap-10">
@@ -75,12 +75,12 @@ export const Footer: React.FC<FooterProps> = ({
               )}
             </div>
             {blurb && (
-              <p className="mt-4 max-w-sm text-sm leading-relaxed text-brand-ink">{blurb}</p>
+              <p className="mt-3 max-w-sm text-sm leading-relaxed text-brand-ink">{blurb}</p>
             )}
           </div>
 
           {/* Circular icon buttons. rounded-full is on the element itself. */}
-          <ul className="mt-8 flex list-none gap-2.5 md:mt-0">
+          <ul className="mt-6 flex list-none gap-2.5 md:mt-0">
             {socialLinks.map(link => (
               <li key={link.label}>
                 <a
@@ -98,7 +98,7 @@ export const Footer: React.FC<FooterProps> = ({
           </ul>
         </div>
 
-        <div className="mt-10 border-t border-brand-clay pt-8 lg:grid lg:grid-cols-10 lg:gap-6">
+        <div className="mt-6 border-t border-brand-clay pt-6 lg:grid lg:grid-cols-10 lg:gap-6">
           <nav className="lg:col-[4/11]">
             <ul className="-mx-2 -my-1 flex list-none flex-wrap lg:justify-end">
               {mainLinks.map(link => (
@@ -120,7 +120,7 @@ export const Footer: React.FC<FooterProps> = ({
           </nav>
 
           {legalLinks.length > 0 && (
-            <div className="mt-5 lg:col-[4/11] lg:mt-2">
+            <div className="mt-4 lg:col-[4/11] lg:mt-2">
               <ul className="-mx-3 -my-1 flex list-none flex-wrap lg:justify-end">
                 {legalLinks.map(link => (
                   <li key={link.label} className="mx-3 my-1 shrink-0">
@@ -137,7 +137,7 @@ export const Footer: React.FC<FooterProps> = ({
             </div>
           )}
 
-          <div className="mt-8 text-sm leading-6 text-brand-muted lg:col-[1/4] lg:row-[1/3] lg:mt-0">
+          <div className="mt-5 text-sm leading-6 text-brand-muted lg:col-[1/4] lg:row-[1/3] lg:mt-0">
             <div>{copyright.text}</div>
             {copyright.license && <div>{copyright.license}</div>}
           </div>
