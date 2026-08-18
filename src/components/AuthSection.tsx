@@ -6,6 +6,8 @@
 import React, { useState } from 'react';
 import { PasswordField } from './PasswordField';
 import { useApp } from '../context/AppContext';
+import { ScrollReveal } from './ui/ScrollReveal';
+import { motion, useReducedMotion } from 'motion/react';
 import { Palette, Mail, Lock, User, Check, AlertCircle, ArrowLeft, LogIn, KeyRound, ShieldCheck, CheckCircle2, RefreshCw } from 'lucide-react';
 import { PhoneInput } from './PhoneInput';
 import { validatePhone, normalisePhone } from '../utils/phoneUtils';
@@ -18,7 +20,7 @@ export const AuthSection: React.FC = () => {
   const { 
     authScreen, setAuthScreen, currentUser, setCurrentUser, setCustomerTab, 
     loginCustomer, claimCustomerAccount, registerCustomer, requestPasswordReset,
-    logoutCustomer, pendingBooking 
+    logoutCustomer, pendingBooking, changeCustomerPassword 
   } = useApp();
 
   // Common Inputs
@@ -33,11 +35,54 @@ export const AuthSection: React.FC = () => {
   const [claimIdentifier, setClaimIdentifier] = useState<string | null>(null);
   const [claimPassword, setClaimPassword] = useState('');
   const [claimConfirm, setClaimConfirm] = useState('');
+  /** Masked form of the address on the record, e.g. "n****a@gmail.com". */
+  const [claimEmailHint, setClaimEmailHint] = useState<string | null>(null);
+  /** Typed when claiming by phone: the account needs an address to confirm. */
+  const [claimEmail, setClaimEmail] = useState('');
   // Field-keyed messages from the shared validation layer.
   const [errors, setErrors] = useState<Record<string, string>>({});
   const clearError = (key: string) =>
     setErrors(prev => (prev[key] ? { ...prev, [key]: '' } : prev));
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Change-password state for the account page.
+  const prefersReducedMotion = useReducedMotion();
+  const [showPasswordForm, setShowPasswordForm] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordMsg, setPasswordMsg] = useState<string | null>(null);
+  const [isSavingPassword, setIsSavingPassword] = useState(false);
+
+  /** Sets a new password for whoever is signed in. Nothing else is editable. */
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError(null);
+    setPasswordMsg(null);
+
+    const match = validatePasswordConfirmation(newPassword, confirmNewPassword);
+    if (!match.valid) {
+      setPasswordError(match.error!);
+      return;
+    }
+
+    setIsSavingPassword(true);
+    try {
+      const res = await changeCustomerPassword(newPassword);
+      if (!res.success) {
+        setPasswordError(res.error || 'Could not change your password.');
+        return;
+      }
+      setShowPasswordForm(false);
+      setNewPassword('');
+      setConfirmNewPassword('');
+      setPasswordMsg('Your password has been changed. Use it next time you sign in.');
+    } catch {
+      setPasswordError('Something went wrong. Please try again.');
+    } finally {
+      setIsSavingPassword(false);
+    }
+  };
 
   // Password Recovery States
   const [forgotMethod, setForgotMethod] = useState<'email' | 'phone'>('email');
@@ -60,6 +105,8 @@ export const AuthSection: React.FC = () => {
         setClaimIdentifier(loginInput);
         setClaimPassword('');
         setClaimConfirm('');
+        setClaimEmail('');
+        setClaimEmailHint(res.claimEmailHint || null);
       }
       setErrorMsg(res.error || 'Invalid credentials.');
       return;
@@ -84,7 +131,9 @@ export const AuthSection: React.FC = () => {
     }
 
     setIsSubmitting(true);
-    const res = await claimCustomerAccount(claimIdentifier || '', claimPassword);
+    // Claiming by phone needs an address for the confirmation link; claiming by
+    // email already has one.
+    const res = await claimCustomerAccount(claimIdentifier || '', claimPassword, claimEmail || undefined);
     setIsSubmitting(false);
 
     if (!res.success) {
@@ -95,6 +144,8 @@ export const AuthSection: React.FC = () => {
     setClaimIdentifier(null);
     setClaimPassword('');
     setClaimConfirm('');
+    setClaimEmail('');
+    setClaimEmailHint(null);
     setPassword('');
     if (pendingBooking) setCustomerTab('checkout-info');
     else setCustomerTab('my-bookings');
@@ -165,74 +216,279 @@ export const AuthSection: React.FC = () => {
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-10 animate-in fade-in duration-300">
       
-      {/* Already Logged In Panel */}
+      {/* ACCOUNT DETAILS — read-only profile; the only thing changeable
+          here is the password. */}
       {currentUser ? (
-        <div className="max-w-md mx-auto bg-white border border-brand-clay rounded-[28px] p-8 text-center space-y-6 shadow-card-sm">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-terracotta text-brand-cream">
-            <User className="h-7 w-7" />
-          </div>
-          <div>
-            <h2 className="font-display text-2xl font-semibold text-brand-charcoal">Logged in successfully</h2>
-            <p className="text-sm text-brand-ink mt-1.5 font-semibold">Welcome back, {currentUser.name}</p>
-            <p className="text-xs text-brand-muted mt-1">{currentUser.email}</p>
-          </div>
+        <div className="mx-auto max-w-2xl space-y-6">
 
-          {pendingBooking && (
-            <div className="p-3 bg-brand-sand/40 border border-brand-clay rounded-xl text-xs font-semibold text-brand-charcoal text-start">
-              📌 You have an active booking draft for: <span className="font-semibold text-brand-terracotta">{pendingBooking.workshopTitle}</span> ({pendingBooking.date})
+          <ScrollReveal
+            once
+            viewOptions={{ once: true, amount: 0.2, margin: '0px 0px -80px 0px' }}
+            transition={{ duration: 0.5, ease: 'easeOut' }}
+            variants={{ hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0 } }}
+          >
+            <div className="text-start">
+              <h1 className="font-display text-3xl sm:text-4xl font-semibold text-brand-charcoal">
+                Account Details
+              </h1>
+              <p className="mt-2 text-brand-ink">Manage your Arty Café profile</p>
             </div>
-          )}
+          </ScrollReveal>
 
-          <div className="space-y-2 pt-2">
-            <button
-              onClick={() => setCustomerTab(pendingBooking ? 'checkout-info' : 'my-bookings')}
-              className="w-full cursor-pointer rounded-xl bg-brand-terracotta py-3 text-xs font-semibold text-brand-cream hover:bg-brand-terracotta-hover transition-colors"
-            >
-              {pendingBooking ? 'Continue Booking' : 'View My Bookings'}
-            </button>
-            <button
-              onClick={() => {
-                logoutCustomer();
-                setAuthScreen('login');
-              }}
-              className="w-full cursor-pointer rounded-xl bg-brand-sand py-3 text-xs font-semibold text-brand-charcoal hover:bg-brand-clay/50 transition-colors"
-            >
-              Log Out Account
-            </button>
-          </div>
+          {/* Avatar + name */}
+          <ScrollReveal
+            once
+            viewOptions={{ once: true, amount: 0.2, margin: '0px 0px -80px 0px' }}
+            transition={{ delay: 0.12, duration: 0.5, ease: 'easeOut' }}
+            variants={{ hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0 } }}
+          >
+            <div className="flex items-center gap-4 rounded-[28px] border border-brand-clay bg-white p-6 shadow-card-sm text-start">
+              <div
+                className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-brand-terracotta font-display text-2xl font-semibold text-brand-cream"
+                aria-hidden="true"
+              >
+                {(currentUser.name || currentUser.email || '?').trim().charAt(0).toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <p className="font-display text-xl font-semibold text-brand-charcoal truncate">
+                  {currentUser.name || 'Your account'}
+                </p>
+                <p className="mt-0.5 text-sm text-brand-muted truncate">{currentUser.email}</p>
+              </div>
+            </div>
+          </ScrollReveal>
+
+          {/* Read-only profile. Deliberately not inputs — these are changed by
+              the studio, not here. */}
+          <ScrollReveal
+            once
+            viewOptions={{ once: true, amount: 0.2, margin: '0px 0px -80px 0px' }}
+            transition={{ delay: 0.24, duration: 0.5, ease: 'easeOut' }}
+            variants={{ hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0 } }}
+          >
+            <div className="rounded-[28px] border border-brand-clay bg-white p-6 sm:p-7 shadow-card-sm text-start">
+              <h2 className="font-display text-lg font-semibold text-brand-charcoal">Profile</h2>
+              <p className="mt-1 text-xs text-brand-muted">
+                Ask the studio if any of these need changing.
+              </p>
+
+              <dl className="mt-5 text-sm">
+                {[
+                  { label: 'Full Name', value: currentUser.name },
+                  { label: 'Email Address', value: currentUser.email },
+                  { label: 'Phone Number', value: currentUser.phone }
+                ].map(row => (
+                  <div key={row.label} className="border-t border-brand-clay py-4 last:border-b">
+                    <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-muted">
+                      {row.label}
+                    </dt>
+                    <dd className={`mt-1.5 break-words ${row.value ? 'text-brand-charcoal ltr-numerals' : 'text-brand-muted italic'}`}>
+                      {row.value || 'Not on file'}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          </ScrollReveal>
+
+          {/* The one action: a new password. */}
+          <ScrollReveal
+            once
+            viewOptions={{ once: true, amount: 0.2, margin: '0px 0px -80px 0px' }}
+            transition={{ delay: 0.36, duration: 0.5, ease: 'easeOut' }}
+            variants={{ hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0 } }}
+          >
+            <div className="rounded-[28px] border border-brand-clay bg-white p-6 sm:p-7 shadow-card-sm text-start">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="font-display text-lg font-semibold text-brand-charcoal">Password</h2>
+                  <p className="mt-1 text-xs text-brand-muted">
+                    Choose a new password for signing in.
+                  </p>
+                </div>
+                {!showPasswordForm && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowPasswordForm(true);
+                      setPasswordMsg(null);
+                      setPasswordError(null);
+                    }}
+                    className="shrink-0 cursor-pointer rounded-full border border-brand-clay bg-brand-cream px-5 py-2.5 text-sm font-semibold text-brand-charcoal transition-colors hover:bg-brand-clay-soft"
+                  >
+                    Change Password
+                  </button>
+                )}
+              </div>
+
+              {showPasswordForm && (
+                <form onSubmit={handleChangePassword} className="mt-5 space-y-4">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-brand-ink">New password *</label>
+                    <PasswordField
+                      required
+                      placeholder="••••••••"
+                      value={newPassword}
+                      onChange={v => { setNewPassword(v); setPasswordError(null); }}
+                      className="w-full bg-brand-cream border border-brand-clay rounded-xl py-3 px-4 text-sm font-semibold text-brand-charcoal"
+                    />
+                    <ul className="space-y-0.5 pt-0.5">
+                      {passwordChecklist(newPassword).map(item => (
+                        <li
+                          key={item.label}
+                          className={`text-[11px] font-semibold flex items-center gap-1.5 ${
+                            item.met ? 'text-brand-sage' : 'text-brand-muted'
+                          }`}
+                        >
+                          <span>{item.met ? '✓' : '•'}</span>
+                          <span>{item.label}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-brand-ink">Confirm new password *</label>
+                    <PasswordField
+                      required
+                      placeholder="••••••••"
+                      value={confirmNewPassword}
+                      onChange={v => { setConfirmNewPassword(v); setPasswordError(null); }}
+                      className="w-full bg-brand-cream border border-brand-clay rounded-xl py-3 px-4 text-sm font-semibold text-brand-charcoal"
+                    />
+                  </div>
+
+                  {passwordError && (
+                    <p className="text-xs font-semibold text-red-600">{passwordError}</p>
+                  )}
+
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="submit"
+                      disabled={isSavingPassword}
+                      className="cursor-pointer rounded-full bg-brand-terracotta px-6 py-3 text-sm font-semibold text-brand-cream shadow-button transition-colors hover:bg-brand-terracotta-hover disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isSavingPassword ? 'Saving…' : 'Save new password'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isSavingPassword}
+                      onClick={() => {
+                        setShowPasswordForm(false);
+                        setNewPassword('');
+                        setConfirmNewPassword('');
+                        setPasswordError(null);
+                      }}
+                      className="cursor-pointer rounded-full border border-brand-clay px-5 py-3 text-sm font-semibold text-brand-muted transition-colors hover:bg-brand-sand/40 disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {passwordMsg && (
+                <p className="mt-4 rounded-xl border border-brand-sage-line bg-brand-sage-soft px-4 py-3 text-xs font-semibold text-brand-sage-hover">
+                  {passwordMsg}
+                </p>
+              )}
+            </div>
+          </ScrollReveal>
+
+          {/* Actions */}
+          <ScrollReveal
+            once
+            viewOptions={{ once: true, amount: 0.2, margin: '0px 0px -80px 0px' }}
+            transition={{ delay: 0.48, duration: 0.5, ease: 'easeOut' }}
+            variants={{ hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0 } }}
+          >
+            <div className="space-y-3">
+              {pendingBooking && (
+                <div className="rounded-[22px] border border-brand-clay bg-brand-sand/40 p-4 text-xs font-semibold text-brand-charcoal text-start">
+                  📌 You have an active booking draft for:{' '}
+                  <span className="text-brand-terracotta">{pendingBooking.workshopTitle}</span> ({pendingBooking.date})
+                </div>
+              )}
+
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  onClick={() => setCustomerTab(pendingBooking ? 'checkout-info' : 'my-bookings')}
+                  className="flex-1 cursor-pointer rounded-full bg-brand-terracotta px-6 py-3.5 text-sm font-semibold text-brand-cream shadow-button transition-colors hover:bg-brand-terracotta-hover"
+                >
+                  {pendingBooking ? 'Continue Booking' : 'View My Bookings'}
+                </button>
+                <button
+                  onClick={() => {
+                    logoutCustomer();
+                    setAuthScreen('login');
+                  }}
+                  className="flex-1 cursor-pointer rounded-full border border-brand-clay bg-brand-cream px-6 py-3.5 text-sm font-semibold text-brand-charcoal transition-colors hover:bg-brand-clay-soft"
+                >
+                  Log Out
+                </button>
+              </div>
+            </div>
+          </ScrollReveal>
+
         </div>
       ) : (
-        /* SPLIT SCREEN LAYOUT */
-        <div className="grid grid-cols-1 lg:grid-cols-12 rounded-[28px] border border-brand-clay overflow-hidden shadow-card-sm max-w-5xl mx-auto lg:min-h-[550px]">
+        /* SPLIT SCREEN LAYOUT — the same entrance the Custom Events card
+           uses: the panel wipes in from the side while the card rises. */
+        <ScrollReveal
+          once
+          viewOptions={{ once: true, amount: 0.15 }}
+          transition={{ duration: 0.5, ease: 'easeOut' }}
+          variants={{ hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0 } }}
+          className="max-w-5xl mx-auto"
+        >
+        {/* `layout` animates the height between the two forms. The fixed
+            min-height it replaces was the resize bug: it held the card at
+            550px whatever the login form actually needed, so returning from
+            the taller sign-up form left dead space below the fields. The card
+            now sizes to its own content in both directions. */}
+        <motion.div
+          layout={!prefersReducedMotion}
+          transition={{ duration: 0.35, ease: 'easeOut' }}
+          className="grid grid-cols-1 lg:grid-cols-12 rounded-[28px] border border-brand-clay overflow-hidden shadow-card-sm"
+        >
           
-          {/* Left Column: Warm Cafe Photo with Overlay */}
-          <div className="lg:col-span-5 relative hidden lg:block bg-brand-sand min-h-full">
+          {/* Left Column: the studio, with just the overlay copy on top —
+              no brand chip, no location label. */}
+          {/* The observed element is never clipped: an element clipped to zero
+              area reports zero intersection, so useInView would never fire and
+              the reveal would hold it invisible for good. The wipe lives on an
+              inner element that inherits the variant instead. */}
+          <ScrollReveal
+            once
+            viewOptions={{ once: true, amount: 0.15 }}
+            transition={{ delay: 0.15, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+            variants={{ hidden: { opacity: 0 }, visible: { opacity: 1 } }}
+            className="lg:col-span-5 relative hidden lg:block bg-brand-sand min-h-full"
+          >
+            <motion.div
+              className="absolute inset-0"
+              variants={{
+                hidden: { clipPath: 'inset(0 100% 0 0)' },
+                visible: { clipPath: 'inset(0 0% 0 0)' }
+              }}
+              transition={{ delay: 0.15, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+            >
             <img
-              src="https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=800&q=80"
-              alt="Cozy Arty Cafe interior in Jeddah"
+              src="/images/auth-panel.jpg"
+              alt="The Arty Café studio in Jeddah"
               className="absolute inset-0 w-full h-full object-cover filter brightness-[0.75]"
-              referrerPolicy="no-referrer"
             />
-            
-            {/* Logo overlay */}
-            <div className="absolute inset-0 flex flex-col justify-between p-10 text-start bg-gradient-to-t from-brand-charcoal/80 via-transparent to-brand-charcoal/40 text-brand-cream">
-              <div className="flex items-center gap-2">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-terracotta text-brand-cream">
-                  <Palette className="h-5 w-5" />
-                </div>
-                <span className="font-display text-xl font-semibold">Arty Café</span>
-              </div>
-              
+
+            <div className="absolute inset-0 flex flex-col justify-end p-10 text-start bg-gradient-to-t from-brand-charcoal/80 via-transparent to-brand-charcoal/40 text-brand-cream">
               <div className="space-y-3">
                 <p className="font-display text-3xl font-semibold leading-tight">Your wheel is waiting.</p>
                 <p className="text-sm text-brand-cream/80 max-w-xs font-medium">
                   Log in to track your clay pieces, review upcoming workshop sessions, and manage reservations easily.
                 </p>
               </div>
-
-              <span className="text-[10px] uppercase tracking-wider font-semibold opacity-60">Jeddah, Saudi Arabia</span>
             </div>
-          </div>
+            </motion.div>
+          </ScrollReveal>
 
           {/* Right Column: Form Column */}
           <div className="lg:col-span-7 bg-brand-cream p-8 md:p-12 flex flex-col justify-center text-start">
@@ -303,7 +559,7 @@ export const AuthSection: React.FC = () => {
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="w-full cursor-pointer rounded-xl bg-brand-terracotta py-3.5 text-sm font-semibold text-brand-cream hover:bg-brand-terracotta-hover transition-colors shadow-card-sm mt-2 flex items-center justify-center gap-2"
+                    className="w-full cursor-pointer rounded-full bg-brand-terracotta py-3.5 text-sm font-semibold text-brand-cream hover:bg-brand-terracotta-hover transition-colors shadow-card-sm mt-2 flex items-center justify-center gap-2"
                   >
                     <LogIn className="h-4 w-4" />
                     <span>{isSubmitting ? 'Signing in...' : 'Log In'}</span>
@@ -322,6 +578,28 @@ export const AuthSection: React.FC = () => {
                         visit or booking. Choose a password to claim that account — your history stays with it.
                       </p>
                     </div>
+
+                    {/* Claiming by phone: the account is created against an
+                        address, and the confirmation link proves it is yours.
+                        It has to be the address already on the record. */}
+                    {!claimIdentifier.includes('@') && (
+                      <div className="space-y-1">
+                        <label className="text-xs font-semibold text-brand-ink">Your email address *</label>
+                        <input
+                          type="email"
+                          required
+                          value={claimEmail}
+                          onChange={e => { setClaimEmail(e.target.value); setErrorMsg(null); }}
+                          placeholder={claimEmailHint || 'you@example.com'}
+                          className="w-full bg-brand-cream border border-brand-clay rounded-xl py-3 px-4 text-sm font-semibold text-brand-charcoal"
+                        />
+                        <p className="text-[11px] text-brand-muted leading-relaxed">
+                          {claimEmailHint
+                            ? `Use the address on your record — it looks like ${claimEmailHint}. We will send a confirmation link to it.`
+                            : 'We will send a confirmation link to this address to finish claiming your account.'}
+                        </p>
+                      </div>
+                    )}
 
                     <div className="space-y-1">
                       <label className="text-xs font-semibold text-brand-ink">New password *</label>
@@ -362,14 +640,14 @@ export const AuthSection: React.FC = () => {
                       <button
                         type="submit"
                         disabled={isSubmitting}
-                        className="flex-1 cursor-pointer rounded-xl bg-brand-terracotta py-3 text-sm font-semibold text-brand-cream hover:bg-brand-terracotta-hover transition-colors disabled:opacity-50"
+                        className="flex-1 cursor-pointer rounded-full bg-brand-terracotta py-3 text-sm font-semibold text-brand-cream hover:bg-brand-terracotta-hover transition-colors disabled:opacity-50"
                       >
                         {isSubmitting ? 'Saving...' : 'Set password & continue'}
                       </button>
                       <button
                         type="button"
                         onClick={() => { setClaimIdentifier(null); setErrorMsg(null); }}
-                        className="px-4 rounded-xl border border-brand-clay text-xs font-semibold text-brand-muted cursor-pointer hover:bg-brand-sand/40"
+                        className="px-4 rounded-full border border-brand-clay text-xs font-semibold text-brand-muted cursor-pointer hover:bg-brand-sand/40"
                       >
                         Cancel
                       </button>
@@ -478,7 +756,7 @@ export const AuthSection: React.FC = () => {
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="w-full cursor-pointer rounded-xl bg-brand-terracotta py-3.5 text-sm font-semibold text-brand-cream hover:bg-brand-terracotta-hover transition-colors shadow-card-sm mt-4"
+                    className="w-full cursor-pointer rounded-full bg-brand-terracotta py-3.5 text-sm font-semibold text-brand-cream hover:bg-brand-terracotta-hover transition-colors shadow-card-sm mt-4"
                   >
                     {isSubmitting ? 'Creating account...' : 'Create Account'}
                   </button>
@@ -518,11 +796,11 @@ export const AuthSection: React.FC = () => {
                 </div>
 
                 {/* Method selector. Phone is offered but not yet available. */}
-                <div className="grid grid-cols-2 gap-2 bg-brand-sand/30 p-1 rounded-xl border border-brand-clay">
+                <div className="grid grid-cols-2 gap-2 bg-brand-sand/30 p-1 rounded-full border border-brand-clay">
                   <button
                     type="button"
                     onClick={() => setForgotMethod('email')}
-                    className={`py-2 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
+                    className={`py-2 text-xs font-semibold rounded-full transition-colors cursor-pointer ${
                       forgotMethod === 'email' ? 'bg-brand-cream text-brand-terracotta shadow-card-sm' : 'text-brand-muted'
                     }`}
                   >
@@ -531,7 +809,7 @@ export const AuthSection: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setForgotMethod('phone')}
-                    className={`py-2 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
+                    className={`py-2 text-xs font-semibold rounded-full transition-colors cursor-pointer ${
                       forgotMethod === 'phone' ? 'bg-brand-cream text-brand-terracotta shadow-card-sm' : 'text-brand-muted'
                     }`}
                   >
@@ -565,7 +843,7 @@ export const AuthSection: React.FC = () => {
                     <button
                       type="submit"
                       disabled={isSubmitting}
-                      className="w-full cursor-pointer rounded-xl bg-brand-terracotta py-3.5 text-sm font-semibold text-brand-cream hover:bg-brand-terracotta-hover transition-colors shadow-card-sm mt-2 flex items-center justify-center gap-2 disabled:opacity-50"
+                      className="w-full cursor-pointer rounded-full bg-brand-terracotta py-3.5 text-sm font-semibold text-brand-cream hover:bg-brand-terracotta-hover transition-colors shadow-card-sm mt-2 flex items-center justify-center gap-2 disabled:opacity-50"
                     >
                       <KeyRound className="h-4 w-4" />
                       <span>{isSubmitting ? 'Sending reset link...' : 'Email me a reset link'}</span>
@@ -596,7 +874,7 @@ export const AuthSection: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => { setForgotMethod('email'); setErrorMsg(null); }}
-                      className="w-full cursor-pointer rounded-xl bg-brand-terracotta py-3.5 text-sm font-semibold text-brand-cream hover:bg-brand-terracotta-hover transition-colors"
+                      className="w-full cursor-pointer rounded-full bg-brand-terracotta py-3.5 text-sm font-semibold text-brand-cream hover:bg-brand-terracotta-hover transition-colors"
                     >
                       Use email recovery instead
                     </button>
@@ -608,7 +886,8 @@ export const AuthSection: React.FC = () => {
 
           </div>
 
-        </div>
+        </motion.div>
+        </ScrollReveal>
       )}
 
     </div>
