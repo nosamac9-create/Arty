@@ -99,6 +99,23 @@ export const MIGRATION_REQUIREMENTS: MigrationRequirement[] = [
     name: 'bookings.staff_id column',
     migration: '0004_booking_staff_assignment.sql',
     probe: tableExists('bookings', 'staff_id')
+  },
+
+  // 0005 — signing in with a phone number or an email address.
+  {
+    name: 'customer_signin_route()',
+    migration: '0005_signin_by_phone_or_email.sql',
+    probe: rpcExists('customer_signin_route', { identifier: '' })
+  },
+  {
+    name: 'customer_signin_email()',
+    migration: '0005_signin_by_phone_or_email.sql',
+    probe: rpcExists('customer_signin_email', { p_identifier: '', p_password: '' })
+  },
+  {
+    name: 'customer_claim_email_matches()',
+    migration: '0005_signin_by_phone_or_email.sql',
+    probe: rpcExists('customer_claim_email_matches', { p_identifier: '', p_email: '' })
   }
 ];
 

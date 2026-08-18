@@ -95,11 +95,34 @@ interface AppContextType {
   authScreen: 'login' | 'register' | 'forgot';
   setAuthScreen: (screen: 'login' | 'register' | 'forgot') => void;
   registerCustomer: (data: { name: string; email: string; phone: string; password?: string }) => Promise<{ success: boolean; error?: string }>;
-  loginCustomer: (email: string, password?: string) =>
-    Promise<{ success: boolean; error?: string; needsPasswordSetup?: boolean }>;
-  /** Attaches a password to an existing passwordless record and signs them in. */
-  claimCustomerAccount: (emailOrPhone: string, password: string) =>
-    Promise<{ success: boolean; error?: string; customerId?: string }>;
+  /**
+   * Signs a customer in with EITHER their phone number or their email address.
+   * `needsPasswordSetup` means the identifier matched an unclaimed record and
+   * the claim flow should be offered instead of a password error.
+   */
+  loginCustomer: (emailOrPhone: string, password?: string) =>
+    Promise<{
+      success: boolean;
+      error?: string;
+      needsPasswordSetup?: boolean;
+      /** The masked address the claim confirmation will be sent to, if known. */
+      claimEmailHint?: string;
+      /** True when the record has no email, so the claim needs phone OTP. */
+      awaitingPhoneVerification?: boolean;
+    }>;
+  /**
+   * Attaches a password to an existing passwordless record and signs them in.
+   * `email` is required when the identifier is a phone number: the auth account
+   * is created against an address, and the record's own address is never
+   * disclosed to the browser.
+   */
+  claimCustomerAccount: (emailOrPhone: string, password: string, email?: string) =>
+    Promise<{
+      success: boolean;
+      error?: string;
+      customerId?: string;
+      needsEmailConfirmation?: boolean;
+    }>;
   /** Sends a reset link. The reply never reveals whether the email exists. */
   requestPasswordReset: (email: string) =>
     Promise<{ success: boolean; error?: string; message?: string }>;
@@ -111,6 +134,12 @@ interface AppContextType {
   completePasswordReset: (newPassword: string) =>
     Promise<{ success: boolean; error?: string; expired?: boolean }>;
   resetCustomerPassword: (emailOrPhone: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
+  /**
+   * Changes the signed-in customer's own password. Requires their live session
+   * — there is no identifier argument, so it can only ever act on the caller.
+   */
+  changeCustomerPassword: (newPassword: string) =>
+    Promise<{ success: boolean; error?: string; needsSignIn?: boolean }>;
   logoutCustomer: () => void;
 
   // Active items for detail/editing
@@ -562,24 +591,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   /**
-   * Finds the shared customer record for a typed email address or phone number.
-   * Matching is normalized, so a record saved as "0501234567", "+966501234567"
-   * or "Noura@Example.com" is found however the person types it.
+   * Asks Postgres which sign-in route an identifier needs.
+   *
+   * This cannot be answered in the browser: an anonymous visitor cannot read
+   * `customers` at all (the RLS policies are `to authenticated` and scoped to
+   * their own row), so a local lookup finds nothing before sign-in and every
+   * walk-in would be told their password was wrong.
+   *
+   * The function folds "no record" and "already claimed" into the same
+   * `password` answer, so this cannot be used to discover which numbers or
+   * addresses are on file.
    */
-  const findCustomerForSignIn = async (input: string) => {
-    const all = await db.customers.toArray();
-    const email = canonicalEmail(input);
-    const phoneKey = phoneMatchKey(input);
+  const resolveSignInRoute = async (
+    identifier: string
+  ): Promise<{ route: 'password' | 'claim_email' | 'claim_phone_pending'; emailHint?: string }> => {
+    if (!supabase) return { route: 'password' };
 
-    if (email) {
-      const byEmail = all.find(c => canonicalEmail(c.email) === email);
-      if (byEmail) return byEmail;
+    const { data, error } = await supabase.rpc('customer_signin_route', {
+      identifier: String(identifier || '').trim()
+    });
+
+    if (error) {
+      console.error('customer_signin_route failed:', error.message);
+      // Fail closed: ask for a password rather than opening the claim flow on
+      // an identifier whose status is unknown.
+      return { route: 'password' };
     }
-    if (phoneKey) {
-      const byPhone = all.find(c => customerPhoneKey(c) === phoneKey);
-      if (byPhone) return byPhone;
+
+    const route = (data as any)?.route;
+    if (route === 'claim_email' || route === 'claim_phone_pending') {
+      return { route, emailHint: (data as any)?.email_hint || undefined };
     }
-    return undefined;
+    return { route: 'password' };
   };
 
   const signInCustomerRecord = (customer: CustomerAccount) => {
@@ -589,13 +632,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   /**
-   * Customer sign-in.
+   * Customer sign-in with EITHER a phone number or an email address.
    *
-   * A password is REQUIRED: the account must have one stored and the entered
-   * one must match it. Records created without a password — walk-ins, admin
-   * entries and bookings taken over the counter — cannot be signed into at all
-   * until their owner claims them and sets one. `needsPasswordSetup` tells the
-   * screen to offer that instead of just refusing.
+   * The identifier is resolved server-side first, because which of three things
+   * should happen depends on a row the browser is not allowed to read:
+   *
+   *   - an unclaimed record (a walk-in, an admin entry, a counter booking)
+   *     is routed into the claim flow — never told its password is wrong;
+   *   - a real website account is asked for its password, and a wrong one
+   *     gets the ordinary error, NOT the claim flow;
+   *   - an identifier with nothing behind it is answered exactly like a real
+   *     account, so this cannot be used to discover who is on file.
+   *
+   * Supabase Auth still mints every session. A phone sign-in only needs the
+   * address the account lives at, and the RPC releases that solely to a caller
+   * who has already proved they hold the password.
    */
   const loginCustomer = async (emailOrPhone: string, password?: string) => {
     const input = String(emailOrPhone || '').trim();
@@ -603,34 +654,66 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!password) return { success: false, error: 'Enter your password.' };
     if (!supabase) return { success: false, error: SUPABASE_NOT_CONFIGURED };
 
-    // Supabase Auth verifies the credential. There is no password comparison
-    // in the app any more, and no password column to compare against.
-    const email = canonicalEmail(input);
-    if (!email.includes('@')) {
-      // Phone sign-in is not enabled yet; the record still resolves by phone
-      // so the message can point at the right recovery route.
-      const byPhone = await findCustomerForSignIn(input);
-      if (byPhone && !byPhone.userId) {
-        return {
-          success: false,
-          needsPasswordSetup: true,
-          error: 'This number is on file from a visit or booking, but it does not have an account yet. Set one up to claim it.'
-        };
+    const typedEmail = canonicalEmail(input);
+    const looksLikeEmail = typedEmail.includes('@');
+
+    // Step 1 — which route? An unclaimed record is offered the claim flow
+    // before any credential is tried, so it never sees a password error.
+    const { route, emailHint } = await resolveSignInRoute(input);
+
+    if (route === 'claim_email') {
+      return {
+        success: false,
+        needsPasswordSetup: true,
+        claimEmailHint: emailHint,
+        error: looksLikeEmail
+          ? 'This email is on file from a visit or booking, but it does not have an account yet. Set a password to claim it.'
+          : 'This number is on file from a visit or booking, but it does not have an account yet. Set a password to claim it.'
+      };
+    }
+
+    if (route === 'claim_phone_pending') {
+      // ⚠️ OWNERSHIP VERIFICATION — the record has a phone and no email, so
+      // there is nothing to send a confirmation to and knowing the number
+      // proves nothing. The claim is offered but cannot complete; see
+      // claimCustomerAccount().
+      // TODO(stage-2): gate behind supabase.auth.signInWithOtp({ phone }) +
+      // verifyOtp() once SMS is enabled, then allow it without an email.
+      return {
+        success: false,
+        // No claim form is offered: it could not complete, and an unusable form
+        // is worse than a clear explanation.
+        awaitingPhoneVerification: true,
+        error: 'This number is on file from a visit or booking, but there is no email address on the record to send a confirmation link to. Please ask the studio to add your email, then set your password here.'
+      };
+    }
+
+    // Step 2 — a password is expected. Signing in by phone needs the address
+    // the auth account lives at; the RPC returns it only once the password
+    // checks out, and returns nothing at all for a wrong one or an unknown
+    // identifier, so the two are indistinguishable.
+    let email = typedEmail;
+    if (!looksLikeEmail) {
+      const { data: resolvedEmail, error: lookupError } = await supabase.rpc('customer_signin_email', {
+        p_identifier: input,
+        p_password: password
+      });
+
+      if (lookupError) {
+        console.error('customer_signin_email failed:', lookupError.message);
+        return { success: false, error: 'Could not sign you in right now. Please try again.' };
       }
-      return { success: false, error: 'Please sign in with your email address.' };
+
+      if (typeof resolvedEmail !== 'string' || !resolvedEmail.includes('@')) {
+        return { success: false, error: 'Incorrect phone number or password.' };
+      }
+      email = canonicalEmail(resolvedEmail);
     }
 
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error || !data.user) {
-      // An unclaimed record is offered the claim route rather than a dead end.
-      const existing = await findCustomerForSignIn(email);
-      if (existing && !existing.userId) {
-        return {
-          success: false,
-          needsPasswordSetup: true,
-          error: 'This email is on file from a visit or booking, but it does not have an account yet. Set one up to claim it.'
-        };
-      }
+      // Route resolution already handled the unclaimed case, so a failure here
+      // is a genuinely wrong credential and says so plainly.
       return { success: false, error: friendlyAuthError(error?.message || '') };
     }
 
@@ -671,7 +754,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
    * completes once Supabase Auth has proven the caller controls the address
    * (the email confirmation link). Knowing a phone number must never be enough.
    */
-  const claimCustomerAccount = async (emailOrPhone: string, password: string) => {
+  const claimCustomerAccount = async (emailOrPhone: string, password: string, email?: string) => {
     const input = String(emailOrPhone || '').trim();
     if (!input) return { success: false, error: 'Email or phone number is required.' };
     if (!supabase) return { success: false, error: SUPABASE_NOT_CONFIGURED };
@@ -679,32 +762,82 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const strength = validatePasswordRule(password);
     if (!strength.valid) return { success: false, error: strength.error };
 
-    const customer = await findCustomerForSignIn(input);
-    if (!customer) {
-      return { success: false, error: 'No account found with these details. Please create an account.' };
-    }
-    if (customer.userId) {
-      return { success: false, error: 'This account already has a sign-in. Please sign in, or use Forgot password.' };
-    }
-
-    // The email the account will be created against. A record with no email on
-    // file cannot be claimed by email — that path needs phone OTP.
-    // TODO(stage-2): offer supabase.auth.signInWithOtp({ phone }) here.
-    const email = canonicalEmail(customer.email) || canonicalEmail(input);
-    if (!email.includes('@')) {
+    // The record itself is unreadable from here — an anonymous caller cannot
+    // select a row whose user_id is null — so its status comes from the same
+    // route function the sign-in used. A claimed identifier is refused without
+    // confirming that it is claimed.
+    const { route } = await resolveSignInRoute(input);
+    if (route === 'password') {
       return {
         success: false,
-        error: 'This record has no email address on file. Please ask the studio to add one, then claim your account.'
+        error: 'That account cannot be set up here. Please sign in, or use Forgot password.'
       };
     }
 
-    const { data, error } = await supabase.auth.signUp({ email, password });
+    if (route === 'claim_phone_pending') {
+      // ⚠️ OWNERSHIP VERIFICATION — the record holds a phone number and no
+      // email, so there is nothing to send a confirmation link to. Knowing the
+      // number proves nothing, and letting any address claim it would hand the
+      // record to whoever typed the number first. The claim stops here.
+      // TODO(stage-2): when SMS is enabled, prove the phone channel with
+      // supabase.auth.signInWithOtp({ phone }) + verifyOtp() and claim on that
+      // verification instead of on an email.
+      return {
+        success: false,
+        error: 'We cannot finish setting this up online yet — there is no email address on your record. Please ask the studio to add one, then claim your account.'
+      };
+    }
+
+    // The address the auth account is created against, and where the
+    // confirmation link goes. Either the identifier itself is an email, or one
+    // was typed in the claim form; the record's own address is never disclosed
+    // to the browser, only ever masked as a hint.
+    const claimEmail = canonicalEmail(email) || canonicalEmail(input);
+
+    if (!claimEmail.includes('@')) {
+      return {
+        success: false,
+        error: 'Enter the email address on your record, and we will send a confirmation link to finish claiming your account.'
+      };
+    }
+
+    // Claiming by phone: the typed address must be the one the studio already
+    // holds. The confirmation link only proves the visitor owns that address —
+    // it says nothing about their being this customer — so any other address
+    // would let whoever knows the number take the record.
+    if (canonicalEmail(input) !== claimEmail) {
+      const { data: matches, error: matchError } = await supabase.rpc('customer_claim_email_matches', {
+        p_identifier: input,
+        p_email: claimEmail
+      });
+
+      if (matchError) {
+        console.error('customer_claim_email_matches failed:', matchError.message);
+        return { success: false, error: 'Could not set up your account right now. Please try again.' };
+      }
+
+      if (matches !== true) {
+        // Deliberately does not say which address is on file.
+        return {
+          success: false,
+          error: 'That email address does not match the one on your record. Check the hint above, or ask the studio to confirm it.'
+        };
+      }
+    }
+
+    // The claim attaches to the record matched by the ORIGINAL identifier — the
+    // phone number, when that is what was typed — so a walk-in's bookings,
+    // queue visits and pottery all stay on the one record. The typed email only
+    // ever names the auth account.
+    const { data, error } = await supabase.auth.signUp({ email: claimEmail, password });
     if (error) return { success: false, error: friendlyAuthError(error.message) };
 
     const authId = data.user?.id;
     if (!authId) return { success: false, error: 'Could not create the account. Please try again.' };
 
-    const linkedId = await linkAuthToCustomer(email, authId);
+    // Matched on the identifier that was signed in with, not on the typed
+    // email, so no second customer is ever created for the same person.
+    const linkedId = await linkAuthToCustomer(input, authId);
     if (!linkedId) {
       return { success: false, error: 'No account found with these details. Please create an account.' };
     }
@@ -826,6 +959,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     success: false,
     error: 'Password resets are sent by email. Use "Forgot password?" to get a secure link.'
   });
+
+  /**
+   * Changes the password of whoever is signed in on the customer client.
+   *
+   * Supabase resolves the account from the session cookie, so there is nothing
+   * to pass and nothing to spoof: a caller can only change their own. An
+   * account that was never claimed has no auth session, and is told to use the
+   * emailed link rather than being handed a way to set a password from the
+   * page.
+   */
+  const changeCustomerPassword = async (newPassword: string) => {
+    if (!supabase) return { success: false, error: SUPABASE_NOT_CONFIGURED };
+
+    const strength = validatePasswordRule(newPassword);
+    if (!strength.valid) return { success: false, error: strength.error };
+
+    const { data } = await supabase.auth.getSession();
+    if (!data.session) {
+      return {
+        success: false,
+        needsSignIn: true,
+        error: 'Your session has expired, or this account has not been set up with a password yet. Sign in again, or use "Forgot password?" to set one by email.'
+      };
+    }
+
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) return { success: false, error: friendlyAuthError(error.message) };
+
+    return { success: true };
+  };
 
   const logoutCustomer = async () => {
     // Supabase owns the session; signing out clears it everywhere.
@@ -2839,7 +3002,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       workshopsInitialCategory, setWorkshopsInitialCategory,
       currentUser, setCurrentUser,
       authScreen, setAuthScreen,
-      registerCustomer, loginCustomer, claimCustomerAccount,
+      registerCustomer, loginCustomer, claimCustomerAccount, changeCustomerPassword,
       requestPasswordReset, completePasswordReset, hasRecoverySession, recoveryLinkError,
       resetCustomerPassword, logoutCustomer,
       selectedWorkshopId, setSelectedWorkshopId,

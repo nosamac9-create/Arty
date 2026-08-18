@@ -442,11 +442,11 @@ export const CheckoutInfoSection: React.FC = () => {
 
             <form onSubmit={handleQuickLogin} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-brand-ink mb-1">Email</label>
+                <label className="block text-xs font-semibold text-brand-ink mb-1">Email or phone</label>
                 <input
-                  type="email"
+                  type="text"
                   required
-                  placeholder="e.g. noura@example.com"
+                  placeholder="e.g. noura@example.com or 0501234567"
                   value={loginEmail}
                   onChange={e => { setLoginEmail(e.target.value); setModalError(null); }}
                   className="w-full bg-brand-sand/20 border border-brand-clay rounded-xl py-2.5 px-3 text-sm font-semibold text-brand-charcoal"
