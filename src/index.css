@@ -134,3 +134,72 @@ input:focus, select:focus, textarea:focus {
 @theme {
   --breakpoint-xs: 25rem;
 }
+
+/* =============================================================================
+   ARC GALLERY HERO
+   The cards rise the last few degrees into place, then the headline follows.
+   The translate values must match the component's resting transform, or the
+   card jumps at the end of the animation.
+   ============================================================================= */
+
+@keyframes arcCardIn {
+  from { opacity: 0; transform: translate(-50%, 62%) scale(0.94); }
+  to   { opacity: 1; transform: translate(-50%, 50%) scale(1); }
+}
+
+@keyframes arcContentIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.arc-card-in {
+  animation: arcCardIn 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.arc-content-in {
+  animation: arcContentIn 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arc-card-in,
+  .arc-content-in {
+    animation: none;
+    opacity: 1 !important;
+  }
+  .arc-card-in { transform: translate(-50%, 50%) !important; }
+}
+
+/* =============================================================================
+   ANIMATED MAP
+   The pin drops in, then keeps a slow pulse under it; the "open" dot breathes.
+   ============================================================================= */
+
+@keyframes mapPinDrop {
+  0%   { opacity: 0; transform: translateY(-18px); }
+  60%  { opacity: 1; transform: translateY(3px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes mapPinPulse {
+  0%   { transform: scale(0.7); opacity: 0.7; }
+  70%  { transform: scale(2.6); opacity: 0; }
+  100% { transform: scale(2.6); opacity: 0; }
+}
+
+@keyframes mapLiveDot {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}
+
+.map-pin-drop  { animation: mapPinDrop 0.7s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.map-pin-pulse { animation: mapPinPulse 2.4s ease-out infinite; }
+.map-live-dot  { animation: mapLiveDot 2s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .map-pin-drop,
+  .map-pin-pulse,
+  .map-live-dot {
+    animation: none;
+  }
+  .map-pin-pulse { opacity: 0; }
+}
