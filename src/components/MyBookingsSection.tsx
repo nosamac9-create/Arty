@@ -9,6 +9,8 @@ import { Calendar, Users, Hash, AlertCircle, Trash2, CalendarX, Compass, HelpCir
 import { Booking } from '../types';
 import { resolveBookingInstructor } from '../utils/queueUtils';
 import { normalizeCustomerPhone } from '../utils/customerIdentity';
+import Reveal from './ui/Reveal';
+import { ScrollReveal } from './ui/ScrollReveal';
 
 export const MyBookingsSection: React.FC = () => {
   const { bookings, cancelBooking, setCustomerTab, workshops, currentUser, setAuthScreen, staff, workshopSessions } = useApp();
@@ -94,12 +96,22 @@ export const MyBookingsSection: React.FC = () => {
 
         {/* Title */}
         <div className="pb-8 border-b border-brand-clay mb-8">
-          <h1 className="font-display text-3xl font-semibold text-brand-charcoal">My Reservations</h1>
-          <p className="text-sm text-brand-ink mt-1">
-            Review, reschedule, or cancel your upcoming creative sessions at Arty Café.
-          </p>
+          <Reveal index={0}>
+            <h1 className="font-display text-3xl font-semibold text-brand-charcoal">My Reservations</h1>
+          </Reveal>
+          <Reveal index={1}>
+            <p className="text-sm text-brand-ink mt-1">
+              Review, reschedule, or cancel your upcoming creative sessions at Arty Café.
+            </p>
+          </Reveal>
         </div>
 
+        <ScrollReveal
+          once
+          viewOptions={{ once: true, amount: 0.3, margin: '0px 0px -80px 0px' }}
+          transition={{ delay: 0, duration: 0.5, ease: 'easeOut' }}
+          variants={{ hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0 } }}
+        >
         <div className="bg-white border border-brand-clay rounded-[28px] p-8 sm:p-12 shadow-card-sm max-w-md mx-auto space-y-4 text-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-terracotta/10 text-brand-terracotta mx-auto">
             <Calendar className="h-8 w-8" />
@@ -117,6 +129,7 @@ export const MyBookingsSection: React.FC = () => {
             </button>
           </div>
         </div>
+        </ScrollReveal>
       </div>
     );
   }
@@ -126,10 +139,14 @@ export const MyBookingsSection: React.FC = () => {
 
       {/* Title */}
       <div className="pb-8 border-b border-brand-clay mb-8">
-        <h1 className="font-display text-3xl font-semibold text-brand-charcoal">My Reservations</h1>
-        <p className="text-sm text-brand-ink mt-1">
-          Review, reschedule, or cancel your upcoming creative sessions at Arty Café.
-        </p>
+        <Reveal index={0}>
+          <h1 className="font-display text-3xl font-semibold text-brand-charcoal">My Reservations</h1>
+        </Reveal>
+        <Reveal index={1}>
+          <p className="text-sm text-brand-ink mt-1">
+            Review, reschedule, or cancel your upcoming creative sessions at Arty Café.
+          </p>
+        </Reveal>
       </div>
 
       {/* Tabs */}
@@ -158,6 +175,12 @@ export const MyBookingsSection: React.FC = () => {
       <div className="space-y-6">
         {activeList.length === 0 ? (
           /* PAST TAB EMPTY STATE or GENERAL EMPTY STATE */
+          <ScrollReveal
+            once
+            viewOptions={{ once: true, amount: 0.3, margin: '0px 0px -80px 0px' }}
+            transition={{ delay: 0, duration: 0.5, ease: 'easeOut' }}
+            variants={{ hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0 } }}
+          >
           <div className="bg-white border border-brand-clay rounded-2xl p-8 sm:p-12 text-center max-w-md mx-auto shadow-card-sm">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-terracotta/10 text-brand-terracotta mb-4">
               <CalendarX className="h-7 w-7" />
@@ -166,7 +189,7 @@ export const MyBookingsSection: React.FC = () => {
               {activeTab === 'Past' ? 'No past bookings yet' : 'No upcoming bookings'}
             </h3>
             <p className="text-sm text-brand-ink mt-2 leading-relaxed">
-              {activeTab === 'Past' 
+              {activeTab === 'Past'
                 ? "You haven't completed any art classes with us yet. Let's make something beautiful!"
                 : "You don't have any sessions booked. Check our interactive timetable to join."
               }
@@ -179,15 +202,22 @@ export const MyBookingsSection: React.FC = () => {
               <span>Browse Workshops</span>
             </button>
           </div>
+          </ScrollReveal>
         ) : (
-          activeList.map(b => {
+          activeList.map((b, rowIndex) => {
             const isClosed = isCancellationClosed(b);
             const isCancelled = b.status === 'Cancelled';
             const imageUrl = getWorkshopImage(b.workshopId);
 
             return (
-              <div
+              <ScrollReveal
                 key={b.id}
+                once
+                viewOptions={{ once: true, amount: 0.3, margin: '0px 0px -80px 0px' }}
+                transition={{ delay: rowIndex * 0.12, duration: 0.5, ease: 'easeOut' }}
+                variants={{ hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0 } }}
+              >
+              <div
                 className={`flex flex-col sm:flex-row items-start sm:items-center justify-between p-5 rounded-[22px] border border-brand-clay bg-brand-cream shadow-2xs gap-4 transition-all hover:shadow-card-sm relative ${
                   isCancelled ? 'opacity-65' : ''
                 }`}
@@ -288,6 +318,7 @@ export const MyBookingsSection: React.FC = () => {
                 </div>
 
               </div>
+              </ScrollReveal>
             );
           })
         )}

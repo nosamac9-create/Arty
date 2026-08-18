@@ -8,6 +8,8 @@ import { useApp } from '../context/AppContext';
 import { Sparkles, Calendar, Box, Flame, Compass, Clock, LogIn, Hash } from 'lucide-react';
 import { PotteryPiece, stageCustomerLabel } from '../types';
 import { formatDateTime } from '../utils/calendarConfig';
+import Reveal from './ui/Reveal';
+import { ScrollReveal } from './ui/ScrollReveal';
 
 export const MyPiecesSection: React.FC = () => {
   const { pieces, setCustomerTab, currentUser, notifications, markNotificationAsRead, pipelineStages } = useApp();
@@ -90,10 +92,14 @@ export const MyPiecesSection: React.FC = () => {
       
       {/* Header block */}
       <div className="pb-8 border-b border-brand-clay mb-8">
-        <h1 className="font-display text-3xl font-semibold text-brand-charcoal">My Pottery Creations</h1>
-        <p className="text-sm text-brand-ink mt-1">
-          Track your handcrafted clay pieces as they move from wet clay crafting to our kiln firing and glazing stages.
-        </p>
+        <Reveal index={0}>
+          <h1 className="font-display text-3xl font-semibold text-brand-charcoal">My Pottery Creations</h1>
+        </Reveal>
+        <Reveal index={1}>
+          <p className="text-sm text-brand-ink mt-1">
+            Track your handcrafted clay pieces as they move from wet clay crafting to our kiln firing and glazing stages.
+          </p>
+        </Reveal>
       </div>
 
       {/* Customer Notifications Panel */}
@@ -140,6 +146,12 @@ export const MyPiecesSection: React.FC = () => {
 
       {/* Not Logged In State */}
       {!currentUser ? (
+        <ScrollReveal
+          once
+          viewOptions={{ once: true, amount: 0.3, margin: '0px 0px -80px 0px' }}
+          transition={{ delay: 0, duration: 0.5, ease: 'easeOut' }}
+          variants={{ hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0 } }}
+        >
         <div className="bg-white border border-brand-clay rounded-[28px] py-16 px-6 text-center max-w-md mx-auto space-y-4 shadow-card-sm">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-terracotta/10 text-brand-terracotta">
             <Flame className="h-7 w-7" />
@@ -158,8 +170,15 @@ export const MyPiecesSection: React.FC = () => {
             <span>Sign In to Account</span>
           </button>
         </div>
+        </ScrollReveal>
       ) : userPieces.length === 0 ? (
         /* Empty State for Logged-In User */
+        <ScrollReveal
+          once
+          viewOptions={{ once: true, amount: 0.3, margin: '0px 0px -80px 0px' }}
+          transition={{ delay: 0, duration: 0.5, ease: 'easeOut' }}
+          variants={{ hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0 } }}
+        >
         <div className="bg-white border border-brand-clay rounded-[28px] py-16 px-6 text-center max-w-md mx-auto space-y-4 shadow-card-sm">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-terracotta/10 text-brand-terracotta">
             <Box className="h-7 w-7" />
@@ -178,18 +197,25 @@ export const MyPiecesSection: React.FC = () => {
             <span>Explore Workshops</span>
           </button>
         </div>
+        </ScrollReveal>
       ) : (
         /* Grid of Piece Cards */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {userPieces.map((p) => {
+          {userPieces.map((p, cardIndex) => {
             const currentStageIdx = getCustomerStageIndex(p);
             const isReady = p.status === 'Ready for Collection';
-            
+
             const isBroken = p.status === 'Broken';
 
             return (
-              <div
+              <ScrollReveal
                 key={p.id}
+                once
+                viewOptions={{ once: true, amount: 0.3, margin: '0px 0px -80px 0px' }}
+                transition={{ delay: cardIndex * 0.12, duration: 0.5, ease: 'easeOut' }}
+                variants={{ hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0 } }}
+              >
+              <div
                 className={`relative bg-brand-cream rounded-[32px] p-6 shadow-card shadow-brand-charcoal/5 border flex flex-col justify-between transition-all duration-300 ${
                   isBroken
                     ? 'border-2 border-red-300 ring-4 ring-red-100'
@@ -325,6 +351,7 @@ export const MyPiecesSection: React.FC = () => {
                 </div>
 
               </div>
+              </ScrollReveal>
             );
           })}
         </div>
