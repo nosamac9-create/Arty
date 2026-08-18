@@ -5,8 +5,55 @@
 
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { motion } from 'motion/react';
+import { PhotoGallery } from './ui/PhotoGallery';
+import { VerticalCutReveal } from './ui/VerticalCutReveal';
+import { CountingNumber } from './ui/CountingNumber';
+import { ScrollReveal } from './ui/ScrollReveal';
+import Reveal from './ui/Reveal';
+import { AnimatedMap } from './ui/AnimatedMap';
+import {
+  ContainerStagger,
+  ContainerAnimated,
+  GalleryGrid,
+  GalleryGridCell
+} from './ui/CtaSectionWithGallery';
 import { formatDate } from '../utils/calendarConfig';
 import { Calendar, Sparkles, ChevronRight, Paintbrush, MousePointerClick, CalendarRange, Gift, Coffee, ChevronDown, ChevronUp, Phone, Mail, UserCheck, Star } from 'lucide-react';
+
+/**
+ * The arc gallery's photographs, in the order the studio supplied them.
+ * They live in /public so they are served as plain files, not bundled.
+ */
+const HERO_IMAGES = [
+  '/images/hero/studio-01.jpg',
+  '/images/hero/studio-02.jpg',
+  '/images/hero/studio-03.jpg',
+  '/images/hero/studio-04.jpg',
+  '/images/hero/studio-05.jpg',
+  '/images/hero/studio-06.jpg',
+  '/images/hero/studio-07.jpg',
+  '/images/hero/studio-08.jpg',
+  '/images/hero/studio-09.jpg',
+  '/images/hero/studio-10.jpg',
+  '/images/hero/studio-11.jpg',
+  '/images/hero/studio-12.jpg'
+];
+
+const HERO_ALTS = [
+  'Underglaze bottles beside a wall of fired colour test tiles',
+  'Hands trimming a terracotta pot on the wheel',
+  'Throwing a bowl on the potter’s wheel',
+  'Paint-covered studio tables under handmade ceramic lamps',
+  'A studio wall hung with students’ paintings',
+  'Shelves of glazed cups and bowls made by students',
+  'A hand reaching for brushes in a handmade cup',
+  'An artist holding a loaded paint palette',
+  'Shaping a cylinder with a rib tool at the wheel',
+  'A visitor looking at the portrait wall',
+  'A pot spinning on the wheel, seen from above',
+  'The pottery room mid-session, trays of thrown cups drying'
+];
 
 export const HomeSection: React.FC = () => {
   const {
@@ -61,124 +108,122 @@ export const HomeSection: React.FC = () => {
   return (
     <div className="animate-in fade-in duration-300">
       
-      {/* HERO SECTION */}
-      <section className="relative overflow-hidden bg-brand-cream py-12 md:py-20 lg:py-24">
+      {/* HERO — a stack of studio photographs that deals itself into a row.
+          Copy, CTAs and the three facts are unchanged; only the arrangement
+          around them is new. */}
+      <section className="bg-brand-cream pt-10 sm:pt-14 pb-16 md:pb-20 overflow-hidden">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
-            
-            {/* Left Content Column */}
-            <div className="lg:col-span-5 space-y-6 text-start">
-              <div className="inline-flex items-center gap-2 rounded-full border border-brand-sage-line bg-brand-sage-soft px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-brand-sage-hover">
-                <Sparkles className="h-3.5 w-3.5" />
-                <span>Creative Sanctuary in Jeddah</span>
-              </div>
-              <h1 className="font-display text-[42px] sm:text-5xl lg:text-[62px] font-semibold text-brand-charcoal">
-                Melt into the art of <span className="text-brand-sage">clay &amp; canvas</span>.
-              </h1>
-              <p className="text-lg text-brand-ink max-w-lg leading-[1.7]">
-                Slow down, pour a fresh cup of espresso, and handcraft ceramic pottery or vibrant acrylic art in Jeddah’s favorite creative retreat.
-              </p>
-              <div className="pt-2 flex flex-wrap gap-4">
-                <button
-                  onClick={() => {
-                    setWorkshopsInitialCategory('All');
-                    setCustomerTab('workshops');
-                  }}
-                  className="cursor-pointer rounded-[14px] bg-brand-terracotta px-7 py-4 text-base font-semibold text-brand-cream shadow-button hover:bg-brand-terracotta-hover transition-colors duration-200 active:scale-[0.98]"
-                >
-                  Browse Workshops
-                </button>
-                <button
-                  onClick={() => {
-                    setSelectedWorkshopId('ws-1');
-                    setCustomerTab('detail');
-                  }}
-                  className="cursor-pointer rounded-[14px] border border-brand-clay bg-brand-cream px-7 py-4 text-base font-semibold text-brand-charcoal hover:bg-brand-clay-soft transition-colors duration-200"
-                >
-                  View Top Experience
-                </button>
-              </div>
 
-              {/* Three plain facts about the studio — the design leads with
-                  proof rather than adjectives. */}
-              <dl className="grid grid-cols-1 xs:grid-cols-3 gap-5 border-t border-brand-clay pt-6 max-w-lg">
-                <div>
-                  <dt className="font-display text-2xl font-semibold text-brand-charcoal ltr-numerals">{workshops.length}</dt>
-                  <dd className="mt-1 text-[11px] uppercase tracking-[0.1em] text-brand-muted">Workshops running</dd>
-                </div>
-                <div>
-                  <dt className="font-display text-2xl font-semibold text-brand-charcoal ltr-numerals">2</dt>
-                  <dd className="mt-1 text-[11px] uppercase tracking-[0.1em] text-brand-muted">Kilns firing weekly</dd>
-                </div>
-                <div>
-                  <dt className="font-display text-2xl font-semibold text-brand-charcoal ltr-numerals">2021</dt>
-                  <dd className="mt-1 text-[11px] uppercase tracking-[0.1em] text-brand-muted">On Ahmad Al Attas St.</dd>
-                </div>
-              </dl>
+          <Reveal index={0}>
+            <p className="text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-sage">
+              Creative Sanctuary in Jeddah
+            </p>
+          </Reveal>
+
+          <h1 className="mx-auto mt-4 max-w-3xl text-center font-display text-[34px] sm:text-5xl lg:text-[62px] font-semibold text-brand-charcoal">
+            <VerticalCutReveal
+              splitBy="characters"
+              staggerDuration={0.04}
+              staggerFrom="center"
+              transition={{ damping: 20, stiffness: 300, type: 'spring' }}
+            >
+              Melt into the art of <span className="text-brand-sage">clay &amp; canvas</span>.
+            </VerticalCutReveal>
+          </h1>
+
+          <Reveal index={1}>
+            <p className="mx-auto mt-5 max-w-xl text-center text-base sm:text-lg text-brand-ink leading-[1.7]">
+              Slow down, pour a fresh cup of espresso, and handcraft ceramic pottery or vibrant
+              acrylic art in Jeddah’s favorite creative retreat.
+            </p>
+          </Reveal>
+
+          <PhotoGallery images={HERO_IMAGES} alts={HERO_ALTS} className="mt-10">
+            <div className="flex flex-col sm:flex-row flex-wrap justify-center gap-3 sm:gap-4">
+              <button
+                onClick={() => {
+                  setWorkshopsInitialCategory('All');
+                  setCustomerTab('workshops');
+                }}
+                className="cursor-pointer rounded-full bg-brand-terracotta px-7 py-4 text-base font-semibold text-brand-cream shadow-button hover:bg-brand-terracotta-hover transition-colors duration-200 active:scale-[0.98]"
+              >
+                Browse Workshops
+              </button>
+              <button
+                onClick={() => {
+                  setSelectedWorkshopId('ws-1');
+                  setCustomerTab('detail');
+                }}
+                className="cursor-pointer rounded-full border border-brand-clay bg-brand-cream px-7 py-4 text-base font-semibold text-brand-charcoal hover:bg-brand-clay-soft transition-colors duration-200"
+              >
+                View Top Experience
+              </button>
             </div>
 
-            {/* Right Photo Column */}
-            <div className="lg:col-span-7">
-              <div className="relative rounded-[28px] overflow-hidden shadow-card aspect-video md:aspect-[4/3] max-h-[480px]">
-                <img
-                  src="/images/hero-clay.webp"
-                  alt="Clay modeling on potter wheel at Arty Cafe"
-                  className="w-full h-full object-cover transition-transform duration-700 hover:scale-105"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-brand-charcoal/40 to-transparent"></div>
-                
-                {/* Floating pill over hero image */}
-                <div className="absolute bottom-6 left-6 right-6 flex items-center justify-between bg-brand-cream/95 backdrop-blur-sm p-4 rounded-2xl border border-brand-clay shadow-card">
-                  <div className="flex items-center gap-3">
-                    <span className="flex h-3 w-3 rounded-full bg-green-500 animate-ping"></span>
-                    <span className="flex h-3 w-3 absolute rounded-full bg-green-500"></span>
-                    <p className="text-sm font-semibold text-brand-charcoal ml-3">Clay Studio Spinning Right Now</p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setWorkshopsInitialCategory('All');
-                      setCustomerTab('workshops');
-                    }}
-                    className="text-xs font-semibold text-brand-terracotta flex items-center hover:underline"
-                  >
-                    Join Queue <ChevronRight className="h-4 w-4" />
-                  </button>
-                </div>
+            {/* Three plain facts about the studio — the design leads with
+                proof rather than adjectives. */}
+            <dl className="mx-auto mt-12 grid max-w-xl grid-cols-1 xs:grid-cols-3 gap-6 border-t border-brand-clay pt-8">
+              <div>
+                <dt className="font-display text-2xl font-semibold text-brand-charcoal ltr-numerals">
+                  <CountingNumber target={workshops.length} />
+                </dt>
+                <dd className="mt-1 text-[11px] uppercase tracking-[0.1em] text-brand-muted">Workshops running</dd>
               </div>
-            </div>
+              <div>
+                <dt className="font-display text-2xl font-semibold text-brand-charcoal ltr-numerals">
+                  <CountingNumber target={2} />
+                </dt>
+                <dd className="mt-1 text-[11px] uppercase tracking-[0.1em] text-brand-muted">Kilns firing weekly</dd>
+              </div>
+              <div>
+                <dt className="font-display text-2xl font-semibold text-brand-charcoal ltr-numerals">
+                  {/* A year, so no thousands separator — never "2,021". */}
+                  <CountingNumber target={2021} from={1990} groupThousands={false} />
+                </dt>
+                <dd className="mt-1 text-[11px] uppercase tracking-[0.1em] text-brand-muted">On Ahmad Al Attas St.</dd>
+              </div>
+            </dl>
+          </PhotoGallery>
 
-          </div>
         </div>
       </section>
 
       {/* FEATURED WORKSHOPS — a white full-bleed band, so the cards read against
           a clean backdrop instead of blending into the cream page. */}
       <section className="bg-white border-y border-brand-clay/60 py-16 md:py-20">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10 text-start">
-          <div>
-            <span className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-sage">This week</span>
-            <h2 className="mt-2 font-display text-3xl md:text-[38px] font-semibold text-brand-charcoal">Featured Workshops</h2>
-            <p className="text-brand-ink mt-3 max-w-xl">
-              Led by professional artisan tutors. Spaces are kept tight for custom, hands-on feedback.
-            </p>
-          </div>
-          <button
-            onClick={() => {
-              setWorkshopsInitialCategory('All');
-              setCustomerTab('workshops');
-            }}
-            className="group inline-flex shrink-0 items-center gap-2 self-start rounded-full border border-brand-clay bg-brand-cream px-5 py-2.5 text-sm font-semibold text-brand-charcoal transition-colors hover:bg-brand-clay-soft cursor-pointer md:self-auto"
-          >
-            <span>View All ({workshops.length})</span>
-            <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-1 flip-rtl" />
-          </button>
-        </div>
+      <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-10 px-4 sm:px-6 lg:grid-cols-2 lg:gap-16 lg:px-8">
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {featuredWorkshops.map((ws) => (
+        {/* Left: the section's own words, played in as a stagger. */}
+        <ContainerStagger className="text-start">
+          <ContainerAnimated className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-sage">
+            This week
+          </ContainerAnimated>
+          <ContainerAnimated className="mt-2 font-display text-3xl md:text-[38px] font-semibold text-brand-charcoal">
+            <h2>Featured Workshops</h2>
+          </ContainerAnimated>
+          <ContainerAnimated className="mt-3 max-w-xl text-brand-ink">
+            Led by professional artisan tutors. Spaces are kept tight for custom, hands-on feedback.
+          </ContainerAnimated>
+          <ContainerAnimated className="mt-7">
+            <button
+              onClick={() => {
+                setWorkshopsInitialCategory('All');
+                setCustomerTab('workshops');
+              }}
+              className="group inline-flex shrink-0 items-center gap-2 rounded-full border border-brand-clay bg-brand-cream px-5 py-2.5 text-sm font-semibold text-brand-charcoal transition-colors hover:bg-brand-clay-soft cursor-pointer"
+            >
+              <span>View All ({workshops.length})</span>
+              <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-1 flip-rtl" />
+            </button>
+          </ContainerAnimated>
+        </ContainerStagger>
+
+        {/* Right: the real workshop cards, in the offset grid. Same cards and
+            same live fields as before — only the arrangement is new. */}
+        <GalleryGrid>
+          {featuredWorkshops.map((ws, index) => (
+            <GalleryGridCell key={ws.id} index={index}>
             <div
-              key={ws.id}
               onClick={() => handleCardClick(ws.id)}
               className="group cursor-pointer rounded-[22px] border border-brand-clay/60 bg-white shadow-card hover:shadow-card hover:-translate-y-1 transition-all duration-300 text-start flex flex-col h-full overflow-hidden"
             >
@@ -237,8 +282,10 @@ export const HomeSection: React.FC = () => {
                 </div>
               </div>
             </div>
+            </GalleryGridCell>
           ))}
-        </div>
+        </GalleryGrid>
+
       </div>
       </section>
 
@@ -247,17 +294,33 @@ export const HomeSection: React.FC = () => {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
           <div className="max-w-xl mx-auto mb-12">
             <span className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-sage">Three steps</span>
-            <h2 className="mt-2 font-display text-3xl md:text-[38px] font-semibold text-brand-charcoal">How Booking Works</h2>
-            <p className="text-brand-ink mt-2">
-              Three simple, effortless steps from clay mud to beautiful glazed pottery.
-            </p>
+            <Reveal index={0}>
+              <h2 className="mt-2 font-display text-3xl md:text-[38px] font-semibold text-brand-charcoal">
+                How Booking Works
+              </h2>
+            </Reveal>
+            <Reveal index={1}>
+              <p className="text-brand-ink mt-2">
+                Three simple, effortless steps from clay mud to beautiful glazed pottery.
+              </p>
+            </Reveal>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {steps.map((step) => {
+            {steps.map((step, stepIndex) => {
               const Icon = step.icon;
               return (
-                <div key={step.num} className="bg-brand-cream rounded-[22px] p-7 border border-brand-clay shadow-card-sm relative text-start">
+                <ScrollReveal
+                  key={step.num}
+                  once
+                  /* Fires a little before the card is 30% in, so the stagger
+                     is already running as the section arrives rather than
+                     finishing after it has settled. */
+                  viewOptions={{ once: true, amount: 0.3, margin: '0px 0px -80px 0px' }}
+                  transition={{ delay: stepIndex * 0.12, duration: 0.5, ease: 'easeOut' }}
+                  variants={{ hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0 } }}
+                >
+                <div className="bg-brand-cream rounded-[22px] p-7 border border-brand-clay shadow-card-sm relative text-start h-full">
                   <div className="absolute top-5 end-6 font-display text-3xl font-semibold text-brand-clay">
                     {step.num}
                   </div>
@@ -267,6 +330,7 @@ export const HomeSection: React.FC = () => {
                   <h3 className="font-display text-lg font-semibold text-brand-charcoal mb-2">{step.title}</h3>
                   <p className="text-sm text-brand-ink leading-relaxed">{step.desc}</p>
                 </div>
+                </ScrollReveal>
               );
             })}
           </div>
@@ -282,67 +346,128 @@ export const HomeSection: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16 items-center">
 
             <div className="text-start">
-              <div className="inline-flex items-center gap-2 rounded-full bg-brand-cream/10 px-3.5 py-1.5 text-xs font-medium text-brand-cream/85">
-                <Gift className="h-3.5 w-3.5" />
-                <span>Birthday Celebrations &amp; Private Parties</span>
-              </div>
+              {/* Reveal order through this section: badge → heading →
+                  paragraph → button → package 01 → package 02. */}
+              <ScrollReveal
+                once
+                viewOptions={{ once: true, amount: 0.3 }}
+                transition={{ delay: 0, duration: 0.5, ease: 'easeOut' }}
+                variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } }}
+              >
+                <div className="inline-flex items-center gap-2 rounded-full bg-brand-cream/10 px-3.5 py-1.5 text-xs font-medium text-brand-cream/85">
+                  <Gift className="h-3.5 w-3.5" />
+                  <span>Birthday Celebrations &amp; Private Parties</span>
+                </div>
+              </ScrollReveal>
 
-              <h2 className="mt-6 font-display text-3xl sm:text-4xl lg:text-[44px] font-semibold text-brand-cream">
-                Celebrate your birthday with us
-              </h2>
+              <ScrollReveal
+                once
+                viewOptions={{ once: true, amount: 0.3 }}
+                transition={{ delay: 0.12, duration: 0.5, ease: 'easeOut' }}
+                variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } }}
+              >
+                <ContainerStagger>
+                  <ContainerAnimated className="mt-6 font-display text-3xl sm:text-4xl lg:text-[44px] font-semibold text-brand-cream">
+                    <h2>Celebrate your birthday with us</h2>
+                  </ContainerAnimated>
+                </ContainerStagger>
+              </ScrollReveal>
 
-              <p className="mt-5 max-w-lg text-base leading-[1.7] text-brand-cream/70">
-                Make your child's special day unforgettable with creative art sessions, balloons,
-                customized cakes, and fun hands-on memories in our studio.
-              </p>
+              <ScrollReveal
+                once
+                viewOptions={{ once: true, amount: 0.3 }}
+                transition={{ delay: 0.24, duration: 0.5, ease: 'easeOut' }}
+                variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } }}
+              >
+                <p className="mt-5 max-w-lg text-base leading-[1.7] text-brand-cream/70">
+                  Make your child's special day unforgettable with creative art sessions, balloons,
+                  customized cakes, and fun hands-on memories in our studio.
+                </p>
+              </ScrollReveal>
 
-              <div className="mt-8 flex flex-wrap gap-3">
+              <ScrollReveal
+                once
+                viewOptions={{ once: true, amount: 0.3 }}
+                transition={{ delay: 0.36, duration: 0.5, ease: 'easeOut' }}
+                variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } }}
+                className="mt-8 flex flex-wrap gap-3"
+              >
                 <button
                   type="button"
                   onClick={() => {
                     setWorkshopsInitialCategory('Birthday Packages');
                     setCustomerTab('workshops');
                   }}
-                  className="cursor-pointer rounded-[14px] bg-brand-terracotta px-6 py-3.5 text-sm font-semibold text-brand-cream shadow-button transition-colors hover:bg-brand-terracotta-hover active:scale-[0.98]"
+                  className="cursor-pointer rounded-full bg-brand-terracotta px-6 py-3.5 text-sm font-semibold text-brand-cream shadow-button transition-colors hover:bg-brand-terracotta-hover active:scale-[0.98]"
                 >
                   See packages
                 </button>
-              </div>
+              </ScrollReveal>
             </div>
 
             {publishedBirthdayPackages.length > 0 && (
-              <div className="space-y-4">
+              /* Two tickets pinned side by side, each tilted the other way.
+                 The tilt is desktop-only — on a phone they stack upright so
+                 they stay readable. */
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 sm:gap-6 pt-2">
                 {publishedBirthdayPackages.map((pkg, index) => (
-                  <button
+                  <ScrollReveal
                     key={pkg.id}
+                    once
+                    viewOptions={{ once: true, amount: 0.3 }}
+                    transition={{ delay: 0.48 + index * 0.12, duration: 0.5, ease: 'easeOut' }}
+                    variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } }}
+                  >
+                  <button
                     type="button"
                     onClick={() => {
                       setSelectedBirthdayPackage(pkg.id);
                       setWorkshopsInitialCategory('Birthday Packages');
                       setCustomerTab('workshops');
                     }}
-                    className="w-full cursor-pointer rounded-[20px] border border-brand-cream/10 bg-brand-cream/[0.07] p-6 flex items-start justify-between gap-6 text-start transition-colors hover:bg-brand-cream/[0.12] hover:border-brand-cream/20"
+                    className={`group h-full w-full cursor-pointer rounded-[22px] border border-brand-cream/15 bg-brand-cream/[0.07] p-6 flex flex-col text-start shadow-card transition-all duration-300 hover:bg-brand-cream/[0.13] hover:border-brand-cream/25 sm:hover:rotate-0 sm:hover:-translate-y-1 ${
+                      index % 2 === 0 ? 'sm:-rotate-[2.5deg]' : 'sm:rotate-[2.5deg]'
+                    }`}
                   >
-                    <div className="min-w-0">
-                      <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-cream/45">
+                    <div className="flex items-start justify-between gap-4">
+                      <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-cream/45">
                         Package {String(index + 1).padStart(2, '0')}
                       </span>
-                      <h3 className="mt-1.5 font-display text-xl font-semibold text-brand-cream">{pkg.name}</h3>
-                      <p className="mt-2 text-[13px] leading-relaxed text-brand-cream/60">
-                        {[
-                          pkg.maxGuests ? `${pkg.maxGuests} guests` : null,
-                          pkg.duration || null,
-                          pkg.shortDescription || null
-                        ].filter(Boolean).join(' · ')}
-                      </p>
-                    </div>
-                    <div className="shrink-0 text-end">
-                      <span className="font-display text-2xl font-semibold text-brand-cream ltr-numerals">
-                        {pkg.price}
+                      {/* The ticket's punched holes. */}
+                      <span className="flex gap-1 pt-1" aria-hidden="true">
+                        <span className="h-1.5 w-1.5 rounded-full bg-brand-cream/25" />
+                        <span className="h-1.5 w-1.5 rounded-full bg-brand-cream/25" />
+                        <span className="h-1.5 w-1.5 rounded-full bg-brand-cream/25" />
                       </span>
-                      <span className="mt-0.5 block text-[10px] text-brand-cream/50">SAR per party</span>
+                    </div>
+
+                    <h3 className="mt-2 font-display text-2xl font-semibold text-brand-cream">{pkg.name}</h3>
+
+                    <p className="mt-3 text-[13px] leading-relaxed text-brand-cream/60">
+                      {[
+                        pkg.maxGuests ? `${pkg.maxGuests} guests` : null,
+                        pkg.duration || null,
+                        pkg.shortDescription || null
+                      ].filter(Boolean).join(' · ')}
+                    </p>
+
+                    {/* The tear line, then the price stub. */}
+                    <div className="mt-auto pt-6">
+                      <div className="border-t border-dashed border-brand-cream/20 pt-4 flex items-end justify-between gap-3">
+                        <div>
+                          <span className="font-display text-2xl font-semibold text-brand-cream ltr-numerals">
+                            {pkg.price}
+                          </span>
+                          <span className="mt-0.5 block text-[10px] text-brand-cream/50">SAR per party</span>
+                        </div>
+                        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-cream/80 transition-colors group-hover:text-brand-cream">
+                          See package
+                          <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1 flip-rtl" />
+                        </span>
+                      </div>
                     </div>
                   </button>
+                  </ScrollReveal>
                 ))}
               </div>
             )}
@@ -355,24 +480,125 @@ export const HomeSection: React.FC = () => {
           birthday packages above, so customers don't mistake a custom request
           for one of the fixed packages. A white full-bleed band, like Featured
           Workshops, so the page's sections keep alternating backgrounds. */}
-      <section className="bg-white border-y border-brand-clay/60 py-16 md:py-20">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
-          <span className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-sage">Custom Events</span>
-          <h2 className="mt-2 font-display text-3xl md:text-[38px] font-semibold text-brand-charcoal">Plan your own event</h2>
-          <p className="text-brand-ink mt-3 max-w-xl mx-auto leading-[1.7]">
-            Adult pottery parties, corporate team-building, bridal showers, or anything outside our
-            fixed packages — connect directly with our owner to design something custom.
-          </p>
+      <section className="bg-white border-y border-brand-clay/60 py-12 md:py-16">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
 
-          <div className="mt-8 space-y-4">
-            <button
-              onClick={() => setShowOwnerContact(prev => !prev)}
-              className="cursor-pointer inline-flex items-center justify-center gap-2.5 bg-brand-charcoal hover:bg-brand-charcoal/90 text-brand-cream text-base font-semibold px-8 py-4 rounded-2xl shadow-card-sm transition-all duration-200 active:scale-95 border border-brand-clay"
+        {/* One cream slab holding the whole section: words on the left, the
+            studio on the right, the image given the larger share. */}
+        <div className="relative overflow-hidden rounded-[32px] bg-brand-sand px-6 py-10 sm:px-10 sm:py-12 lg:px-14">
+
+          {/* Quiet studio marks — a clay curve and two sparks. Decorative only. */}
+          <svg
+            className="pointer-events-none absolute -left-10 -top-10 h-40 w-40 text-brand-clay/50"
+            viewBox="0 0 100 100" fill="none" aria-hidden="true"
+          >
+            <circle cx="50" cy="50" r="34" stroke="currentColor" strokeWidth="1.25" />
+            <path d="M22 62c14-10 28-14 42-8" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+          </svg>
+          <svg
+            className="pointer-events-none absolute bottom-6 left-8 h-20 w-20 text-brand-sage/35"
+            viewBox="0 0 100 100" fill="none" aria-hidden="true"
+          >
+            <path d="M50 14c4 22 14 32 36 36-22 4-32 14-36 36-4-22-14-32-36-36 22-4 32-14 36-36Z"
+                  stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+          </svg>
+
+          <div className="relative grid grid-cols-1 items-center gap-10 lg:grid-cols-12 lg:gap-14">
+
+            {/* Words — five of twelve columns, so the photograph leads. */}
+            <div className="text-start lg:col-span-5">
+              <ScrollReveal
+                once
+                viewOptions={{ once: true, amount: 0.4 }}
+                transition={{ duration: 0.45, ease: 'easeOut' }}
+                variants={{ hidden: { opacity: 0 }, visible: { opacity: 1 } }}
+              >
+                <span className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-sage">
+                  Custom Events
+                </span>
+              </ScrollReveal>
+
+              <ScrollReveal
+                once
+                viewOptions={{ once: true, amount: 0.4 }}
+                transition={{ delay: 0.1, duration: 0.5, ease: 'easeOut' }}
+                variants={{ hidden: { opacity: 0, y: 18 }, visible: { opacity: 1, y: 0 } }}
+              >
+                <ContainerStagger>
+                  <ContainerAnimated className="mt-3 font-display text-[34px] leading-[1.1] md:text-[46px] font-semibold text-brand-charcoal">
+                    <h2>Plan your own event</h2>
+                  </ContainerAnimated>
+                </ContainerStagger>
+              </ScrollReveal>
+
+              <ScrollReveal
+                once
+                viewOptions={{ once: true, amount: 0.4 }}
+                transition={{ delay: 0.2, duration: 0.5, ease: 'easeOut' }}
+                variants={{ hidden: { opacity: 0, y: 18 }, visible: { opacity: 1, y: 0 } }}
+              >
+                <p className="mt-5 max-w-md text-[15px] text-brand-ink leading-[1.75]">
+                  Adult pottery parties, corporate team-building, bridal showers, or anything outside our
+                  fixed packages — connect directly with our owner to design something custom.
+                </p>
+              </ScrollReveal>
+
+              <ScrollReveal
+                once
+                viewOptions={{ once: true, amount: 0.4 }}
+                transition={{ delay: 0.3, duration: 0.5, ease: 'easeOut' }}
+                variants={{ hidden: { opacity: 0, y: 18 }, visible: { opacity: 1, y: 0 } }}
+                className="mt-8"
+              >
+                <button
+                  onClick={() => setShowOwnerContact(prev => !prev)}
+                  className="group cursor-pointer inline-flex items-center justify-center gap-2.5 rounded-full bg-brand-charcoal px-7 py-4 text-base font-semibold text-brand-cream shadow-button transition-colors duration-200 hover:bg-brand-terracotta active:scale-[0.98]"
+                >
+                  <Sparkles className="h-5 w-5 text-brand-terracotta transition-colors group-hover:text-brand-cream" />
+                  <span>Create your own Event</span>
+                  {showOwnerContact
+                    ? <ChevronUp className="h-5 w-5 text-brand-cream/70 transition-transform duration-200 group-hover:-translate-y-0.5" />
+                    : <ChevronRight className="h-5 w-5 text-brand-cream/70 transition-transform duration-200 group-hover:translate-x-1 flip-rtl" />}
+                </button>
+              </ScrollReveal>
+            </div>
+
+            {/* The studio — seven of twelve, wiped in from the trailing edge. */}
+            <ScrollReveal
+              once
+              viewOptions={{ once: true, amount: 0.25 }}
+              transition={{ delay: 0.15, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+              /* The observed element must not be the clipped one — an element
+                 clipped to zero area reports zero intersection, so useInView
+                 never fires and the reveal holds it invisible. The wipe is on
+                 the inner element, which inherits the variant. */
+              variants={{ hidden: { opacity: 0, x: 48 }, visible: { opacity: 1, x: 0 } }}
+              className="lg:col-span-7"
             >
-              <Sparkles className="h-5 w-5 text-brand-terracotta" />
-              <span>Create your own Event</span>
-              {showOwnerContact ? <ChevronUp className="h-5 w-5 text-brand-clay" /> : <ChevronDown className="h-5 w-5 text-brand-clay" />}
-            </button>
+              <motion.div
+                className="relative overflow-hidden rounded-[26px] shadow-card"
+                variants={{
+                  hidden: { clipPath: 'inset(0 0 0 100%)' },
+                  visible: { clipPath: 'inset(0 0 0 0%)' }
+                }}
+                transition={{ delay: 0.15, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <img
+                  src="/images/custom-events.jpg"
+                  alt="The Arty Café studio set up for a private event"
+                  className="h-64 w-full object-cover sm:h-80 lg:h-[26rem]"
+                  loading="lazy"
+                  decoding="async"
+                />
+              </motion.div>
+            </ScrollReveal>
+
+          </div>
+        </div>
+
+        {/* The owner's details stay exactly as they were, revealed by the
+            button above. */}
+        <div className="mt-8 text-center">
 
             {showOwnerContact && (
               <div className="bg-brand-cream border-2 border-brand-terracotta/40 rounded-3xl p-6 md:p-8 max-w-2xl mx-auto text-start shadow-card-sm animate-in fade-in duration-300 space-y-6">
@@ -433,60 +659,58 @@ export const HomeSection: React.FC = () => {
             
             {/* Info */}
             <div className="lg:col-span-5 space-y-6">
-              <h2 className="font-display text-3xl md:text-[38px] font-semibold text-brand-charcoal">Slow down &amp; visit us</h2>
-              <p className="text-brand-ink leading-[1.7]">
-                We are situated in Al Zahra District. Grab a quiet corner, sculpt some clay, and meet friendly creative people.
-              </p>
+              <Reveal index={0}>
+                <h2 className="font-display text-3xl md:text-[38px] font-semibold text-brand-charcoal">
+                  Slow down &amp; visit us
+                </h2>
+              </Reveal>
+              <Reveal index={1}>
+                <p className="text-brand-ink leading-[1.7]">
+                  We are situated in Al Zahra District. Grab a quiet corner, sculpt some clay, and meet friendly creative people.
+                </p>
+              </Reveal>
               
               {/* Labelled rows separated by hairlines — no icons, so the
                   eye runs straight down the labels. */}
               <dl className="pt-2 text-sm">
-                <div className="border-t border-brand-clay py-4">
-                  <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-muted">Address</dt>
-                  <dd className="mt-1.5 text-brand-charcoal">
-                    3331 Ahmad Al Attas, Al Zahra District, Jeddah 23521, Saudi Arabia
-                  </dd>
-                </div>
+                <Reveal index={2}>
+                  <div className="border-t border-brand-clay py-4">
+                    <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-muted">Address</dt>
+                    <dd className="mt-1.5 text-brand-charcoal">
+                      3331 Ahmad Al Attas, Al Zahra District, Jeddah 23521, Saudi Arabia
+                    </dd>
+                  </div>
+                </Reveal>
 
-                <div className="border-t border-brand-clay py-4">
-                  <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-muted">Opening Hours</dt>
-                  <dd className="mt-1.5 text-brand-charcoal ltr-numerals">
-                    Every day: 05:00 PM – 12:00 AM
-                  </dd>
-                </div>
+                <Reveal index={3}>
+                  <div className="border-t border-brand-clay py-4">
+                    <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-muted">Opening Hours</dt>
+                    <dd className="mt-1.5 text-brand-charcoal ltr-numerals">
+                      Every day: 05:00 PM – 12:00 AM
+                    </dd>
+                  </div>
+                </Reveal>
 
-                <div className="border-t border-b border-brand-clay py-4">
-                  <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-muted">Call Front Desk</dt>
-                  <dd className="mt-1.5 text-brand-charcoal ltr-numerals">
-                    +966 54 822 2055 (Walk-ins welcome!)
-                  </dd>
-                </div>
+                <Reveal index={4}>
+                  <div className="border-t border-b border-brand-clay py-4">
+                    <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-muted">Call Front Desk</dt>
+                    <dd className="mt-1.5 text-brand-charcoal ltr-numerals">
+                      +966 54 822 2055 (Walk-ins welcome!)
+                    </dd>
+                  </div>
+                </Reveal>
               </dl>
             </div>
 
-            {/* Map — the studio's real Google Maps embed */}
+            {/* Map — drawn rather than embedded, and clickable as a whole:
+                it opens the studio's real Google Maps listing. */}
             <div className="lg:col-span-7">
-              <div className="relative rounded-2xl overflow-hidden border border-brand-clay h-72 md:h-96 shadow-inner bg-brand-sand">
-                <iframe
-                  src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3709.903266193685!2d39.128822799999995!3d21.5896987!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x15c3dbe2b52fdff1%3A0xc4b6d955ad20394e!2zQXJ0eSBjYWZlINii2LHYqtmKINmD2KfZgdmK!5e0!3m2!1sen!2ssa!4v1786860695546!5m2!1sen!2ssa"
-                  className="absolute inset-0 h-full w-full"
-                  style={{ border: 0 }}
-                  allowFullScreen
-                  loading="lazy"
-                  referrerPolicy="strict-origin-when-cross-origin"
-                  title="Arty Café Jeddah location map"
-                />
-              </div>
-
-              <a
+              <AnimatedMap
                 href="https://maps.app.goo.gl/Br4QagaCrPKeJ8EW8"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-brand-terracotta hover:underline cursor-pointer"
-              >
-                <span>Open in Google Maps</span>
-                <ChevronRight className="h-3 w-3" />
-              </a>
+                label="Arty Café Jeddah"
+                coordinates="21.5897° N, 39.1288° E"
+                className="h-72 md:h-96"
+              />
             </div>
 
           </div>

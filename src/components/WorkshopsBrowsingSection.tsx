@@ -5,6 +5,8 @@
 
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
+import Reveal from './ui/Reveal';
+import { ScrollReveal } from './ui/ScrollReveal';
 import {
   Search, SlidersHorizontal, RefreshCw, Eye, EyeOff,
   ChevronDown, ChevronUp, ChevronRight, CheckCircle2, Paintbrush, Cake, Compass,
@@ -144,17 +146,23 @@ export const WorkshopsBrowsingSection: React.FC = () => {
 
       {/* Header Title */}
       <div className="pb-8">
-        <span className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-sage">
-          {isBirthdayView ? 'Private Parties' : 'Catalogue'}
-        </span>
-        <h1 className="mt-3 font-display text-4xl sm:text-5xl font-semibold text-brand-charcoal max-w-lg">
-          {isBirthdayView ? 'Birthday Packages' : 'Creative Workshops'}
-        </h1>
-        <p className="text-brand-ink mt-4 max-w-xl text-base leading-[1.7]">
-          {isBirthdayView
-            ? "Browse our birthday party packages, see everything that's included, and pick the one that fits before you book."
-            : 'Discover Jeddah’s premier pottery and painting workshops. Center clay on the wheel, explore watercolor glazes, or paint canvases under guidance of Saudi artists.'}
-        </p>
+        <Reveal index={0}>
+          <span className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-sage">
+            {isBirthdayView ? 'Private Parties' : 'Catalogue'}
+          </span>
+        </Reveal>
+        <Reveal index={1}>
+          <h1 className="mt-3 font-display text-4xl sm:text-5xl font-semibold text-brand-charcoal max-w-lg">
+            {isBirthdayView ? 'Birthday Packages' : 'Creative Workshops'}
+          </h1>
+        </Reveal>
+        <Reveal index={2}>
+          <p className="text-brand-ink mt-4 max-w-xl text-base leading-[1.7]">
+            {isBirthdayView
+              ? "Browse our birthday party packages, see everything that's included, and pick the one that fits before you book."
+              : 'Discover Jeddah’s premier pottery and painting workshops. Center clay on the wheel, explore watercolor glazes, or paint canvases under guidance of Saudi artists.'}
+          </p>
+        </Reveal>
       </div>
 
       {/* Filter and Search Bar */}
@@ -501,14 +509,23 @@ export const WorkshopsBrowsingSection: React.FC = () => {
 
         {/* LIVE GRID — WORKSHOPS */}
         {!isBirthdayView && filteredWorkshops.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {filteredWorkshops.map((ws) => {
+          <div className="grid grid-cols-1 gap-4 sm:gap-8 md:grid-cols-3">
+            {filteredWorkshops.map((ws, cardIndex) => {
               const isFull = ws.spotsLeft === 0;
               return (
-                <div
+                <ScrollReveal
                   key={ws.id}
+                  once
+                  viewOptions={{ once: true, amount: 0.3, margin: '0px 0px -80px 0px' }}
+                  transition={{ delay: cardIndex * 0.12, duration: 0.5, ease: 'easeOut' }}
+                  variants={{ hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0 } }}
+                  className="h-full"
+                >
+                <div
                   onClick={() => handleCardClick(ws)}
-                  className={`group relative bg-white rounded-[32px] shadow-card shadow-brand-charcoal/5 border border-brand-terracotta/5 transition-all duration-300 flex flex-col h-full text-start overflow-hidden ${
+                  /* Phone: a compact horizontal row — thumbnail left, details
+                     right. From sm up it is the original vertical card. */
+                  className={`group relative bg-white rounded-[22px] sm:rounded-[32px] shadow-card shadow-brand-charcoal/5 border border-brand-terracotta/5 transition-all duration-300 flex flex-row sm:flex-col h-full text-start overflow-hidden ${
                     isFull
                       ? 'opacity-70 saturate-75 cursor-not-allowed'
                       : 'cursor-pointer hover:shadow-2xl hover:shadow-brand-terracotta/10 hover:-translate-y-1'
@@ -520,7 +537,7 @@ export const WorkshopsBrowsingSection: React.FC = () => {
                       aspect-ratio on a flex item with a replaced (object-cover)
                       child is unreliable and was letting square photos render
                       taller than widescreen ones. */}
-                  <div className="relative h-48 sm:h-52 shrink-0 bg-brand-sand">
+                  <div className="relative m-3 h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-brand-sand sm:m-0 sm:h-52 sm:w-auto sm:rounded-none">
                     <img
                       src={ws.image}
                       alt={ws.title}
@@ -529,7 +546,7 @@ export const WorkshopsBrowsingSection: React.FC = () => {
                     />
 
                     {/* Muted or highlight Spots Pill */}
-                    <div className="absolute top-3 left-3">
+                    <div className="absolute top-3 left-3 hidden sm:block">
                       {isFull ? (
                         <span className="inline-flex items-center rounded-lg bg-brand-charcoal/85 text-brand-cream px-2.5 py-1 text-xs font-semibold tracking-wide shadow-card-sm">
                           FULLY BOOKED
@@ -543,24 +560,36 @@ export const WorkshopsBrowsingSection: React.FC = () => {
                   </div>
 
                   {/* Core details */}
-                  <div className="flex-1 flex flex-col justify-between p-6">
-                    <div>
+                  <div className="flex-1 min-w-0 flex flex-col justify-between py-3 pe-3 sm:p-6">
+                    <div className="min-w-0">
                       <span className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-muted">
                         {ws.category}{ws.skillLevel ? ` · ${ws.skillLevel}` : ''}
                       </span>
-                      <h3 className="mt-1.5 font-display text-xl font-semibold text-brand-charcoal group-hover:text-brand-terracotta transition-colors">
+                      <h3 className="mt-1 font-display text-base sm:text-xl font-semibold text-brand-charcoal group-hover:text-brand-terracotta transition-colors line-clamp-2 sm:line-clamp-none sm:mt-1.5">
                         {ws.title}
                       </h3>
-                      <p className="text-sm text-brand-ink mt-1.5 line-clamp-2">
+                      {/* The hook is the one thing the compact row drops — it is
+                          the longest line and the least scannable. */}
+                      <p className="hidden sm:block text-sm text-brand-ink mt-1.5 line-clamp-2">
                         {ws.hook}
                       </p>
                     </div>
 
+                    {/* Phone: spots left and price on one line. */}
+                    <div className="mt-2 flex items-end justify-between gap-3 sm:hidden">
+                      <span className={`text-[11px] font-semibold ${isFull ? 'text-brand-muted' : 'text-brand-terracotta'}`}>
+                        {isFull ? 'Fully booked' : `${ws.spotsLeft} spots left`}
+                      </span>
+                      <span className="font-display text-base font-semibold text-brand-charcoal ltr-numerals">
+                        {ws.price} <span className="text-[10px] font-medium text-brand-muted">SAR</span>
+                      </span>
+                    </div>
+
                     {/* Meta and Price row */}
-                    <div className="mt-6 pt-4 border-t border-brand-clay flex items-end justify-between gap-3">
+                    <div className="mt-6 pt-4 border-t border-brand-clay hidden sm:flex items-end justify-between gap-3">
                       <div className="text-[13px] text-brand-ink space-y-0.5 min-w-0">
                         <p className="truncate">{ws.duration} · {ws.ageRange}</p>
-                        {ws.instructor && <p className="truncate text-brand-muted">{ws.instructor}</p>}
+                        {ws.instructor && <p className="truncate text-brand-muted">Instructor {ws.instructor}</p>}
                       </div>
                       <div className="text-end shrink-0">
                         <span className="font-display text-[22px] font-semibold text-brand-charcoal ltr-numerals">
@@ -579,6 +608,7 @@ export const WorkshopsBrowsingSection: React.FC = () => {
                     </div>
                   )}
                 </div>
+                </ScrollReveal>
               );
             })}
           </div>

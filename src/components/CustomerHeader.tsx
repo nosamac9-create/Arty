@@ -5,8 +5,9 @@
 
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Palette, Coffee, Menu, X, User, Calendar, Flame } from 'lucide-react';
+import { Palette, Coffee, Menu, X, User, Calendar, Flame, Mail, Instagram, Facebook } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
+import { Footer } from './ui/Footer';
 import { LanguageToggle } from './LanguageToggle';
 
 export const CustomerHeader: React.FC = () => {
@@ -51,12 +52,12 @@ export const CustomerHeader: React.FC = () => {
               alt="Arty Café"
               className="h-10 w-auto object-contain transition-transform duration-300 group-hover:-rotate-6"
             />
-            <div className="leading-none">
-              <span className="block font-display text-[18px] font-semibold tracking-tight text-brand-charcoal">Arty Café</span>
-              <span className="mt-0.5 block text-[10px] font-medium uppercase tracking-[0.14em] text-brand-sage">
-                Jeddah Art &amp; Clay
-              </span>
-            </div>
+            {/* Just the tagline now — the logo already reads "Arty Café".
+                It is a single line, so it centres against the logo rather
+                than sitting where the top line of the old two-line block was. */}
+            <span className="text-[10px] font-medium uppercase leading-none tracking-[0.14em] text-brand-sage">
+              Jeddah Art &amp; Clay
+            </span>
           </button>
 
           {/* Desktop navigation — plain words, weight marks the active one */}
@@ -156,100 +157,91 @@ export const CustomerHeader: React.FC = () => {
   );
 };
 
+/**
+ * WhatsApp and TikTok have no lucide icon, so their marks are inline.
+ * Both inherit `currentColor`, so they pick up the button's hover state like
+ * the lucide icons beside them.
+ */
+const WhatsAppIcon: React.FC<{ className?: string }> = ({ className = 'h-5 w-5' }) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.347-.347.52-.52.174-.174.232-.298.348-.497.115-.198.057-.371-.058-.52-.116-.148-.696-1.653-.943-2.238-.247-.585-.5-.5-.685-.5-.174 0-.372-.025-.57-.025-.199 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.247-.694.247-1.29.173-1.414-.074-.124-.272-.198-.57-.347Z" />
+    <path d="M20.52 3.449A11.876 11.876 0 0 0 12.05 0C5.495 0 .16 5.334.157 11.892c0 2.096.548 4.142 1.588 5.945L0 24l6.304-1.654a11.88 11.88 0 0 0 5.741 1.463h.005c6.554 0 11.89-5.335 11.893-11.893a11.82 11.82 0 0 0-3.423-8.467Zm-8.47 18.293h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.981.999-3.648-.235-.374a9.86 9.86 0 0 1-1.511-5.267c.002-5.45 4.437-9.884 9.889-9.884a9.82 9.82 0 0 1 6.988 2.898 9.825 9.825 0 0 1 2.892 6.994c-.003 5.45-4.437 9.884-9.884 9.884Z" />
+  </svg>
+);
+
+const TikTokIcon: React.FC<{ className?: string }> = ({ className = 'h-5 w-5' }) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+    <path d="M16.6 5.82a4.28 4.28 0 0 1-1.05-2.82h-3.1v12.2a2.36 2.36 0 1 1-1.7-2.27V9.75a5.46 5.46 0 1 0 4.8 5.42V8.9a7.32 7.32 0 0 0 4.28 1.38V7.18a4.29 4.29 0 0 1-3.23-1.36Z" />
+  </svg>
+);
+
 export const CustomerFooter: React.FC = () => {
   const { goToStaffLogin, currentStaff, returnToStaffConsole } = useApp();
   const { t } = useLanguage();
 
+  /* Hours, the address and the front-desk number are deliberately absent:
+     they are all shown in "Slow down & visit us" on the home page, and a
+     second copy here is one more place to forget to update. */
   return (
-    /* pb clears the mobile tab bar so the last line is never hidden behind it. */
-    <footer className="border-t border-brand-clay bg-white pt-16 pb-24 lg:pb-16">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-12">
-        <div className="grid grid-cols-1 gap-10 md:grid-cols-3 md:gap-8">
-
-          {/* Identity */}
-          <div className="space-y-4 md:pe-8">
-            <div className="flex items-center gap-3">
-              <img
-                src="/images/arty-logo-wordmark.png"
-                alt="Arty Café"
-                className="h-10 w-auto object-contain"
-              />
-              <div className="leading-none">
-                <span className="block font-display text-[18px] font-semibold tracking-tight text-brand-charcoal">Arty Café</span>
-                <span className="mt-0.5 block text-[10px] font-medium uppercase tracking-[0.14em] text-brand-sage">
-                  {t('Jeddah Art & Clay', 'جدة للفن والطين')}
-                </span>
-              </div>
-            </div>
-            <p className="text-sm leading-relaxed text-brand-ink">
-              {t(
-                'Jeddah’s cozy creative sanctuary. Crafting memories, pouring fine coffee, and molding mud into masterworks since 2021.',
-                'ملاذ جدة الإبداعي. نصنع الذكريات، ونقدّم قهوة مختصة، ونحوّل الطين إلى تحف منذ ٢٠٢١.'
-              )}
-            </p>
-          </div>
-
-          {/* Hours */}
-          <div>
-            <h3 className="mb-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-sage">
-              {t('Hours', 'أوقات العمل')}
-            </h3>
-            <ul className="space-y-2 text-sm text-brand-ink">
-              <li>{t('Every day', 'يوميًا')}</li>
-              <li className="font-semibold text-brand-charcoal ltr-numerals">05:00 PM – 12:00 AM</li>
-            </ul>
-          </div>
-
-          {/* Contact */}
-          <div>
-            <h3 className="mb-4 text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-sage">
-              {t('Say Hello', 'تواصل معنا')}
-            </h3>
-            <p className="text-sm leading-relaxed text-brand-ink">
-              {t('3331 Ahmad Al Attas, Al Zahra District, Jeddah 23521, KSA', '3331 أحمد العطاس، حي الزهراء، جدة 23521، المملكة العربية السعودية')}
-            </p>
-            <a href="tel:+966548222055" className="mt-3 block text-sm font-semibold text-brand-terracotta hover:underline ltr-numerals">
-              +966 54 822 2055
-            </a>
-            <a href="https://wa.me/966548182404" target="_blank" rel="noopener noreferrer" className="mt-1 block text-sm font-semibold text-brand-terracotta hover:underline ltr-numerals">
-              {t('WhatsApp', 'واتساب')}: +966 54 818 2404
-            </a>
-            <a href="mailto:hello@artycafe.sa" className="mt-1 block text-xs text-brand-muted hover:text-brand-charcoal">
-              hello@artycafe.sa
-            </a>
-          </div>
-
-        </div>
-
-        <div className="mt-14 flex flex-col items-center justify-between gap-4 border-t border-brand-clay pt-8 text-xs text-brand-muted sm:flex-row">
-          <p>{t('© 2026 Arty Café Jeddah. All rights reserved.', '© ٢٠٢٦ آرتي كافيه جدة. جميع الحقوق محفوظة.')}</p>
-          <div className="flex items-center gap-6">
-            <a href="https://www.instagram.com/arty.cafe" target="_blank" rel="noopener noreferrer" className="hover:text-brand-charcoal">Instagram</a>
-            <a href="https://www.tiktok.com/@artycafe" target="_blank" rel="noopener noreferrer" className="hover:text-brand-charcoal">TikTok</a>
-            <a href="https://www.facebook.com/people/Arty-Cafe/100041894486483/" target="_blank" rel="noopener noreferrer" className="hover:text-brand-charcoal">Facebook</a>
-
-            {/* The only way into the staff area. Signing in is still required —
-                this opens the staff login, it grants nothing. */}
-            {currentStaff ? (
-              <button
-                type="button"
-                onClick={() => returnToStaffConsole()}
-                className="cursor-pointer font-semibold text-brand-terracotta hover:underline"
-              >
-                {t('Back to Staff Console', 'العودة إلى لوحة الموظفين')}
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => goToStaffLogin()}
-                className="cursor-pointer hover:text-brand-charcoal"
-              >
-                {t('Staff Login', 'دخول الموظفين')}
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    </footer>
+    <Footer
+      logo={
+        <img
+          src="/images/arty-logo-wordmark.png"
+          alt=""
+          className="h-10 w-auto object-contain"
+        />
+      }
+      brandName="Arty Café"
+      tagline={t('Jeddah Art & Clay', 'جدة للفن والطين')}
+      blurb={t(
+        'Jeddah’s cozy creative sanctuary. Crafting memories, pouring fine coffee, and molding mud into masterworks since 2021.',
+        'ملاذ جدة الإبداعي. نصنع الذكريات، ونقدّم قهوة مختصة، ونحوّل الطين إلى تحف منذ ٢٠٢١.'
+      )}
+      socialLinks={[
+        {
+          icon: <WhatsAppIcon />,
+          href: 'https://wa.me/966548182404',
+          label: t('WhatsApp', 'واتساب')
+        },
+        {
+          icon: <Mail className="h-5 w-5" />,
+          href: 'mailto:hello@artycafe.sa',
+          label: t('Email', 'البريد الإلكتروني')
+        },
+        {
+          icon: <Instagram className="h-5 w-5" />,
+          href: 'https://www.instagram.com/arty.cafe',
+          label: 'Instagram'
+        },
+        {
+          icon: <TikTokIcon />,
+          href: 'https://www.tiktok.com/@artycafe',
+          label: 'TikTok'
+        },
+        {
+          icon: <Facebook className="h-5 w-5" />,
+          href: 'https://www.facebook.com/people/Arty-Cafe/100041894486483/',
+          label: 'Facebook'
+        }
+      ]}
+      mainLinks={[
+        /* The only way into the staff area. Signing in is still required —
+           this opens the staff login, it grants nothing. */
+        currentStaff
+          ? {
+              label: t('Back to Staff Console', 'العودة إلى لوحة الموظفين'),
+              onClick: () => returnToStaffConsole(),
+              emphasis: true
+            }
+          : {
+              label: t('Staff Login', 'دخول الموظفين'),
+              onClick: () => goToStaffLogin()
+            }
+      ]}
+      copyright={{
+        text: t('© 2026 Arty Café Jeddah.', '© ٢٠٢٦ آرتي كافيه جدة.'),
+        license: t('All rights reserved.', 'جميع الحقوق محفوظة.')
+      }}
+    />
   );
 };
