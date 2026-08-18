@@ -26,19 +26,19 @@ import { Calendar, Sparkles, ChevronRight, Paintbrush, MousePointerClick, Calend
  * They live in /public so they are served as plain files, not bundled.
  */
 const HERO_IMAGES = [
-  '/images/hero/studio-01.jpg',
-  '/images/hero/studio-02.jpg',
-  '/images/hero/studio-03.jpg',
-  '/images/hero/studio-04.jpg',
-  '/images/hero/studio-05.jpg',
-  '/images/hero/studio-06.jpg',
-  '/images/hero/studio-07.jpg',
-  '/images/hero/studio-08.jpg',
-  '/images/hero/studio-09.jpg',
-  '/images/hero/studio-10.jpg',
-  '/images/hero/studio-11.jpg',
-  '/images/hero/studio-12.jpg'
-];
+  'hero/studio-01.jpg',
+  'hero/studio-02.jpg',
+  'hero/studio-03.jpg',
+  'hero/studio-04.jpg',
+  'hero/studio-05.jpg',
+  'hero/studio-06.jpg',
+  'hero/studio-07.jpg',
+  'hero/studio-08.jpg',
+  'hero/studio-09.jpg',
+  'hero/studio-10.jpg',
+  'hero/studio-11.jpg',
+  'hero/studio-12.jpg'
+].map(path => `${import.meta.env.BASE_URL}images/${path}`);
 
 const HERO_ALTS = [
   'Underglaze bottles beside a wall of fired colour test tiles',
@@ -584,7 +584,7 @@ export const HomeSection: React.FC = () => {
                 transition={{ delay: 0.15, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
               >
                 <img
-                  src="/images/custom-events.jpg"
+                  src={`${import.meta.env.BASE_URL}images/custom-events.jpg`}
                   alt="The Arty Café studio set up for a private event"
                   className="h-64 w-full object-cover sm:h-80 lg:h-[26rem]"
                   loading="lazy"

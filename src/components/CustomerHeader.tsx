@@ -48,7 +48,7 @@ export const CustomerHeader: React.FC = () => {
             className="flex items-center gap-3 text-left group focus:outline-none cursor-pointer shrink-0"
           >
             <img
-              src="/images/arty-logo-wordmark.png"
+              src={`${import.meta.env.BASE_URL}images/arty-logo-wordmark.png`}
               alt="Arty Café"
               className="h-10 w-auto object-contain transition-transform duration-300 group-hover:-rotate-6"
             />
@@ -186,7 +186,7 @@ export const CustomerFooter: React.FC = () => {
     <Footer
       logo={
         <img
-          src="/images/arty-logo-wordmark.png"
+          src={`${import.meta.env.BASE_URL}images/arty-logo-wordmark.png`}
           alt=""
           className="h-10 w-auto object-contain"
         />

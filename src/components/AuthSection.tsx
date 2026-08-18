@@ -474,7 +474,7 @@ export const AuthSection: React.FC = () => {
               transition={{ delay: 0.15, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
             >
             <img
-              src="/images/auth-panel.jpg"
+              src={`${import.meta.env.BASE_URL}images/auth-panel.jpg`}
               alt="The Arty Café studio in Jeddah"
               className="absolute inset-0 w-full h-full object-cover filter brightness-[0.75]"
             />
