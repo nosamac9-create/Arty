@@ -5,6 +5,9 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
+import { ImageSlider } from './ui/ImageSlider';
+import Reveal from './ui/Reveal';
+import { ScrollReveal } from './ui/ScrollReveal';
 import { getRiyadhNow, parseBookingDateTimeToRiyadhDate, getRiyadhDateString } from '../utils/dateUtils';
 import { resolveStaffName } from '../utils/staffAssignments';
 import { getSessionSeatUsage } from '../utils/queueUtils';
@@ -26,19 +29,19 @@ export const WorkshopDetailSection: React.FC = () => {
     return workshops.find(ws => ws.id === selectedWorkshopId) || workshops[0];
   }, [workshops, selectedWorkshopId]);
 
-  // Gallery thumbnail state
-  const [activeImg, setActiveImg] = useState(workshop?.image || '');
-  useEffect(() => {
-    if (workshop?.image) {
-      setActiveImg(workshop.image);
-    }
-  }, [workshop]);
-
-  const thumbnails = [
-    workshop?.image || 'https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?auto=format&fit=crop&w=400&q=80',
-    'https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?auto=format&fit=crop&w=400&q=80',
-    'https://images.unsplash.com/photo-1578749556568-bc2c40e68b61?auto=format&fit=crop&w=400&q=80',
-  ];
+  /**
+   * Every image this workshop has, for the slider: the cover first, then the
+   * rest as staff ordered them in the console. A workshop saved before multiple
+   * photos existed has an empty `additionalImages`, so it simply yields a list
+   * of one and the slider renders a still image with no dots.
+   */
+  const galleryImages = useMemo(
+    () =>
+      [workshop?.image, ...(workshop?.additionalImages || [])].filter(
+        (src): src is string => typeof src === 'string' && src.trim() !== ''
+      ),
+    [workshop]
+  );
 
   // This workshop's sessions and bookings, taken from the shared data layer.
   const dbSessions = useMemo(
@@ -297,59 +300,43 @@ export const WorkshopDetailSection: React.FC = () => {
         {/* LEFT COLUMN: Gallery & Info */}
         <div className="lg:col-span-7 space-y-8">
           
-          {/* Photos */}
-          <div className="space-y-4">
-            <div className="aspect-[16/9] w-full rounded-[32px] overflow-hidden bg-brand-sand">
-              <img 
-                src={activeImg} 
-                alt={workshop.title} 
-                className="w-full h-full object-cover transition-all duration-300"
-                referrerPolicy="no-referrer"
-              />
-            </div>
-            
-            {/* Thumbnail Strip */}
-            <div className="flex gap-3">
-              {thumbnails.map((img, i) => {
-                const isActive = activeImg === img;
-                return (
-                  <button
-                    key={i}
-                    onClick={() => setActiveImg(img)}
-                    className={`relative w-20 h-20 rounded-2xl overflow-hidden border bg-brand-sand cursor-pointer transition-all ${
-                      isActive 
-                        ? 'border-2 border-brand-terracotta' 
-                        : 'border-brand-clay opacity-60 hover:opacity-100'
-                    }`}
-                  >
-                    <img src={img} alt="thumbnail" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          {/* Photos — same position and size as the single image it replaces. */}
+          <ImageSlider
+            images={galleryImages}
+            alt={workshop.title}
+            className="aspect-[16/9] w-full rounded-[32px]"
+          />
 
           {/* Title & Metadata */}
           <div className="space-y-4">
-            <div className="flex flex-wrap gap-2">
-              <span className="inline-flex items-center rounded-lg bg-brand-terracotta/10 px-2.5 py-1 text-xs font-semibold text-brand-terracotta">
-                {workshop.category}
-              </span>
-              <span className="inline-flex items-center rounded-lg bg-brand-sage/10 px-2.5 py-1 text-xs font-semibold text-brand-sage">
-                {workshop.ageRange}
-              </span>
-            </div>
-            
-            <h1 className="font-display text-3xl sm:text-4xl font-semibold text-brand-charcoal">
-              {workshop.title}
-            </h1>
-            
-            <p className="text-lg font-medium text-brand-terracotta">
-              "{workshop.hook}"
-            </p>
+            <Reveal index={0}>
+              <div className="flex flex-wrap gap-2">
+                <span className="inline-flex items-center rounded-lg bg-brand-terracotta/10 px-2.5 py-1 text-xs font-semibold text-brand-terracotta">
+                  {workshop.category}
+                </span>
+              </div>
+            </Reveal>
+
+            <Reveal index={1}>
+              <h1 className="font-display text-3xl sm:text-4xl font-semibold text-brand-charcoal">
+                {workshop.title}
+              </h1>
+            </Reveal>
+
+            <Reveal index={2}>
+              <p className="text-lg font-medium text-brand-terracotta">
+                "{workshop.hook}"
+              </p>
+            </Reveal>
           </div>
 
           {/* Fact grid — boxed cells, label over value, no icons. */}
+          <ScrollReveal
+            once
+            viewOptions={{ once: true, amount: 0.3, margin: '0px 0px -80px 0px' }}
+            variants={{ hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0 } }}
+            transition={{ duration: 0.5, ease: 'easeOut' }}
+          >
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 rounded-[22px] border border-brand-clay bg-brand-cream overflow-hidden">
             {[
               { label: 'Duration', value: workshop.duration },
@@ -379,21 +366,36 @@ export const WorkshopDetailSection: React.FC = () => {
               </div>
             ))}
           </div>
+          </ScrollReveal>
 
           {/* Description details */}
           <div className="space-y-4">
-            <h3 className="font-display text-2xl font-semibold text-brand-charcoal">What you’ll do</h3>
-            <p className="text-brand-ink leading-[1.75] text-[15px]">
-              {workshop.description}
-            </p>
-            <p className="text-brand-ink leading-[1.75] text-[15px]">
-              {workshop.fullDetails}
-            </p>
+            <Reveal index={0}>
+              <h3 className="font-display text-2xl font-semibold text-brand-charcoal">What you’ll do</h3>
+            </Reveal>
+            <Reveal index={1}>
+              <p className="text-brand-ink leading-[1.75] text-[15px]">
+                {workshop.description}
+              </p>
+            </Reveal>
+            <Reveal index={2}>
+              <p className="text-brand-ink leading-[1.75] text-[15px]">
+                {workshop.fullDetails}
+              </p>
+            </Reveal>
           </div>
 
           {/* Materials Bullet Points List */}
           <div className="space-y-4 pt-6 border-t border-brand-clay">
-            <h3 className="font-display text-2xl font-semibold text-brand-charcoal">Included</h3>
+            <Reveal index={0}>
+              <h3 className="font-display text-2xl font-semibold text-brand-charcoal">Included</h3>
+            </Reveal>
+            <ScrollReveal
+              once
+            viewOptions={{ once: true, amount: 0.3, margin: '0px 0px -80px 0px' }}
+            variants={{ hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0 } }}
+              transition={{ delay: 0.12, duration: 0.5, ease: 'easeOut' }}
+            >
             <div className="flex flex-wrap gap-2.5">
               {workshop.materials.map((mat, idx) => (
                 <span
@@ -404,21 +406,7 @@ export const WorkshopDetailSection: React.FC = () => {
                 </span>
               ))}
             </div>
-
-            {/* The room, called out the way the studio talks about it. */}
-            <div className="mt-6 rounded-[22px] bg-brand-charcoal p-6 sm:p-7 flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8">
-              <div className="min-w-0">
-                <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-cream/45">
-                  The room
-                </span>
-                <p className="mt-1.5 font-display text-xl font-semibold text-brand-cream">
-                  {workshop.room}
-                </p>
-              </div>
-              <p className="text-[13px] leading-relaxed text-brand-cream/65 sm:ms-auto sm:max-w-xs">
-                Aprons and towels are waiting on your stool. Everything you need is set up before you arrive.
-              </p>
-            </div>
+            </ScrollReveal>
           </div>
 
         </div>
@@ -428,8 +416,12 @@ export const WorkshopDetailSection: React.FC = () => {
           <div className="lg:sticky lg:top-24 bg-brand-cream rounded-[28px] p-6 sm:p-8 shadow-card shadow-brand-charcoal/5 border border-brand-terracotta/5 flex flex-col gap-6">
             
             <div>
-              <span className="text-[10px] font-semibold text-brand-sage uppercase tracking-widest block">SECURE BOOKING</span>
-              <h2 className="font-display text-2xl font-semibold text-brand-charcoal">Reserve your workspace</h2>
+              <Reveal index={0}>
+                <span className="text-[10px] font-semibold text-brand-sage uppercase tracking-widest block">SECURE BOOKING</span>
+              </Reveal>
+              <Reveal index={1}>
+                <h2 className="font-display text-2xl font-semibold text-brand-charcoal">Reserve your workspace</h2>
+              </Reveal>
             </div>
 
             {/* 1. Date Selection (Month Calendar) */}
@@ -439,7 +431,8 @@ export const WorkshopDetailSection: React.FC = () => {
               </label>
 
               {/* Full Month Calendar with Forward Navigation */}
-              <div className="bg-brand-sand/20 rounded-2xl p-4 border border-brand-clay space-y-3 animate-in fade-in duration-200">
+              {/* The shadow is on the month grid alone, not the panel around it. */}
+              <div className="bg-brand-sand/20 rounded-2xl p-4 border border-brand-clay shadow-card space-y-3 animate-in fade-in duration-200">
                 
                 {/* Calendar Month Header */}
                 <div className="flex items-center justify-between pb-2 border-b border-brand-clay">
@@ -574,7 +567,7 @@ export const WorkshopDetailSection: React.FC = () => {
                           setSelectedSlot(s.time);
                           setSelectedSessionId(s.id ? String(s.id) : null);
                         }}
-                        className={`px-4 py-3 rounded-2xl border transition-all cursor-pointer text-sm font-semibold flex justify-between items-center ${
+                        className={`px-5 py-3 rounded-full border transition-all cursor-pointer text-sm font-semibold flex justify-between items-center ${
                           isSelected 
                             ? 'border-2 border-brand-terracotta bg-brand-terracotta/5 text-brand-terracotta shadow-card-sm' 
                             : 'border border-brand-clay text-brand-charcoal hover:border-brand-terracotta/50'
@@ -674,7 +667,7 @@ export const WorkshopDetailSection: React.FC = () => {
             <button
               disabled={!selectedSlot}
               onClick={handleBook}
-              className={`w-full py-4 text-white rounded-2xl font-semibold text-lg shadow-card transition-all duration-150 cursor-pointer ${
+              className={`w-full py-4 text-white rounded-full font-semibold text-lg shadow-card transition-all duration-150 cursor-pointer ${
                 selectedSlot 
                   ? 'bg-brand-terracotta shadow-brand-terracotta/20 hover:scale-[1.02] active:scale-[0.98]' 
                   : 'bg-brand-sand text-brand-charcoal/40 border border-brand-clay cursor-not-allowed shadow-none'

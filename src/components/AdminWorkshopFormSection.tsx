@@ -91,7 +91,15 @@ export const AdminWorkshopFormSection: React.FC = () => {
   const [roomId, setRoomId] = useState('');
   const [status, setStatus] = useState<'Draft' | 'Published' | 'Archived'>('Published');
   const [skillLevel, setSkillLevel] = useState<'Beginner' | 'Intermediate' | 'Advanced' | 'All Levels'>('Beginner');
-  const [image, setImage] = useState<string>('https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?auto=format&fit=crop&w=800&q=80');
+  /**
+   * Every photo on this workshop, cover first.
+   *
+   * The record still stores a single `image` (the cover) plus
+   * `additionalImages` — the shape the table and the column allow-list have
+   * always had — so nothing about the schema changes. The form just works in
+   * one list and splits it again on save.
+   */
+  const [images, setImages] = useState<string[]>(['https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?auto=format&fit=crop&w=800&q=80']);
   
   // Tag input list
   const [materialInput, setMaterialInput] = useState('');
@@ -118,33 +126,67 @@ export const AdminWorkshopFormSection: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [expandedWorkshopIds, setExpandedWorkshopIds] = useState<Set<string>>(new Set());
 
-  // Handle Thumbnail File Select
+  /**
+   * Adds the chosen photos to the list — it never replaces what is already
+   * there. Several may be picked at once, and more added later.
+   */
   const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
 
-    if (!file.type.startsWith('image/')) {
-      alert('Please select a valid image file (JPEG, PNG, WEBP, etc.).');
+    const rejected: string[] = [];
+    const accepted = files.filter(file => {
+      if (!file.type.startsWith('image/')) {
+        rejected.push(`${file.name} is not an image`);
+        return false;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        rejected.push(`${file.name} is over 5MB`);
+        return false;
+      }
+      return true;
+    });
+
+    if (rejected.length > 0) {
+      alert(`These files were skipped:\n\n${rejected.join('\n')}`);
+    }
+    if (accepted.length === 0) {
+      e.target.value = '';
       return;
     }
 
-    if (file.size > 5 * 1024 * 1024) {
-      alert('Image size exceeds 5MB limit. Please select a smaller photo.');
-      return;
-    }
+    Promise.all(
+      accepted.map(
+        file =>
+          new Promise<string | null>(resolve => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.onerror = () => resolve(null);
+            reader.readAsDataURL(file);
+          })
+      )
+    ).then(results => {
+      const added = results.filter((src): src is string => !!src);
+      if (added.length < accepted.length) {
+        alert('Some photos could not be read. Please try adding them again.');
+      }
+      // Appended, and de-duplicated so the same photo picked twice does not
+      // give the slider two identical frames.
+      setImages(prev => Array.from(new Set([...prev, ...added])));
+    });
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setImage(reader.result as string);
-    };
-    reader.onerror = () => {
-      alert('Failed to read image file. Please try again.');
-    };
-    reader.readAsDataURL(file);
+    // Lets the same file be chosen again after being removed.
+    e.target.value = '';
   };
 
-  const handleRemoveImage = () => {
-    setImage('');
+  /** Removes one photo. If it was the cover, the next one becomes the cover. */
+  const handleRemoveImage = (src: string) => {
+    setImages(prev => prev.filter(item => item !== src));
+  };
+
+  /** Promotes a photo to cover — the cover is simply the first in the list. */
+  const handleMakeCover = (src: string) => {
+    setImages(prev => [src, ...prev.filter(item => item !== src)]);
   };
 
   const resetForm = () => {
@@ -162,7 +204,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
     setRoomId('');
     setStatus('Published');
     setSkillLevel('Beginner');
-    setImage('https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?auto=format&fit=crop&w=800&q=80');
+    setImages(['https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?auto=format&fit=crop&w=800&q=80']);
     setMaterials(['Terracotta Clay', 'Trimming tools', 'Kiln firing']);
     setAgeRange('');
     setSessions([]);
@@ -192,7 +234,11 @@ export const AdminWorkshopFormSection: React.FC = () => {
         setRoomId(ws.roomId || '');
         setStatus(ws.status || 'Published');
         setSkillLevel(ws.skillLevel || 'Beginner');
-        setImage(ws.image || 'https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?auto=format&fit=crop&w=800&q=80');
+        // Backward compatible: a workshop saved with a single image loads as
+        // a list of one.
+        setImages(
+          Array.from(new Set([ws.image, ...(ws.additionalImages || [])].filter(Boolean))) as string[]
+        );
         setMaterials(ws.materials || []);
         setAgeRange(ws.ageRange || '');
         // Sessions store no seat counter: what is left is derived from the
@@ -855,7 +901,8 @@ export const AdminWorkshopFormSection: React.FC = () => {
         price: Number(price) || 200,
         capacity: Number(capacity) || 10,
         spotsLeft: Number(capacity) || 10,
-        image: image || 'https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?auto=format&fit=crop&w=800&q=80',
+        image: images[0] || 'https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?auto=format&fit=crop&w=800&q=80',
+        additionalImages: images.slice(1),
         // Name is denormalized for display only; staffId is the assignment record.
         instructor: assignedStaffMember ? assignedStaffMember.name : '',
         staffId,
@@ -952,7 +999,8 @@ export const AdminWorkshopFormSection: React.FC = () => {
         price: Number(price) || 200,
         capacity: Number(capacity) || 10,
         spotsLeft: Number(capacity) || 10,
-        image: image || 'https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?auto=format&fit=crop&w=800&q=80',
+        image: images[0] || 'https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?auto=format&fit=crop&w=800&q=80',
+        additionalImages: images.slice(1),
         // Name is denormalized for display only; staffId is the assignment record.
         instructor: assignedStaffMember ? assignedStaffMember.name : '',
         staffId,
@@ -1187,47 +1235,82 @@ export const AdminWorkshopFormSection: React.FC = () => {
             </div>
           </div>
 
-          {/* Image Uploader */}
+          {/* Image Uploader — a workshop can carry several photos; the
+              customer detail page rotates through all of them. */}
           <div className="bg-white border border-brand-clay/70 rounded-2xl p-5 shadow-2xs space-y-3 text-left">
-            <label className="text-xs font-bold text-brand-charcoal/80 uppercase tracking-wider block">Workshop Thumbnail photo</label>
-            
+            <div className="flex items-baseline justify-between gap-2">
+              <label className="text-xs font-bold text-brand-charcoal/80 uppercase tracking-wider block">
+                Workshop photos
+              </label>
+              <span className="text-[10px] font-bold text-brand-charcoal/45">
+                {images.length} {images.length === 1 ? 'photo' : 'photos'}
+              </span>
+            </div>
+
             <label className="border-2 border-dashed border-brand-clay rounded-2xl p-5 text-center bg-brand-cream/20 flex flex-col items-center justify-center cursor-pointer hover:bg-brand-sand/30 transition-colors block">
-              <input 
-                type="file" 
-                accept="image/*" 
-                onChange={handleImageFileChange} 
-                className="hidden" 
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleImageFileChange}
+                className="hidden"
               />
               <Upload className="h-7 w-7 text-brand-terracotta mb-2 shrink-0 pulse-accent" />
-              <p className="text-xs font-bold text-brand-charcoal">Click or drag & drop photo here</p>
-              <p className="text-[10px] text-brand-charcoal/50 mt-0.5">JPEG, PNG, WEBP (Max 5MB)</p>
+              <p className="text-xs font-bold text-brand-charcoal">Click or drag &amp; drop photos here</p>
+              <p className="text-[10px] text-brand-charcoal/50 mt-0.5">
+                JPEG, PNG, WEBP (Max 5MB each) — pick several at once, or add more later
+              </p>
             </label>
 
-            {image && (
-              <div className="flex items-center justify-between gap-3 p-2 bg-brand-sand/40 border border-brand-clay/60 rounded-xl">
-                <div className="flex items-center gap-3 overflow-hidden">
-                  <div className="h-12 w-16 bg-brand-clay rounded overflow-hidden shrink-0">
-                    <img src={image} alt="uploaded preview" className="h-full w-full object-cover" />
-                  </div>
-                  <div className="text-left overflow-hidden">
-                    <p className="text-xs font-bold text-brand-charcoal truncate">Workshop Thumbnail</p>
-                    <p className="text-[10px] text-brand-charcoal/50 font-semibold">Active image preview</p>
-                  </div>
+            {images.length > 0 ? (
+              <>
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5">
+                  {images.map((src, index) => (
+                    <div
+                      key={src}
+                      className="group relative aspect-square rounded-xl overflow-hidden border border-brand-clay bg-brand-clay"
+                    >
+                      <img src={src} alt={`Workshop photo ${index + 1}`} className="h-full w-full object-cover" />
+
+                      {/* The first photo is the cover — it is what the workshop
+                          card shows wherever a single image is needed. */}
+                      {index === 0 ? (
+                        <span className="absolute bottom-1 left-1 rounded bg-brand-terracotta px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white">
+                          Cover
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleMakeCover(src)}
+                          className="absolute bottom-1 left-1 rounded bg-white/90 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-brand-charcoal opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer hover:bg-white"
+                          title="Use as cover photo"
+                        >
+                          Make cover
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveImage(src)}
+                        aria-label={`Remove photo ${index + 1}`}
+                        title="Remove photo"
+                        className="absolute top-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-white/90 text-red-500 shadow-2xs hover:bg-red-50 transition-colors cursor-pointer"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <label className="cursor-pointer px-2 py-1 bg-white border border-brand-clay text-[10px] font-bold text-brand-charcoal rounded hover:bg-brand-sand transition-colors">
-                    <span>Replace</span>
-                    <input type="file" accept="image/*" onChange={handleImageFileChange} className="hidden" />
-                  </label>
-                  <button
-                    type="button"
-                    onClick={handleRemoveImage}
-                    className="p-1 hover:bg-red-50 text-red-500 rounded transition-colors"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
+
+                <p className="text-[10px] text-brand-charcoal/50 font-semibold">
+                  The first photo is the cover, used on the workshop card. The rest appear in the
+                  slider on the workshop page.
+                </p>
+              </>
+            ) : (
+              <p className="text-[10px] text-brand-charcoal/50 font-semibold italic">
+                No photos yet — the workshop will fall back to a placeholder image.
+              </p>
             )}
           </div>
 
