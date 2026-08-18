@@ -129,6 +129,26 @@ input:focus, select:focus, textarea:focus {
   * { scroll-behavior: auto !important; }
 }
 
+/* =============================================================================
+   AUTH BACKDROP
+   A very slow drift on the login slideshow. Kept under 6% so it never reads as
+   a zoom — it only stops the still frames from looking frozen.
+   ============================================================================= */
+
+@keyframes authKenBurns {
+  from { transform: scale(1); }
+  to   { transform: scale(1.06); }
+}
+
+.auth-kenburns {
+  animation: authKenBurns 24s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-kenburns { animation: none; }
+}
+
 /* An extra-small breakpoint: phones below ~400px need one more step down
    than Tailwind's default `sm`, which only starts at 640px. */
 @theme {

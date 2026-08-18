@@ -10,6 +10,7 @@ import { ScrollReveal } from './ui/ScrollReveal';
 import { motion, useReducedMotion } from 'motion/react';
 import { Palette, Mail, Lock, User, Check, AlertCircle, ArrowLeft, LogIn, KeyRound, ShieldCheck, CheckCircle2, RefreshCw } from 'lucide-react';
 import { PhoneInput } from './PhoneInput';
+import { AuthBackdrop } from './AuthBackdrop';
 import { validatePhone, normalisePhone } from '../utils/phoneUtils';
 import {
   validateCustomerForm, canonicalEmail, canonicalPhone, passwordChecklist,
@@ -214,8 +215,18 @@ export const AuthSection: React.FC = () => {
   };
 
   return (
-    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-10 animate-in fade-in duration-300">
-      
+    <div
+      className={
+        currentUser
+          ? 'mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-10 animate-in fade-in duration-300'
+          : // Signed out, the studio slideshow is the page: the section fills the
+            // area between header and footer and the panel floats on top of it.
+            'relative w-full min-h-[calc(100vh-5rem)] overflow-hidden flex items-center justify-center px-4 py-12 sm:px-6 animate-in fade-in duration-300'
+      }
+    >
+
+      {!currentUser && <AuthBackdrop />}
+
       {/* ACCOUNT DETAILS — read-only profile; the only thing changeable
           here is the password. */}
       {currentUser ? (
@@ -432,14 +443,13 @@ export const AuthSection: React.FC = () => {
 
         </div>
       ) : (
-        /* SPLIT SCREEN LAYOUT — the same entrance the Custom Events card
-           uses: the panel wipes in from the side while the card rises. */
+        /* CENTRED PANEL over the full-bleed slideshow. */
         <ScrollReveal
           once
           viewOptions={{ once: true, amount: 0.15 }}
           transition={{ duration: 0.5, ease: 'easeOut' }}
           variants={{ hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0 } }}
-          className="max-w-5xl mx-auto"
+          className="relative z-10 w-full max-w-md sm:max-w-lg mx-auto"
         >
         {/* `layout` animates the height between the two forms. The fixed
             min-height it replaces was the resize bug: it held the card at
@@ -449,50 +459,11 @@ export const AuthSection: React.FC = () => {
         <motion.div
           layout={!prefersReducedMotion}
           transition={{ duration: 0.35, ease: 'easeOut' }}
-          className="grid grid-cols-1 lg:grid-cols-12 rounded-[28px] border border-brand-clay overflow-hidden shadow-card-sm"
+          className="rounded-[28px] border border-brand-cream/40 bg-brand-cream/85 backdrop-blur-xl shadow-card"
         >
-          
-          {/* Left Column: the studio, with just the overlay copy on top —
-              no brand chip, no location label. */}
-          {/* The observed element is never clipped: an element clipped to zero
-              area reports zero intersection, so useInView would never fire and
-              the reveal would hold it invisible for good. The wipe lives on an
-              inner element that inherits the variant instead. */}
-          <ScrollReveal
-            once
-            viewOptions={{ once: true, amount: 0.15 }}
-            transition={{ delay: 0.15, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-            variants={{ hidden: { opacity: 0 }, visible: { opacity: 1 } }}
-            className="lg:col-span-5 relative hidden lg:block bg-brand-sand min-h-full"
-          >
-            <motion.div
-              className="absolute inset-0"
-              variants={{
-                hidden: { clipPath: 'inset(0 100% 0 0)' },
-                visible: { clipPath: 'inset(0 0% 0 0)' }
-              }}
-              transition={{ delay: 0.15, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-            >
-            <img
-              src={`${import.meta.env.BASE_URL}images/auth-panel.jpg`}
-              alt="The Arty Café studio in Jeddah"
-              className="absolute inset-0 w-full h-full object-cover filter brightness-[0.75]"
-            />
 
-            <div className="absolute inset-0 flex flex-col justify-end p-10 text-start bg-gradient-to-t from-brand-charcoal/80 via-transparent to-brand-charcoal/40 text-brand-cream">
-              <div className="space-y-3">
-                <p className="font-display text-3xl font-semibold leading-tight">Your wheel is waiting.</p>
-                <p className="text-sm text-brand-cream/80 max-w-xs font-medium">
-                  Log in to track your clay pieces, review upcoming workshop sessions, and manage reservations easily.
-                </p>
-              </div>
-            </div>
-            </motion.div>
-          </ScrollReveal>
+          <div className="p-6 sm:p-9 flex flex-col justify-center text-start">
 
-          {/* Right Column: Form Column */}
-          <div className="lg:col-span-7 bg-brand-cream p-8 md:p-12 flex flex-col justify-center text-start">
-            
             {errorMsg && (
               <div className="mb-6 p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold flex items-start gap-2.5">
                 <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-red-600" />
