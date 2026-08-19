@@ -17,6 +17,7 @@
     "@tailwindcss/vite": "^4.1.14",
     "@types/canvas-confetti": "^1.9.0",
     "@vitejs/plugin-react": "^5.0.4",
+    "balloons-js": "^0.0.3",
     "canvas-confetti": "^1.9.4",
     "dexie": "^4.4.4",
     "dexie-react-hooks": "^4.4.0",

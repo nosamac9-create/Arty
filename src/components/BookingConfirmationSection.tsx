@@ -5,12 +5,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Sparkles, Calendar, Receipt, Copy, Check, ChevronRight, MapPin, Gift } from 'lucide-react';
+import { Sparkles, Calendar, Receipt, ChevronRight, MapPin, Gift } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 export const BookingConfirmationSection: React.FC = () => {
   const { lastBookingCreated, setCustomerTab, workshops, bookingError } = useApp();
-  const [copied, setCopied] = useState(false);
 
   // Trigger celebration confetti on mount
   useEffect(() => {
@@ -55,12 +54,6 @@ export const BookingConfirmationSection: React.FC = () => {
   };
 
   const matchingWorkshop = workshops.find(w => w.id === booking.workshopId) || workshops[0];
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(booking.id);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
 
   // The write happens after this screen appears. If it failed, say so rather
   // than showing a confirmation for a booking that does not exist.
@@ -115,35 +108,11 @@ export const BookingConfirmationSection: React.FC = () => {
         </div>
 
         {/* Success Header */}
-        <div className="text-center space-y-2 mb-6">
+        <div className="text-center space-y-2 mb-2">
           <h1 className="font-display text-3xl font-semibold text-brand-charcoal">You're booked!</h1>
           <p className="text-sm text-brand-ink max-w-sm mx-auto">
             We have reserved your potter wheel at the café. A confirmation email and SMS with parking guidelines has been sent.
           </p>
-        </div>
-
-        {/* Copyable Reference Pill */}
-        <div className="bg-brand-sand/60 border border-brand-clay rounded-2xl p-3.5 flex items-center justify-between gap-3 mb-6">
-          <div className="text-start">
-            <span className="text-[9px] font-semibold text-brand-sage uppercase tracking-wider block">Booking Reference</span>
-            <span className="text-sm font-mono font-semibold text-brand-charcoal tracking-wider">{booking.id}</span>
-          </div>
-          <button
-            onClick={handleCopy}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-cream border border-brand-clay hover:bg-brand-sand transition-colors cursor-pointer text-brand-terracotta"
-          >
-            {copied ? (
-              <>
-                <Check className="h-3.5 w-3.5 text-green-600" />
-                <span className="text-green-600">Copied</span>
-              </>
-            ) : (
-              <>
-                <Copy className="h-3.5 w-3.5" />
-                <span>Copy</span>
-              </>
-            )}
-          </button>
         </div>
 
         {/* Booking Details Summary List */}
@@ -160,8 +129,8 @@ export const BookingConfirmationSection: React.FC = () => {
           </div>
 
           <div className="flex justify-between">
-            <span className="font-semibold text-brand-muted">Artists Registered</span>
-            <span className="font-semibold text-brand-charcoal">{booking.participants} {booking.participants === 1 ? 'Person' : 'People'}</span>
+            <span className="font-semibold text-brand-muted">Guests</span>
+            <span className="font-semibold text-brand-charcoal">{booking.participants} {booking.participants === 1 ? 'Guest' : 'Guests'}</span>
           </div>
 
           <div className="flex justify-between">

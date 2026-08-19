@@ -11,6 +11,7 @@ import { PhoneInput } from './PhoneInput';
 import { PrePaymentPopup } from './PrePaymentPopup';
 import { migratePrePaymentPopup } from '../types';
 import { validateBookingForm } from '../utils/validation';
+import { CheckoutStepper } from './ui/CheckoutStepper';
 
 export const CheckoutPaymentSection: React.FC = () => {
   const { 
@@ -158,24 +159,20 @@ export const CheckoutPaymentSection: React.FC = () => {
         <span>Back to Contact Information</span>
       </button>
 
-      {/* Progress Step Indicator */}
-      <div className="mb-8 flex items-center justify-between border-b border-brand-clay pb-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-terracotta text-brand-cream text-xs font-semibold shadow-card-sm">
-            2
-          </div>
-          <div>
-            <h1 className="font-display text-xl sm:text-2xl font-semibold text-brand-charcoal">Payment Method</h1>
-            <p className="text-xs text-brand-muted">Step 2 of 2: Select your preferred payment option</p>
-          </div>
-        </div>
-
-        <div className="hidden sm:flex items-center gap-2 text-xs font-semibold text-brand-charcoal/40">
-          <span className="text-brand-sage">1. Info</span>
-          <span>→</span>
-          <span className="text-brand-terracotta">2. Payment</span>
-        </div>
+      {/* Title then stepper — the same header the birthday reservation uses. */}
+      <div className="mb-8">
+        <span className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-sage">
+          Workshop Booking
+        </span>
+        <h1 className="mt-3 font-display text-3xl font-semibold text-brand-charcoal sm:text-[42px]">
+          Payment Method
+        </h1>
+        <p className="mt-3 text-sm text-brand-ink">
+          Select your preferred payment option.
+        </p>
       </div>
+
+      <CheckoutStepper steps={['Customer Information', 'Payment']} current={2} />
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         
@@ -380,7 +377,7 @@ export const CheckoutPaymentSection: React.FC = () => {
               </div>
               <div className="flex justify-between">
                 <span>Participants:</span>
-                <span className="font-semibold text-brand-charcoal">{pendingBooking.participants} {pendingBooking.participants === 1 ? 'person' : 'people'}</span>
+                <span className="font-semibold text-brand-charcoal">{pendingBooking.participants} {pendingBooking.participants === 1 ? 'guest' : 'guests'}</span>
               </div>
             </div>
 

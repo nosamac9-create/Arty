@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,700;9..144,900&display=swap');
 @import "tailwindcss";
 
 /* =============================================================================
@@ -40,6 +40,11 @@
   --font-sans: "IBM Plex Sans", "IBM Plex Sans Arabic", system-ui, -apple-system, sans-serif;
   --font-display: "IBM Plex Sans", "IBM Plex Sans Arabic", system-ui, sans-serif;
   --font-arabic: "IBM Plex Sans Arabic", "IBM Plex Sans", system-ui, sans-serif;
+
+  /* The logo wordmark is artwork, not live text, so there is no font file to
+     reuse. Fraunces is the stand-in: a high-contrast display serif, used for
+     the login page title only. */
+  --font-logo: "Fraunces", Georgia, serif;
 }
 
 body {
@@ -147,6 +152,84 @@ input:focus, select:focus, textarea:focus {
 
 @media (prefers-reduced-motion: reduce) {
   .auth-kenburns { animation: none; }
+}
+
+/* =============================================================================
+   BIRTHDAY BALLOONS
+   balloons-js draws the balloons and owns their motion; it has no colour API —
+   `colorPairs` is a module-private const, so the palette cannot be passed in.
+   The tint is therefore applied to the library's own <balloons> layer: flatten
+   to greyscale, push through sepia to get one hue, then rotate that hue into
+   pink. The originals differ in lightness, so what comes out is a set of tonal
+   pastel pinks rather than one flat colour.
+   ============================================================================= */
+
+balloons {
+  filter: grayscale(1) sepia(1) hue-rotate(285deg) saturate(1.9) brightness(1.06);
+  /* Held back a little so a balloon crossing the heading never fights it. */
+  opacity: 0.85;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  balloons { display: none; }
+}
+
+/* Overlay scrollbars (the macOS default) fade out when idle, so a list that
+   scrolls looks identical to one that does not until you try. These lists are
+   how staff find a customer among many, so the bar is drawn permanently:
+   styling the webkit pseudo-elements opts the element out of overlay mode. */
+.always-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-brand-clay) transparent;
+}
+.always-scrollbar::-webkit-scrollbar {
+  -webkit-appearance: none;
+  width: 8px;
+}
+.always-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.always-scrollbar::-webkit-scrollbar-thumb {
+  background-color: var(--color-brand-clay);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+.always-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-brand-muted);
+}
+
+/* A number input with its own −/+ buttons beside it: the native spinner would
+   be a second, differently-behaved set of controls inside the same field. */
+.no-spinner {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.no-spinner::-webkit-outer-spin-button,
+.no-spinner::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* The login title. This has to be a plain rule rather than the `font-logo`
+   utility: Tailwind's utilities sit in @layer utilities, and an unlayered rule
+   beats a layered one whatever the specificity — so the global
+   `h1, h2, … { font-family: var(--font-display) }` above would win and the
+   heading would silently keep rendering in the body face. */
+.auth-title {
+  font-family: var(--font-logo);
+  font-weight: 900;
+  font-optical-sizing: auto;
+  letter-spacing: -0.01em;
+}
+
+/* Two shadows rather than one: a tight dark edge for contrast against a busy
+   frame, and a wide soft halo so the letterforms hold together over the
+   lighter photos. */
+.auth-heading-shadow {
+  text-shadow:
+    0 2px 6px rgb(0 0 0 / 0.55),
+    0 8px 32px rgb(0 0 0 / 0.45);
 }
 
 /* An extra-small breakpoint: phones below ~400px need one more step down

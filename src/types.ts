@@ -262,17 +262,64 @@ export interface QueueItem {
   history: { status: 'Waiting' | 'Called' | 'In Progress' | 'Completed' | 'Cancelled'; timestamp: string }[];
 }
 
+/**
+ * The four making-stages, then the two end-states.
+ *
+ * Collected and Broken are lifecycle outcomes rather than Kanban columns: a
+ * piece leaves the board through them, it does not queue in them.
+ */
+export const PIECE_MAKING_STAGES = [
+  'Greenware', 'Bisque Firing', 'Glazing', 'Ready for Collection'
+] as const;
+
+export const PIECE_END_STATES = ['Collected', 'Broken'] as const;
+
+export type PieceMakingStage = typeof PIECE_MAKING_STAGES[number];
+export type PieceStatus = PieceMakingStage | typeof PIECE_END_STATES[number];
+
+/**
+ * Where a piece on one of the retired stages lands.
+ *
+ * Kept as a lookup rather than folded into the SQL migration alone, because
+ * older records — and any client that has not reloaded — can still hand us a
+ * legacy name.
+ */
+const LEGACY_STAGE_MAP: Record<string, PieceStatus> = {
+  'Created': 'Greenware',
+  'Drying': 'Greenware',
+  'In Processing': 'Bisque Firing',
+  'Firing': 'Bisque Firing',
+  'Glazing': 'Glazing',
+  'Ready for Collection': 'Ready for Collection',
+  'Collected': 'Collected',
+  'Broken': 'Broken'
+};
+
+/** Normalises any stage name — current or retired — onto a valid status. */
+export function migrateLegacyPieceStatus(status: string | undefined | null): PieceStatus {
+  if (!status) return 'Greenware';
+  const all: string[] = [...PIECE_MAKING_STAGES, ...PIECE_END_STATES];
+  if (all.includes(status)) return status as PieceStatus;
+  return LEGACY_STAGE_MAP[status] || 'Greenware';
+}
+
 export interface PotteryPiece {
   id: string; // e.g. "PC-8802"
   pieceCode?: string; // e.g. "AC-8802"
   name: string;
   workshopName: string;
+  /**
+   * The workshop this piece came from. The customer's My Pieces page shows this
+   * workshop's cover photo — the photo on the piece itself is the studio's own
+   * working shot and is never shown to them.
+   */
+  workshopId?: string;
   customerName: string;
   customerPhone: string;
   customerId?: string;
   dateCreated: string;
   image: string;
-  status: 'Created' | 'Drying' | 'In Processing' | 'Glazing' | 'Firing' | 'Ready for Collection' | 'Collected' | 'Broken';
+  status: PieceStatus;
   daysElapsed: number;
   assignedStaff: string;
   /** Internal-only damage note for a Broken piece. Never sent to the customer. */
@@ -638,7 +685,7 @@ export const INITIAL_PIECES: PotteryPiece[] = [
     customerPhone: '+966 54 888 7777',
     dateCreated: '2026-07-12',
     image: 'https://images.unsplash.com/photo-1578749556568-bc2c40e68b61?auto=format&fit=crop&w=200&q=80',
-    status: 'Firing',
+    status: 'Bisque Firing',
     daysElapsed: 7,
     assignedStaff: 'Aisha Al-Jahdali',
     storageLocation: 'Kiln Room 2',
@@ -652,7 +699,7 @@ export const INITIAL_PIECES: PotteryPiece[] = [
     customerPhone: '+966 50 123 4567',
     dateCreated: '2026-07-18',
     image: 'https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=200&q=80',
-    status: 'Created',
+    status: 'Greenware',
     daysElapsed: 1,
     assignedStaff: 'Sara Al-Malki',
     storageLocation: 'Drying Rack B',
@@ -710,18 +757,23 @@ export interface PipelineStage {
   notifyCustomer?: boolean;
 }
 
-/** The pottery workflow as the application actually uses it today. */
+/**
+ * The pottery workflow: four making-stages, then the two end-states.
+ *
+ * These ids are the canonical set — `0006_piece_pipeline_v2.sql` deletes
+ * everything else in `pipeline_stages`, which is what clears the duplicated and
+ * retired rows the board was drawing twice. Staff can rename, recolour and
+ * reorder them in Settings; the ids are what stays fixed.
+ */
 export const DEFAULT_PIPELINE_STAGES: PipelineStage[] = [
-  { id: 'stage-1', name: 'Created', color: '#E07A5F', order: 0, visibleToCustomer: true, enabled: true, notifyCustomer: true },
-  { id: 'stage-2', name: 'Drying', color: '#D4C5B9', order: 1, visibleToCustomer: false, enabled: true, notifyCustomer: true },
-  { id: 'stage-3', name: 'In Processing', color: '#3D405B', order: 2, visibleToCustomer: true, enabled: true, notifyCustomer: true },
-  { id: 'stage-4', name: 'Glazing', color: '#81B29A', order: 3, visibleToCustomer: false, enabled: true, notifyCustomer: true },
-  { id: 'stage-5', name: 'Firing', color: '#F2CC8F', order: 4, visibleToCustomer: false, enabled: true, notifyCustomer: true },
-  { id: 'stage-6', name: 'Ready for Collection', color: '#335C67', order: 5, visibleToCustomer: true, enabled: true, notifyCustomer: true },
-  { id: 'stage-7', name: 'Collected', color: '#111111', order: 6, visibleToCustomer: true, enabled: true, notifyCustomer: true },
-  // Internal handling stage — the customer is told to contact the café, never
-  // shown the damage details.
-  { id: 'stage-8', name: 'Broken', color: '#B91C1C', order: 7, visibleToCustomer: false, enabled: true, notifyCustomer: true }
+  { id: 'stage-greenware', name: 'Greenware', color: '#E07A5F', order: 0, visibleToCustomer: true, enabled: true, notifyCustomer: true },
+  { id: 'stage-bisque', name: 'Bisque Firing', color: '#F2CC8F', order: 1, visibleToCustomer: true, enabled: true, notifyCustomer: true },
+  { id: 'stage-glazing', name: 'Glazing', color: '#81B29A', order: 2, visibleToCustomer: true, enabled: true, notifyCustomer: true },
+  { id: 'stage-ready', name: 'Ready for Collection', color: '#335C67', order: 3, visibleToCustomer: true, enabled: true, notifyCustomer: true },
+  // End-states. On the board these are outcomes, not columns.
+  { id: 'stage-collected', name: 'Collected', color: '#111111', order: 4, visibleToCustomer: true, enabled: true, notifyCustomer: true },
+  // The customer is told to contact the café, never shown the damage details.
+  { id: 'stage-broken', name: 'Broken', color: '#B91C1C', order: 5, visibleToCustomer: false, enabled: true, notifyCustomer: true }
 ];
 
 /** A stage is selectable for a new update unless it has been disabled. */

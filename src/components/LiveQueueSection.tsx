@@ -1620,10 +1620,15 @@ export const LiveQueueSection: React.FC = () => {
                   </button>
                 </div>
               ) : customerMatches.length > 0 && (
-                <div className="bg-brand-sand/25 border border-brand-clay/50 rounded-xl p-2 space-y-1">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-brand-charcoal/50 px-1">
+                <div className="bg-brand-sand/25 border border-brand-clay/50 rounded-xl p-2">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-brand-charcoal/50 px-1 pb-1">
                     Matching customers
                   </p>
+                  {/* Fixed height with the rest reached by scrolling — the same
+                      shape the piece logging console's customer search uses.
+                      Stacking every match grew the card off the screen whenever
+                      several customers shared a name. */}
+                  <div className="max-h-40 overflow-y-auto always-scrollbar space-y-1 pe-1">
                   {customerMatches.map(({ customer }) => {
                     const summary = summarizeCustomerActivity(customer, { bookings, queue, pieces });
                     return (
@@ -1644,6 +1649,7 @@ export const LiveQueueSection: React.FC = () => {
                       </button>
                     );
                   })}
+                  </div>
                 </div>
               )}
 

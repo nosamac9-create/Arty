@@ -592,12 +592,12 @@ export const SYSTEM_TESTS: SystemTestDefinition[] = [
     kind: 'audit',
     run: async ({ live }) => {
       const pieces: PotteryPiece[] = await live.pieces.toArray();
-      const moved = pieces.filter(p => p.status && p.status !== 'Created');
+      const moved = pieces.filter(p => p.status && p.status !== 'Greenware');
       const missing = moved.filter(p => !(p.history || []).some(h => h.status === p.status));
 
       return check(
         missing.length === 0,
-        `Every piece past "Created" has its current status in its history (${moved.length} checked)`,
+        `Every piece past "Greenware" has its current status in its history (${moved.length} checked)`,
         missing.length === 0
           ? `${moved.length} pieces have a complete history`
           : `${missing.length} missing a history entry: ${listSome(missing.map(p => `${p.id} (${p.status})`))}`,

@@ -10,7 +10,25 @@ import {
   MapPin, User, Calendar, RefreshCw, ClipboardList, Clock, Sparkles,
   Camera, Hash, Upload
 } from 'lucide-react';
-import { PotteryPiece, isStageEnabled } from '../types';
+import { PotteryPiece, isStageEnabled, PIECE_END_STATES } from '../types';
+
+/**
+ * A suggested code that is not already on the board.
+ *
+ * Only a suggestion — staff can type their own, and `addPiece` is the actual
+ * guard. It exists so the field does not open pre-filled with a code that is
+ * already taken, which is how duplicates were being typed in.
+ */
+const suggestPieceCode = (existing: PotteryPiece[]): string => {
+  const taken = new Set(
+    existing.flatMap(p => [p.pieceCode, p.id].filter(Boolean).map(v => String(v).trim().toUpperCase()))
+  );
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const candidate = `AC-${Math.floor(1000 + Math.random() * 9000)}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+  return `AC-${Date.now().toString(36).toUpperCase()}`;
+};
 import { PhoneInput } from './PhoneInput';
 import { DateInput } from './DateInput';
 import { formatDateTime } from '../utils/calendarConfig';
@@ -58,13 +76,13 @@ export const AdminPiecesTrackingSection: React.FC = () => {
 
   const [relatedWorkshopId, setRelatedWorkshopId] = useState('');
   const [pieceType, setPieceType] = useState('Mug');
-  const [pieceCodeInput, setPieceCodeInput] = useState(() => `AC-${Math.floor(1000 + Math.random() * 9000)}`);
+  const [pieceCodeInput, setPieceCodeInput] = useState(() => suggestPieceCode(pieces));
   const [pieceNameInput, setPieceNameInput] = useState('Custom Clay Vessel');
   const [customPhotoUrl, setCustomPhotoUrl] = useState('');
   const [selectedPresetPhoto, setSelectedPresetPhoto] = useState('Mug');
   const [dateCreatedInput, setDateCreatedInput] = useState(() => new Date().toISOString().split('T')[0]);
   const [assignedStaffInput, setAssignedStaffInput] = useState('');
-  const [initialStatus, setInitialStatus] = useState<PotteryPiece['status']>('Created');
+  const [initialStatus, setInitialStatus] = useState<PotteryPiece['status']>('Greenware');
   const [storageLocationInput, setStorageLocationInput] = useState('Shelf A-1');
   const [expectedCompletionInput, setExpectedCompletionInput] = useState(() => {
     const d = new Date();
@@ -222,8 +240,23 @@ export const AdminPiecesTrackingSection: React.FC = () => {
     [pipelineStages]
   );
 
-  /** Board columns follow the configured order. */
+  /**
+   * Board columns follow the configured order, minus the two end-states.
+   *
+   * Collected and Broken are outcomes, not queues — a piece leaves the board
+   * through them. They stay selectable below (so "mark as collected" and the
+   * broken flow are unchanged) and those pieces remain listed in the Table
+   * view, which is not column-driven.
+   */
   const COLUMNS = useMemo(
+    () => orderedStages
+      .filter(stage => !PIECE_END_STATES.includes(stage.name as any))
+      .map(stage => stage.name as PotteryPiece['status']),
+    [orderedStages]
+  );
+
+  /** Every configured stage name, board column or end-state. */
+  const allStageNames = useMemo(
     () => orderedStages.map(stage => stage.name as PotteryPiece['status']),
     [orderedStages]
   );
@@ -306,11 +339,9 @@ export const AdminPiecesTrackingSection: React.FC = () => {
 
   const getColumnColorClass = (col: PotteryPiece['status']) => {
     switch (col) {
-      case 'Created': return 'text-blue-600 border-blue-500 bg-blue-50';
-      case 'Drying': return 'text-amber-600 border-amber-500 bg-amber-50';
-      case 'In Processing': return 'text-indigo-600 border-indigo-500 bg-indigo-50';
+      case 'Greenware': return 'text-blue-600 border-blue-500 bg-blue-50';
+      case 'Bisque Firing': return 'text-orange-600 border-orange-500 bg-orange-50';
       case 'Glazing': return 'text-purple-600 border-purple-500 bg-purple-50';
-      case 'Firing': return 'text-orange-600 border-orange-500 bg-orange-50';
       case 'Ready for Collection': return 'text-emerald-700 border-emerald-500 bg-emerald-50';
       case 'Collected': return 'text-gray-600 border-gray-400 bg-gray-50';
       case 'Broken': return 'text-red-700 border-red-500 bg-red-50';
@@ -435,7 +466,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
           {/* Log Piece Manually Button */}
           <button
             onClick={() => {
-              setPieceCodeInput(`AC-${Math.floor(1000 + Math.random() * 9000)}`);
+              setPieceCodeInput(suggestPieceCode(pieces));
               setShowManualLogModal(true);
             }}
             className="cursor-pointer px-4 py-2 bg-brand-terracotta hover:bg-brand-terracotta/95 text-brand-cream rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all duration-200"
@@ -931,9 +962,12 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                     onChange={e => onAttemptStatusChange(selectedPiece.id, e.target.value as any)}
                     className="w-full bg-brand-cream border border-brand-clay rounded-xl p-2 font-bold text-brand-charcoal cursor-pointer"
                   >
-                    {/* Disabled stages are not selectable, but the piece's own
+                    {/* Every stage, not just the board's columns: Collected and
+                        Broken are end-states with no column of their own, and
+                        this dropdown is one of the ways a piece reaches them.
+                        Disabled stages are not selectable, but the piece's own
                         current stage stays listed so its status is never lost. */}
-                    {COLUMNS.filter(col => selectableStatuses.includes(col) || col === selectedPiece.status)
+                    {allStageNames.filter(col => selectableStatuses.includes(col) || col === selectedPiece.status)
                       .map(col => (
                         <option key={col} value={col}>
                           {col}{!selectableStatuses.includes(col) ? ' (disabled)' : ''}
@@ -1204,7 +1238,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
 
                   {/* Customer matches drop-down list */}
                   {!selectedCust && custSearch.trim() && (
-                    <div className="absolute left-0 right-0 mt-1 bg-white border border-brand-clay rounded-xl shadow-lg z-50 max-h-40 overflow-y-auto divide-y divide-brand-clay/20">
+                    <div className="absolute left-0 right-0 mt-1 bg-white border border-brand-clay rounded-xl shadow-lg z-50 max-h-40 overflow-y-auto always-scrollbar divide-y divide-brand-clay/20">
                       {filteredCustResults.map(c => (
                         <button
                           key={`${c.id}-${c.phone}`}
@@ -1493,6 +1527,9 @@ export const AdminPiecesTrackingSection: React.FC = () => {
 
                   const newPieceData = {
                     customerId: linkedCustomer.id,
+                    // The customer's My Pieces page shows this workshop's cover
+                    // photo instead of the shot uploaded below.
+                    workshopId: selectedWorkshop?.id,
                     pieceCode: pieceCodeInput.trim(),
                     name: pieceNameInput.trim() || `${pieceType} Piece`,
                     workshopName: selectedWorkshop ? selectedWorkshop.title : 'Freestyle Handbuilding',
@@ -1509,7 +1546,12 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                     expectedReadyDate: expectedReadyDateInput
                   };
 
-                  await addPiece(newPieceData);
+                  try {
+                    await addPiece(newPieceData);
+                  } catch (err) {
+                    alert(err instanceof Error ? err.message : 'Could not log the piece. Please try again.');
+                    return;
+                  }
 
                   triggerToast(
                     '🎨 Ceramic Piece Added Successfully',

@@ -4,7 +4,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { useReducedMotion } from 'motion/react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 
 /**
  * The full-bleed studio slideshow behind the login / sign-up panel.
@@ -20,6 +20,13 @@ import { useReducedMotion } from 'motion/react';
  * With `prefers-reduced-motion` there is no cycle and no zoom — one still
  * frame, and the interval is never started.
  */
+/** Cross-fade and settle for the showcase image. */
+const imageVariants = {
+  initial: { opacity: 0, scale: 1.04 },
+  animate: { opacity: 1, scale: 1, transition: { duration: 0.55, ease: [0.16, 1, 0.3, 1] as const } },
+  exit: { opacity: 0, transition: { duration: 0.3 } }
+};
+
 const SLIDES = [
   { file: 'auth-01.jpg', alt: 'The Arty Café studio, paint-splattered tables under handmade lamps' },
   { file: 'auth-02.jpg', alt: 'A visitor looking at the portrait wall in the studio' },
@@ -46,18 +53,51 @@ export const AuthBackdrop: React.FC = () => {
 
   return (
     <div className="absolute inset-0 overflow-hidden" aria-hidden="true">
-      {SLIDES.map((slide, i) => (
-        <img
-          key={slide.file}
-          src={`${import.meta.env.BASE_URL}images/auth/${slide.file}`}
-          alt={slide.alt}
-          loading={i === 0 ? 'eager' : 'lazy'}
-          decoding="async"
-          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-[1600ms] ease-in-out ${
-            i === active ? 'opacity-100' : 'opacity-0'
-          } ${prefersReducedMotion ? '' : 'auth-kenburns'}`}
-        />
-      ))}
+      {/* Every frame is still mounted, so a slide change never waits on a
+          network fetch; only the active one is opaque. The scale lives on this
+          wrapper rather than the image, because the drift below animates
+          `transform` too and the two would overwrite each other. */}
+      <AnimatePresence initial={false}>
+        {SLIDES.map((slide, i) => (
+          i === active && (
+            <motion.div
+              key={slide.file}
+              className="absolute inset-0"
+              variants={imageVariants}
+              initial={prefersReducedMotion ? false : 'initial'}
+              animate="animate"
+              exit={prefersReducedMotion ? undefined : 'exit'}
+            >
+              <img
+                src={`${import.meta.env.BASE_URL}images/auth/${slide.file}`}
+                alt={slide.alt}
+                loading={i === 0 ? 'eager' : 'lazy'}
+                decoding="async"
+                className={`absolute inset-0 h-full w-full object-cover ${
+                  prefersReducedMotion ? '' : 'auth-kenburns'
+                }`}
+              />
+            </motion.div>
+          )
+        ))}
+      </AnimatePresence>
+
+      {/* The frames that are not showing stay in the document so the browser
+          keeps them decoded and ready for their turn. */}
+      <div className="pointer-events-none absolute inset-0 -z-10 opacity-0">
+        {SLIDES.map((slide, i) => (
+          i !== active && (
+            <img
+              key={slide.file}
+              src={`${import.meta.env.BASE_URL}images/auth/${slide.file}`}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+          )
+        ))}
+      </div>
 
       {/* Legibility scrim — kept dark at the centre where the panel sits. */}
       <div className="absolute inset-0 bg-brand-charcoal/45" />

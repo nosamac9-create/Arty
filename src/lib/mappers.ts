@@ -99,7 +99,7 @@ export const TABLE_COLUMNS: Record<string, string[]> = {
     'created_at', 'updated_at'
   ],
   pieces: [
-    'id', 'piece_code', 'customer_id', 'booking_id', 'name', 'workshop_name', 'customer_name',
+    'id', 'piece_code', 'customer_id', 'booking_id', 'workshop_id', 'name', 'workshop_name', 'customer_name',
     'customer_phone', 'date_created', 'image', 'status', 'days_elapsed', 'assigned_staff',
     'damage_note', 'storage_location', 'notes', 'additional_description_glazing_notes',
     'expected_completion', 'expected_ready_date', 'collection_date', 'last_notification_date',

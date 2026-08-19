@@ -6,7 +6,7 @@ import { formatDateTime } from '../utils/calendarConfig';
 import { 
   Sparkles, Calendar, Clock, User, Save, Search, Filter, CheckCircle2, 
   Package, Users, Phone, Mail, DollarSign, AlertCircle, X, ShieldAlert,
-  Plus, Trash2, ChevronUp, ChevronDown, Download
+  Plus, Trash2, ChevronUp, ChevronDown, Download, Upload, Image as ImageIcon
 } from 'lucide-react';
 
 /** One label/value line. Optional answers are shown as "Not provided", never dropped. */
@@ -64,6 +64,31 @@ export const AdminEventsSection: React.FC = () => {
       ...prev,
       [id]: { ...(prev[id] || birthdayPackages.find(p => p.id === id)!), [key]: value }
     }));
+  };
+
+  /**
+   * Reads a chosen photo into the draft as a data URL — the same way workshop
+   * photos are handled, so packages and workshops store their images alike.
+   * Nothing is written until the package itself is saved.
+   */
+  const handlePackagePhoto = (id: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // lets the same file be picked again after a remove
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      showToast('That file is not an image.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('That photo is over 5MB. Please choose a smaller one.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => setDraftField(id, 'image', reader.result as string);
+    reader.onerror = () => showToast('That photo could not be read. Please try again.');
+    reader.readAsDataURL(file);
   };
 
   const handleSavePackage = async (e: React.FormEvent, id: string) => {
@@ -339,14 +364,65 @@ export const AdminEventsSection: React.FC = () => {
                           />
                         </div>
 
+                        {/* Package photo — uploaded from the machine rather than
+                            pasted as a link, which is what staff actually have.
+                            A link still works for anything already hosted. */}
                         <div className="sm:col-span-2 space-y-1">
-                          <label className="font-bold text-brand-charcoal/80 block">Image URL</label>
-                          <input
-                            type="text"
-                            value={draft.image}
-                            onChange={e => setDraftField(pkg.id, 'image', e.target.value)}
-                            className="w-full bg-brand-cream/40 border border-brand-clay rounded-xl p-2.5 font-semibold"
-                          />
+                          <label className="font-bold text-brand-charcoal/80 block">Package Photo</label>
+                          <div className="flex flex-col sm:flex-row items-start gap-4 p-4 rounded-2xl border-2 border-dashed border-brand-clay bg-brand-cream/40">
+                            {draft.image ? (
+                              <img
+                                src={draft.image}
+                                alt=""
+                                className="h-24 w-24 shrink-0 rounded-xl object-cover border border-brand-clay"
+                                referrerPolicy="no-referrer"
+                              />
+                            ) : (
+                              <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-xl bg-brand-sand/60 text-brand-muted">
+                                <ImageIcon className="h-7 w-7" />
+                              </div>
+                            )}
+
+                            <div className="flex-1 min-w-0 space-y-2">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  id={`pkg-photo-${pkg.id}`}
+                                  className="hidden"
+                                  onChange={e => handlePackagePhoto(pkg.id, e)}
+                                />
+                                <label
+                                  htmlFor={`pkg-photo-${pkg.id}`}
+                                  className="inline-flex items-center gap-2 cursor-pointer rounded-xl border border-brand-clay bg-brand-cream px-4 py-2 font-semibold text-brand-terracotta hover:bg-brand-sand/50 transition-colors"
+                                >
+                                  <Upload className="h-3.5 w-3.5" />
+                                  <span>{draft.image ? 'Replace photo' : 'Upload photo'}</span>
+                                </label>
+                                {draft.image && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setDraftField(pkg.id, 'image', '')}
+                                    className="rounded-xl border border-brand-clay px-3 py-2 font-semibold text-brand-muted hover:text-brand-charcoal cursor-pointer"
+                                  >
+                                    Remove
+                                  </button>
+                                )}
+                              </div>
+
+                              <p className="text-[11px] text-brand-muted">
+                                JPG or PNG, up to 5MB. Shown on the birthday packages page.
+                              </p>
+
+                              <input
+                                type="text"
+                                value={draft.image.startsWith('data:') ? '' : draft.image}
+                                placeholder="Or paste an image link"
+                                onChange={e => setDraftField(pkg.id, 'image', e.target.value)}
+                                className="w-full bg-brand-cream/60 border border-brand-clay rounded-xl p-2.5 font-semibold"
+                              />
+                            </div>
+                          </div>
                         </div>
 
                         <div className="sm:col-span-2 space-y-1">

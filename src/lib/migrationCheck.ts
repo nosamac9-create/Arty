@@ -44,6 +44,14 @@ const tableExists = (table: string, column = 'id') =>
     return error.code !== MISSING_RELATION && !/does not exist/i.test(error.message || '');
   };
 
+/** A column exists if selecting it returns anything other than "not found". */
+const columnExists = (table: string, column: string) =>
+  async (client: NonNullable<ReturnType<typeof getDataClient>>) => {
+    const { error } = await client.from(table).select(column).limit(1);
+    if (!error) return true;
+    return error.code !== MISSING_RELATION && !/does not exist/i.test(error.message || '');
+  };
+
 export const MIGRATION_REQUIREMENTS: MigrationRequirement[] = [
   // 0001 — schema.
   { name: 'workshop_sessions table', migration: '0001_init.sql', probe: tableExists('workshop_sessions') },
@@ -116,6 +124,14 @@ export const MIGRATION_REQUIREMENTS: MigrationRequirement[] = [
     name: 'customer_claim_email_matches()',
     migration: '0005_signin_by_phone_or_email.sql',
     probe: rpcExists('customer_claim_email_matches', { p_identifier: '', p_email: '' })
+  },
+
+  // 0006 — the four-stage pottery pipeline. Without it the stage rows are still
+  // duplicated and pieces.status still rejects the new stage names.
+  {
+    name: 'pieces.workshop_id column',
+    migration: '0006_piece_pipeline_v2.sql',
+    probe: columnExists('pieces', 'workshop_id')
   }
 ];
 

@@ -6,13 +6,16 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Sparkles, Calendar, Box, Flame, Compass, Clock, LogIn, Hash } from 'lucide-react';
-import { PotteryPiece, stageCustomerLabel } from '../types';
+import { PotteryPiece, stageCustomerLabel, migrateLegacyPieceStatus } from '../types';
 import { formatDateTime } from '../utils/calendarConfig';
 import Reveal from './ui/Reveal';
 import { ScrollReveal } from './ui/ScrollReveal';
 
 export const MyPiecesSection: React.FC = () => {
-  const { pieces, setCustomerTab, currentUser, notifications, markNotificationAsRead, pipelineStages } = useApp();
+  const {
+    pieces, setCustomerTab, currentUser, notifications, markNotificationAsRead,
+    pipelineStages, workshops
+  } = useApp();
 
   // Filter pieces strictly for the logged-in customer
   const userPieces = React.useMemo(() => {
@@ -51,25 +54,39 @@ export const MyPiecesSection: React.FC = () => {
 
   const STAGES = customerStages.length > 0
     ? customerStages.map(stageCustomerLabel)
-    : ['Created', 'In Processing', 'Ready for Collection', 'Collected'];
+    : ['Greenware', 'Bisque Firing', 'Glazing', 'Ready for Collection', 'Collected'];
 
-  // Map database status to 4-stage index
-  const getStageIndex = (status: PotteryPiece['status']): number => {
-    switch (status) {
-      case 'Created':
-      case 'Drying':
-        return 0;
-      case 'In Processing':
-      case 'Glazing':
-      case 'Firing':
-        return 1;
-      case 'Ready for Collection':
-        return 2;
-      case 'Collected':
-        return 3;
-      default:
-        return 0;
-    }
+  /**
+   * The tracker reads its position from the configured stages rather than a
+   * hardcoded list — renaming or reordering a stage in Settings moves the
+   * customer's tracker with it. A retired name on an older piece is mapped onto
+   * the stage that replaced it.
+   */
+  const getStageIndex = (status: PotteryPiece['status'] | string): number => {
+    const current = migrateLegacyPieceStatus(status);
+    const index = customerStages.findIndex(stage => stage.name === current);
+    return index >= 0 ? index : 0;
+  };
+
+  /**
+   * The photo the customer sees is the workshop's, not the studio's own shot of
+   * the piece: that upload is a working record for the shelf, taken mid-process
+   * and never meant for the customer.
+   */
+  const PIECE_PLACEHOLDER =
+    'https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261?auto=format&fit=crop&w=600&q=80';
+
+  const customerImageFor = (piece: PotteryPiece): string => {
+    const byId = piece.workshopId
+      ? workshops.find(w => w.id === piece.workshopId)
+      : undefined;
+    // Older pieces predate the workshop link and only carry the name.
+    const byName = !byId && piece.workshopName
+      ? workshops.find(
+          w => w.title.trim().toLowerCase() === piece.workshopName.trim().toLowerCase()
+        )
+      : undefined;
+    return (byId || byName)?.image || PIECE_PLACEHOLDER;
   };
 
   /**
@@ -84,7 +101,7 @@ export const MyPiecesSection: React.FC = () => {
       .reverse()
       .find(h => h.status !== 'Broken');
 
-    return lastKnown ? getStageIndex(lastKnown.status as PotteryPiece['status']) : 0;
+    return lastKnown ? getStageIndex(lastKnown.status) : 0;
   };
 
   return (
@@ -243,7 +260,7 @@ export const MyPiecesSection: React.FC = () => {
                 <div className={`space-y-4 ${isReady || isBroken ? 'pt-6' : ''}`}>
                   <div className="aspect-video w-full rounded-2xl overflow-hidden bg-brand-sand border border-brand-clay">
                     <img 
-                      src={p.image || 'https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261?auto=format&fit=crop&w=600&q=80'} 
+                      src={customerImageFor(p)} 
                       alt={p.name} 
                       className="h-full w-full object-cover" 
                       referrerPolicy="no-referrer" 

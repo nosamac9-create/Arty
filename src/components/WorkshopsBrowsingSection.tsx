@@ -7,12 +7,9 @@ import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import Reveal from './ui/Reveal';
 import { ScrollReveal } from './ui/ScrollReveal';
-import {
-  Search, SlidersHorizontal, RefreshCw, Eye, EyeOff,
-  ChevronDown, ChevronUp, ChevronRight, CheckCircle2, Paintbrush, Cake, Compass,
-  CalendarRange, Sparkles, Clock
-} from 'lucide-react';
+import { Search, SlidersHorizontal, RefreshCw, ChevronDown } from 'lucide-react';
 import { Workshop } from '../types';
+import { BirthdayPackagesShowcase } from './BirthdayPackagesShowcase';
 
 /** Pseudo-category: not a real DB category, it swaps the whole grid to birthday packages. */
 const BIRTHDAY_CATEGORY = 'Birthday Packages';
@@ -29,16 +26,6 @@ export const WorkshopsBrowsingSection: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>(workshopsInitialCategory || 'All');
   const [selectedSkillLevel, setSelectedSkillLevel] = useState<string>('All');
   const [sortBy, setSortBy] = useState<'Popularity' | 'PriceLow' | 'PriceHigh'>('Popularity');
-
-  // Which birthday package cards are expanded, keyed by package id. Arriving
-  // here from a specific package card on the home page opens that one already.
-  const [openPackages, setOpenPackages] = useState<Record<string, boolean>>(() =>
-    workshopsInitialCategory === BIRTHDAY_CATEGORY && selectedBirthdayPackage
-      ? { [selectedBirthdayPackage]: true }
-      : {}
-  );
-  const togglePackage = (id: string) =>
-    setOpenPackages(prev => ({ ...prev, [id]: !prev[id] }));
 
   const isBirthdayView = selectedCategory === BIRTHDAY_CATEGORY;
 
@@ -98,24 +85,12 @@ export const WorkshopsBrowsingSection: React.FC = () => {
     return result;
   }, [workshops, searchQuery, selectedCategory, selectedSkillLevel, sortBy, isBirthdayView]);
 
-  // Birthday packages have their own shape (name/shortDescription/guests, not
-  // title/hook/skillLevel) so they get their own filter instead of folding
-  // into filteredWorkshops.
-  const filteredBirthdayPackages = useMemo(() => {
-    if (!isBirthdayView) return [];
-
-    let result = [...publishedBirthdayPackages];
-
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter(pkg =>
-        pkg.name.toLowerCase().includes(q) ||
-        (pkg.shortDescription || '').toLowerCase().includes(q)
-      );
-    }
-
-    return result;
-  }, [publishedBirthdayPackages, searchQuery, isBirthdayView]);
+  // Birthday packages are shown in full, unfiltered: with two of them a search
+  // box only ever hides one, so it was removed along with the old card grid.
+  const filteredBirthdayPackages = useMemo(
+    () => (isBirthdayView ? publishedBirthdayPackages : []),
+    [publishedBirthdayPackages, isBirthdayView]
+  );
 
   const visibleCount = isBirthdayView ? filteredBirthdayPackages.length : filteredWorkshops.length;
 
@@ -169,7 +144,8 @@ export const WorkshopsBrowsingSection: React.FC = () => {
       <div className="mt-8 space-y-4">
         <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-center justify-between">
           
-          {/* Search Box */}
+          {/* Search Box — workshops only. */}
+          {!isBirthdayView && (
           <div className="relative flex-1 max-w-md">
             <Search className="absolute start-4 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-muted" />
             <input
@@ -180,6 +156,7 @@ export const WorkshopsBrowsingSection: React.FC = () => {
               className="w-full bg-white border border-brand-clay rounded-full py-3.5 ps-11 pe-4 text-sm font-medium text-brand-charcoal placeholder-brand-muted focus:ring-1 focus:ring-brand-sage"
             />
           </div>
+          )}
 
           {/* Sort Dropdown — skill level and popularity/price sorting don't
               apply to birthday packages, so hide them for that category. */}
@@ -267,11 +244,11 @@ export const WorkshopsBrowsingSection: React.FC = () => {
               <SlidersHorizontal className="h-7 w-7" />
             </div>
             <h3 className="font-display text-xl font-semibold text-brand-charcoal">
-              {isBirthdayView ? 'No packages match your search' : 'No workshops match your filters'}
+              {isBirthdayView ? 'No packages available right now' : 'No workshops match your filters'}
             </h3>
             <p className="text-sm text-brand-ink mt-2 max-w-sm mx-auto leading-relaxed">
               {isBirthdayView
-                ? 'We couldn’t find a birthday package matching your search query. Try clearing it.'
+                ? 'Our birthday packages are being updated. Please check back shortly or call the studio.'
                 : 'We couldn’t find any clay or painting classes matching your search query or selected category chip. Try clearing the query.'}
             </p>
             <button
@@ -283,229 +260,21 @@ export const WorkshopsBrowsingSection: React.FC = () => {
             </button>
           </div>
         )}
-
-        {/* LIVE GRID — BIRTHDAY PACKAGES */}
+        {/* BIRTHDAY PACKAGES — the redesigned experience replaces the old
+            pair of expandable cards. */}
         {isBirthdayView && filteredBirthdayPackages.length > 0 && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
-            {filteredBirthdayPackages.map((pkg, index) => {
-              const isOpen = !!openPackages[pkg.id];
-              const accent = index % 2 === 0 ? 'terracotta' : 'sage';
-              const accentText = accent === 'terracotta' ? 'text-brand-terracotta' : 'text-brand-sage';
-              const accentBg = accent === 'terracotta' ? 'bg-brand-terracotta' : 'bg-brand-sage';
-              const accentHover = accent === 'terracotta'
-                ? 'bg-brand-terracotta hover:bg-brand-terracotta-hover'
-                : 'bg-brand-sage hover:bg-brand-sage/90';
-
-              return (
-                <div
-                  key={pkg.id}
-                  className="bg-brand-cream border-2 border-brand-clay rounded-3xl p-6 md:p-8 shadow-card-sm flex flex-col text-start relative overflow-hidden transition-all duration-300"
-                >
-                  <div className={`absolute -top-12 -right-12 w-32 h-32 ${accentBg}/5 rounded-full blur-2xl pointer-events-none`}></div>
-
-                  {/* Package image */}
-                  {pkg.image && (
-                    <div className="h-40 w-full rounded-2xl overflow-hidden border border-brand-clay mb-4">
-                      <img src={pkg.image} alt={pkg.name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
-                    </div>
-                  )}
-
-                  {/* Header / Clickable Accordion Toggle */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-brand-clay">
-                    <button
-                      type="button"
-                      onClick={() => togglePackage(pkg.id)}
-                      className="flex-1 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-start cursor-pointer group"
-                    >
-                      <div>
-                        <span className={`text-[11px] font-semibold uppercase tracking-widest ${accentText} block`}>
-                          Package {String(index + 1).padStart(2, '0')}
-                        </span>
-                        <h3 className="font-display text-2xl font-semibold text-brand-charcoal transition-colors flex items-center gap-2">
-                          <span>{pkg.name}</span>
-                          {isOpen
-                            ? <ChevronUp className={`h-5 w-5 ${accentText} shrink-0`} />
-                            : <ChevronDown className="h-5 w-5 text-brand-charcoal/40 shrink-0" />}
-                        </h3>
-                        {pkg.shortDescription && (
-                          <p className="text-xs text-brand-ink mt-1 max-w-md">{pkg.shortDescription}</p>
-                        )}
-                      </div>
-                      <div className="bg-brand-sand/80 border border-brand-clay px-4 py-2 rounded-2xl text-right shrink-0">
-                        <span className="text-[10px] uppercase font-semibold text-brand-muted block">Pricing</span>
-                        <span className={`text-xl font-black ${accentText}`}>
-                          {pkg.price} SAR{' '}
-                          <span className="text-xs font-normal text-brand-ink">
-                            {pkg.pricingLabel || pkg.pricingType}
-                          </span>
-                        </span>
-                      </div>
-                    </button>
-                  </div>
-
-                  {/* Quick facts */}
-                  <div className="pt-3 flex flex-wrap gap-2 text-[11px] font-semibold text-brand-ink">
-                    {pkg.duration && (
-                      <span className="bg-brand-cream/70 border border-brand-clay px-2.5 py-1 rounded-lg flex items-center gap-1">
-                        <Clock className="h-3 w-3 text-brand-muted" />{pkg.duration}
-                      </span>
-                    )}
-                    <span className="bg-brand-cream/70 border border-brand-clay px-2.5 py-1 rounded-lg">
-                      {pkg.minGuests}–{pkg.maxGuests} guests
-                    </span>
-                    {pkg.ageInformation && (
-                      <span className="bg-brand-cream/70 border border-brand-clay px-2.5 py-1 rounded-lg">{pkg.ageInformation}</span>
-                    )}
-                  </div>
-
-                  {/* Action Row with Toggle & Book Now Button */}
-                  <div className="pt-4 flex items-center justify-between gap-3">
-                    <button
-                      type="button"
-                      onClick={() => togglePackage(pkg.id)}
-                      className="text-xs font-semibold text-brand-muted hover:text-brand-charcoal cursor-pointer flex items-center gap-1"
-                    >
-                      <span>{isOpen ? 'Hide Package Details' : 'View Package Details'}</span>
-                      {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleBookPackage(pkg.id)}
-                      className={`cursor-pointer ${accentHover} text-brand-cream text-xs font-semibold px-5 py-2.5 rounded-xl shadow-card-sm transition-all duration-200 active:scale-95 flex items-center gap-1.5`}
-                    >
-                      <span>Book Now</span>
-                      <ChevronRight className="h-4 w-4" />
-                    </button>
-                  </div>
-
-                  {/* Collapsible Dropdown Content — every value comes from the
-                      shared package record edited in the Staff Console. */}
-                  {isOpen && (
-                    <div className="space-y-6 pt-6 mt-4 border-t border-brand-clay animate-in fade-in duration-300">
-                      {pkg.fullDescription && (
-                        <p className="text-sm text-brand-ink leading-relaxed">{pkg.fullDescription}</p>
-                      )}
-
-                      {/* Includes */}
-                      {pkg.includedItems.length > 0 && (
-                        <div className="space-y-2.5">
-                          <h4 className="text-xs font-semibold uppercase tracking-wider text-brand-muted flex items-center gap-1.5">
-                            <CheckCircle2 className={`h-4 w-4 ${accentText}`} />
-                            <span>Includes:</span>
-                          </h4>
-                          <ul className="space-y-2 text-sm text-brand-ink pl-1">
-                            {pkg.includedItems.map(entry => (
-                              <li key={entry} className="flex items-center gap-2">
-                                <span className={`h-1.5 w-1.5 rounded-full ${accentBg}`}></span>
-                                <span>{entry}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-
-                      {/* Your pick from one of the activities */}
-                      {pkg.activityChoices.length > 0 && (
-                        <div className="space-y-2.5 bg-brand-sand/30 p-4 rounded-2xl border border-brand-clay">
-                          <h4 className="text-xs font-semibold uppercase tracking-wider text-brand-ink flex items-center gap-1.5">
-                            <Paintbrush className={`h-4 w-4 ${accentText}`} />
-                            <span>Your choice of one activity:</span>
-                          </h4>
-                          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-medium text-brand-ink pt-1">
-                            {pkg.activityChoices.map(activity => (
-                              <li key={activity} className="bg-brand-cream/80 p-2.5 rounded-xl border border-brand-clay/30 flex items-center gap-2">
-                                <span className={`${accentText} font-semibold`}>•</span> {activity}
-                              </li>
-                            ))}
-                          </ul>
-
-                          {pkg.additionalInfo.length > 0 && (
-                            <div className="text-[11px] text-brand-ink space-y-1 pt-1 border-t border-brand-clay/30">
-                              {pkg.additionalInfo.map(note => (
-                                <p key={note} className="flex items-center gap-1.5 font-semibold text-brand-ink">
-                                  <span className={accentText}>•</span> {note}
-                                </p>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Customized Birthday Cake */}
-                      {(pkg.cakeDescription || pkg.cakeSizes.length > 0) && (
-                        <div className="space-y-2 pt-2 border-t border-brand-clay">
-                          <div className="flex items-start gap-2">
-                            <Cake className={`h-5 w-5 ${accentText} shrink-0 mt-0.5`} />
-                            <div>
-                              <h4 className="text-sm font-semibold text-brand-charcoal">Customized Birthday Cake</h4>
-                              {pkg.cakeDescription && (
-                                <p className="text-xs text-brand-muted italic">({pkg.cakeDescription})</p>
-                              )}
-                            </div>
-                          </div>
-
-                          {pkg.cakeSizes.length > 0 && (
-                            <div className="grid grid-cols-3 gap-2 text-center pt-2">
-                              {pkg.cakeSizes.map(size => (
-                                <div key={size.id} className="bg-brand-sand/40 p-2.5 rounded-xl border border-brand-clay">
-                                  <span className="text-[10px] font-semibold text-brand-muted block">{size.label}</span>
-                                  <span className="text-sm font-semibold text-brand-charcoal">{size.price} SAR</span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Trainer / delivery information */}
-                      {(pkg.trainerInfo || pkg.deliveryInfo) && (
-                        <div className="pt-2 space-y-1">
-                          {pkg.trainerInfo && (
-                            <p className={`text-xs font-semibold ${accentText} flex items-center gap-1.5`}>
-                              <Sparkles className="h-4 w-4" />
-                              <span>{pkg.trainerInfo}</span>
-                            </p>
-                          )}
-                          {pkg.deliveryInfo && (
-                            <p className="text-xs font-semibold text-brand-ink flex items-center gap-1.5">
-                              <Compass className="h-4 w-4" />
-                              <span>{pkg.deliveryInfo}</span>
-                            </p>
-                          )}
-                        </div>
-                      )}
-
-                      {(pkg.availableDays?.length > 0 || pkg.availableTimes?.length > 0) && (
-                        <div className="space-y-2 pt-2 border-t border-brand-clay text-xs text-brand-ink">
-                          <h4 className="text-xs font-semibold uppercase tracking-wider text-brand-muted flex items-center gap-1.5">
-                            <CalendarRange className={`h-4 w-4 ${accentText}`} />
-                            <span>Available:</span>
-                          </h4>
-                          {pkg.availableDays?.length > 0 && <p className="font-semibold">{pkg.availableDays.join(', ')}</p>}
-                          {pkg.availableTimes?.length > 0 && <p className="font-semibold">{pkg.availableTimes.join(' · ')}</p>}
-                        </div>
-                      )}
-
-                      {pkg.customerNotes && (
-                        <p className="text-xs text-brand-ink leading-relaxed pt-2 border-t border-brand-clay">
-                          {pkg.customerNotes}
-                        </p>
-                      )}
-
-                      {pkg.terms && (
-                        <div className="pt-2 border-t border-brand-clay">
-                          <h4 className="text-xs font-semibold uppercase tracking-wider text-brand-muted mb-1">Terms:</h4>
-                          <p className="text-xs text-brand-ink leading-relaxed">{pkg.terms}</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+          <BirthdayPackagesShowcase
+            packages={filteredBirthdayPackages}
+            initialPackageId={
+              workshopsInitialCategory === BIRTHDAY_CATEGORY && selectedBirthdayPackage
+                ? selectedBirthdayPackage
+                : undefined
+            }
+            onFocusChange={setSelectedBirthdayPackage}
+            onChoose={handleBookPackage}
+          />
         )}
+
 
         {/* LIVE GRID — WORKSHOPS */}
         {!isBirthdayView && filteredWorkshops.length > 0 && (

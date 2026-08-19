@@ -83,13 +83,6 @@ export const CustomerHeader: React.FC = () => {
           <div className="flex items-center gap-3 shrink-0">
             <LanguageToggle />
 
-            <button
-              onClick={() => handleNavClick('workshops')}
-              className="hidden sm:block cursor-pointer rounded-[14px] bg-brand-terracotta px-[22px] py-3 text-sm font-semibold text-brand-cream shadow-button transition-colors hover:bg-brand-terracotta-hover active:scale-[0.98]"
-            >
-              {t('Book Now', 'احجز الآن')}
-            </button>
-
             {/* Mobile menu */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}

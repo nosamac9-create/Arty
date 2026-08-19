@@ -4,7 +4,7 @@
  */
 
 import * as React from 'react';
-import { HTMLMotionProps, Variants, motion } from 'motion/react';
+import { HTMLMotionProps, Variants, motion, useReducedMotion } from 'motion/react';
 
 /**
  * Layout and entrance animation from the CTA-section-with-gallery block.
@@ -102,17 +102,24 @@ interface GalleryGridCellProps extends HTMLMotionProps<'div'> {
 export const GalleryGridCell = React.forwardRef<HTMLDivElement, GalleryGridCellProps>(
   ({ className = '', transition, index, ...props }, ref) => {
     const isOffsetColumn = index % 2 === 1;
+    const prefersReducedMotion = useReducedMotion();
 
     return (
       <motion.div
         ref={ref}
-        initial={{ opacity: 0 }}
-        whileInView={{ opacity: 1 }}
+        /* The rise is part of the same tween as the fade — one transition, so
+           the card cannot finish fading before it has finished moving. */
+        initial={prefersReducedMotion ? false : { opacity: 0, y: 36 }}
+        whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
+        /* Slow enough to actually be seen. At 0.3s with a 0.2s step the cards
+           were essentially in place before the eye reached them; the point of
+           the stagger is that they arrive one at a time. */
         transition={{
-          duration: 0.3,
-          delay: index * 0.2,
+          duration: prefersReducedMotion ? 0 : 0.7,
+          delay: prefersReducedMotion ? 0 : index * 0.28,
           delayChildren: transition?.delayChildren ?? 0.2,
+          ease: [0.22, 1, 0.36, 1],
           ...transition
         }}
         className={`relative ${isOffsetColumn ? 'sm:mt-10' : ''} ${className}`}

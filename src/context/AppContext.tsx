@@ -10,7 +10,7 @@ import {
   WorkshopSessionRecord, StaffScheduleDayEntry, BirthdayPackage, BirthdayFormField,
   DEFAULT_BIRTHDAY_PACKAGES, DEFAULT_BIRTHDAY_FORM_FIELDS, normalizeBirthdayPackage,
   StudioResource, DEFAULT_STUDIO_RESOURCES, CustomerAccount, StaffRole,
-  DEFAULT_PIPELINE_STAGES, isStageEnabled, stageCustomerLabel,
+  DEFAULT_PIPELINE_STAGES, isStageEnabled, stageCustomerLabel, migrateLegacyPieceStatus,
   DEFAULT_WORKSHOP_OPTIONS, isWorkshopOptionEnabled,
   WorkshopFieldConfig, DEFAULT_WORKSHOP_FIELDS,
   DraftBooking, DEFAULT_LOGGING_FIELDS, LoggingConsoleField
@@ -1667,26 +1667,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     }
 
-    // Automatically generate a piece in 'Created' state if it is a Pottery workshop!
-    const targetWs = workshops.find(w => w.id === newBookingData.workshopId);
-    if (targetWs && targetWs.category === 'Pottery') {
-      const pieceId = `PC-${Math.floor(300 + Math.random() * 700)}`;
-      const newPiece: PotteryPiece = {
-        id: pieceId,
-        name: `${targetWs.title.split(' ')[0]} Masterpiece`,
-        workshopName: targetWs.title,
-        customerName: newBookingData.customerName,
-        customerPhone: newBookingData.customerPhone,
-        dateCreated: new Date().toISOString().split('T')[0],
-        image: targetWs.image,
-        status: 'Created',
-        daysElapsed: 0,
-        assignedStaff: targetWs.instructor
-      };
-      db.pieces.add(newPiece).catch(err => {
-        console.error("Failed to add piece in addBooking:", err);
-      });
-    }
+    // A booking creates no piece. Pieces exist once a real object exists, which
+    // only the studio can know — so one is logged by hand in the Pottery
+    // Logging Console. Auto-creating one here put pieces on the customer's My
+    // Pieces page for workshops they had not attended yet.
 
     return newBooking;
   };
@@ -2069,13 +2053,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         friendlyMsg = `🎁 Your beautiful pottery piece "${piece.name}" is ready for collection! Please come pick it up at the café shelf.`;
       } else if (status === 'Collected') {
         friendlyMsg = `Thank you for picking up your piece "${piece.name}"! We hope you loved crafting it at Arty Café.`;
-      } else if (status === 'Firing') {
+      } else if (status === 'Bisque Firing') {
         friendlyMsg = `Your piece "${piece.name}" is now being fired in our high-temperature kiln.`;
       } else if (status === 'Glazing') {
         friendlyMsg = `Your piece "${piece.name}" is currently at the glazing station.`;
-      } else if (status === 'In Processing') {
-        friendlyMsg = `Your piece "${piece.name}" is now in processing.`;
-      } else if (status === 'Drying') {
+      } else if (status === 'Greenware') {
         friendlyMsg = `Your piece "${piece.name}" is now resting on the drying racks.`;
       } else if (status === 'Broken') {
         // States the outcome plainly, without exposing the internal damage note.
@@ -2143,18 +2125,57 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  /**
+   * Allocates an identifier that no piece is already using.
+   *
+   * The old generator picked a number out of a 700-wide range and hoped — which
+   * is how the board ended up showing AC-1806 twice. This reads the codes in
+   * use first, and falls back to a timestamp suffix if the random space is
+   * somehow exhausted, so it always terminates with something unique.
+   */
+  const allocatePieceIdentifier = async (prefix: string, taken: Set<string>) => {
+    for (let attempt = 0; attempt < 50; attempt++) {
+      const candidate = `${prefix}-${Math.floor(1000 + Math.random() * 9000)}`;
+      if (!taken.has(candidate.toUpperCase())) return candidate;
+    }
+    return `${prefix}-${Date.now().toString(36).toUpperCase()}`;
+  };
+
   const addPiece = async (piece: Omit<PotteryPiece, 'id' | 'daysElapsed' | 'expectedCompletion' | 'notes'> & Partial<Pick<PotteryPiece, 'expectedCompletion' | 'notes'>>) => {
-    const id = `PC-${Math.floor(300 + Math.random() * 700)}`;
+    // Read once, check both the id and the piece code against it: the two share
+    // a namespace on screen, where a piece falls back to its id when it has no
+    // code of its own.
+    const existing = await db.pieces.toArray();
+    const taken = new Set<string>();
+    existing.forEach(p => {
+      if (p.id) taken.add(p.id.trim().toUpperCase());
+      if (p.pieceCode) taken.add(p.pieceCode.trim().toUpperCase());
+    });
+
+    const id = await allocatePieceIdentifier('PC', taken);
+    taken.add(id.toUpperCase());
+
+    const requestedCode = piece.pieceCode?.trim();
+    if (requestedCode && taken.has(requestedCode.toUpperCase())) {
+      // The console checks this before calling, so reaching here means two
+      // people logged the same code at once. Refusing beats silently writing a
+      // duplicate.
+      throw new Error(`Piece code "${requestedCode}" is already in use.`);
+    }
+
     const newPiece: PotteryPiece = {
       name: 'Ceramic Piece',
       workshopName: 'Freestyle Handbuilding',
       customerName: 'Walk-in Customer',
       customerPhone: '+966500000000',
       image: '',
-      status: 'Created',
       dateCreated: new Date().toISOString().split('T')[0],
       assignedStaff: 'Lina',
       ...piece,
+      // Never a legacy or hand-typed stage name — the column's check constraint
+      // only accepts the six current ones.
+      status: migrateLegacyPieceStatus(piece.status),
+      pieceCode: requestedCode || (await allocatePieceIdentifier('AC', taken)),
       id,
       daysElapsed: 0
     };
@@ -2163,7 +2184,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // The opening history entry, in the append-only table.
     await db.pieceHistory.add({
       pieceId: id,
-      status: newPiece.status || 'Created',
+      status: newPiece.status,
       timestamp: new Date().toISOString(),
       riyadhTime: `${getRiyadhDateString()} ${getRiyadhNow().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`,
       user: 'Staff',

@@ -12,6 +12,7 @@ import { CountingNumber } from './ui/CountingNumber';
 import { ScrollReveal } from './ui/ScrollReveal';
 import Reveal from './ui/Reveal';
 import { AnimatedMap } from './ui/AnimatedMap';
+import { BirthdayBalloons } from './ui/BirthdayBalloons';
 import {
   ContainerStagger,
   ContainerAnimated,
@@ -341,8 +342,11 @@ export const HomeSection: React.FC = () => {
           other section on the page, instead of a card floating on the cream
           background. Points only at the packages themselves; custom, one-off
           events live in their own section below so the two never blur. */}
-      <section className="bg-brand-charcoal py-16 md:py-20">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <section className="relative overflow-hidden bg-brand-charcoal py-16 md:py-20">
+      {/* Decorative only. The balloons layer is pointer-events-none, so the
+          button and the package cards stay fully clickable through it. */}
+      <BirthdayBalloons />
+      <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16 items-center">
 
             <div className="text-start">
@@ -395,6 +399,9 @@ export const HomeSection: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => {
+                    // Overview mode: clearing the selection is what stops a
+                    // package chosen earlier from opening itself here.
+                    setSelectedBirthdayPackage('');
                     setWorkshopsInitialCategory('Birthday Packages');
                     setCustomerTab('workshops');
                   }}
@@ -703,15 +710,37 @@ export const HomeSection: React.FC = () => {
             </div>
 
             {/* Map — drawn rather than embedded, and clickable as a whole:
-                it opens the studio's real Google Maps listing. */}
-            <div className="lg:col-span-7">
-              <AnimatedMap
-                href="https://maps.app.goo.gl/Br4QagaCrPKeJ8EW8"
-                label="Arty Café Jeddah"
-                coordinates="21.5897° N, 39.1288° E"
-                className="h-72 md:h-96"
-              />
-            </div>
+                it opens the studio's real Google Maps listing.
+
+                Wiped in from the trailing edge, the same way the Custom Events
+                studio photo arrives. As there, the observed element is not the
+                clipped one: an element clipped to zero area reports zero
+                intersection, so useInView would never fire and the reveal would
+                hold it invisible. The wipe lives on the inner element, which
+                inherits the variant. */}
+            <ScrollReveal
+              once
+              viewOptions={{ once: true, amount: 0.25 }}
+              transition={{ delay: 0.15, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+              variants={{ hidden: { opacity: 0, x: 48 }, visible: { opacity: 1, x: 0 } }}
+              className="lg:col-span-7"
+            >
+              <motion.div
+                className="relative overflow-hidden rounded-[26px]"
+                variants={{
+                  hidden: { clipPath: 'inset(0 0 0 100%)' },
+                  visible: { clipPath: 'inset(0 0 0 0%)' }
+                }}
+                transition={{ delay: 0.15, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <AnimatedMap
+                  href="https://maps.app.goo.gl/Br4QagaCrPKeJ8EW8"
+                  label="Arty Café Jeddah"
+                  coordinates="21.5897° N, 39.1288° E"
+                  className="h-72 md:h-96"
+                />
+              </motion.div>
+            </ScrollReveal>
 
           </div>
       </div>
