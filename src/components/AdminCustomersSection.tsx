@@ -10,7 +10,7 @@ import {
   Users, UserPlus, Search, Filter, Phone, Mail, Calendar, Clock, ArrowLeft, 
   Edit, CheckCircle2, AlertCircle, ShoppingBag, CreditCard, Flame, ChevronRight, 
   Tag, Shield, History, Sparkles, X, Plus, AlertTriangle, UserCheck, Cake, ListOrdered, Palette
-} from 'lucide-react';
+, Info } from 'lucide-react';
 import { COUNTRIES, parsePhoneComponents, validatePhone, normalisePhone, normaliseSaudiPhone } from '../utils/phoneUtils';
 import { PhoneInput } from './PhoneInput';
 import { validateCustomerForm, canonicalPhone, canonicalEmail } from '../utils/validation';
@@ -741,10 +741,17 @@ export const AdminCustomersSection: React.FC = () => {
 
               <div className="p-4 rounded-xl bg-brand-sand/30 border border-brand-clay/50 text-xs space-y-2">
                 <p className="font-bold text-brand-charcoal">Account Integration Status</p>
-                <p className="text-brand-charcoal/70">
-                  {hasWebsiteAccount(selectedCustomer)
-                    ? '✅ Linked to an active website account (Customer can log in).'
-                    : 'ℹ️ Guest / Walk-in profile (No online login created yet). If this customer creates a website account later with matching phone/email, it will connect automatically.'}
+                <p className="flex items-start gap-1.5 text-brand-charcoal/70">
+                  {hasWebsiteAccount(selectedCustomer) ? (
+                    <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-sage" />
+                  ) : (
+                    <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-charcoal/45" />
+                  )}
+                  <span>
+                    {hasWebsiteAccount(selectedCustomer)
+                      ? 'Linked to an active website account (Customer can log in).'
+                      : 'Guest / Walk-in profile (No online login created yet). If this customer creates a website account later with matching phone/email, it will connect automatically.'}
+                  </span>
                 </p>
               </div>
             </div>
@@ -1431,8 +1438,9 @@ export const AdminCustomersSection: React.FC = () => {
                   />
                 </div>
 
-                <div className="p-3 bg-brand-sand/30 rounded-xl text-[11px] text-brand-charcoal/70">
-                  ℹ️ Manual creation saves a customer profile without establishing an online password account unless explicitly registered.
+                <div className="flex items-start gap-1.5 p-3 bg-brand-sand/30 rounded-xl text-[11px] text-brand-charcoal/70">
+                  <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-charcoal/45" />
+                  <span>Manual creation saves a customer profile without establishing an online password account unless explicitly registered.</span>
                 </div>
 
                 <div className="flex justify-end gap-3 pt-2">

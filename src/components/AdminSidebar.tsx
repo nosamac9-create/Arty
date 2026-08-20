@@ -8,7 +8,7 @@ import { useApp } from '../context/AppContext';
 import { 
   LayoutDashboard, Users, CalendarDays, Palette, ListOrdered, 
   Flame, HelpCircle, ChevronLeft, ChevronRight, ChevronDown, Menu, LogOut, ShieldAlert, Settings, Sparkles, UserCheck
-} from 'lucide-react';
+, Megaphone } from 'lucide-react';
 import { SETTINGS_SECTIONS } from '../utils/adminAccess';
 import { formatTime } from '../utils/calendarConfig';
 
@@ -272,7 +272,8 @@ export const AdminTopBar: React.FC = () => {
                       <p className="font-semibold text-brand-charcoal/90">{n.message}</p>
                       {n.highlighted && (
                         <span className="inline-block mt-1 text-[9px] uppercase font-bold text-brand-terracotta bg-brand-terracotta/10 px-1.5 py-0.5 rounded">
-                          📢 Pickup Alert Dispatched
+                          <Megaphone className="inline h-3 w-3 me-1 align-[-2px]" />
+                          Pickup Alert Dispatched
                         </span>
                       )}
                     </div>

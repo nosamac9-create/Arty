@@ -980,7 +980,7 @@ export const DEFAULT_BIRTHDAY_FORM_FIELDS: BirthdayFormField[] = [
   { id: 'bf-5', key: 'bookingDate', label: 'Date / Day', type: 'date', required: true, enabled: true, order: 4, system: true },
   { id: 'bf-6', key: 'bookingTime', label: 'Time', type: 'time', required: true, enabled: true, order: 5, system: true },
   {
-    id: 'bf-7', key: 'balloonColor', label: 'Balloon Color 🎈', type: 'dropdown', required: false, enabled: true, order: 6,
+    id: 'bf-7', key: 'balloonColor', label: 'Balloon Color', type: 'dropdown', required: false, enabled: true, order: 6,
     options: ['Pink & White', 'Pastel Blue & White', 'Gold & Cream', 'Rose Gold & Blush', 'Sage Green & Neutral', 'Rainbow Multi-Color', 'Custom Mix']
   },
   {

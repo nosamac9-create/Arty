@@ -8,7 +8,7 @@ import { PasswordField } from './PasswordField';
 import { useApp } from '../context/AppContext';
 import { ScrollReveal } from './ui/ScrollReveal';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { Palette, Mail, Lock, User, Check, AlertCircle, ArrowLeft, LogIn, KeyRound, ShieldCheck, CheckCircle2, RefreshCw } from 'lucide-react';
+import { Palette, Mail, Lock, User, Check, AlertCircle, ArrowLeft, LogIn, KeyRound, ShieldCheck, CheckCircle2, RefreshCw , Pin } from 'lucide-react';
 import { PhoneInput } from './PhoneInput';
 import { AuthBackdrop } from './AuthBackdrop';
 import { validatePhone, normalisePhone } from '../utils/phoneUtils';
@@ -392,7 +392,11 @@ export const AuthSection: React.FC = () => {
                             item.met ? 'text-brand-sage' : 'text-brand-muted'
                           }`}
                         >
-                          <span>{item.met ? '✓' : '•'}</span>
+                          <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+                            {item.met
+                              ? <Check className="h-3.5 w-3.5" />
+                              : <span className="h-1 w-1 rounded-full bg-current opacity-60" />}
+                          </span>
                           <span>{item.label}</span>
                         </li>
                       ))}
@@ -457,7 +461,8 @@ export const AuthSection: React.FC = () => {
             <div className="space-y-3">
               {pendingBooking && (
                 <div className="rounded-[22px] border border-brand-clay bg-brand-sand/40 p-4 text-xs font-semibold text-brand-charcoal text-start">
-                  📌 You have an active booking draft for:{' '}
+                  <Pin className="inline h-3.5 w-3.5 me-1 align-[-2px]" />
+                  You have an active booking draft for:{' '}
                   <span className="text-brand-terracotta">{pendingBooking.workshopTitle}</span> ({pendingBooking.date})
                 </div>
               )}
@@ -770,7 +775,11 @@ export const AuthSection: React.FC = () => {
                               item.met ? 'text-brand-sage' : 'text-brand-charcoal/45'
                             }`}
                           >
-                            <span>{item.met ? '✓' : '•'}</span>
+                            <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+                            {item.met
+                              ? <Check className="h-3.5 w-3.5" />
+                              : <span className="h-1 w-1 rounded-full bg-current opacity-60" />}
+                          </span>
                             <span>{item.label}</span>
                           </li>
                         ))}
@@ -885,7 +894,11 @@ export const AuthSection: React.FC = () => {
                             item.met ? 'text-brand-sage' : 'text-brand-charcoal/45'
                           }`}
                         >
-                          <span>{item.met ? '✓' : '•'}</span>
+                          <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+                            {item.met
+                              ? <Check className="h-3.5 w-3.5" />
+                              : <span className="h-1 w-1 rounded-full bg-current opacity-60" />}
+                          </span>
                           <span>{item.label}</span>
                         </li>
                       ))}

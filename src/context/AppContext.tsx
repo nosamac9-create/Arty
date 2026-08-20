@@ -2050,7 +2050,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // Generate CUSTOMER notification
       let friendlyMsg = `Your piece "${piece.name}" has been updated to "${status}".`;
       if (status === 'Ready for Collection') {
-        friendlyMsg = `🎁 Your beautiful pottery piece "${piece.name}" is ready for collection! Please come pick it up at the café shelf.`;
+        friendlyMsg = `Your beautiful pottery piece "${piece.name}" is ready for collection! Please come pick it up at the café shelf.`;
       } else if (status === 'Collected') {
         friendlyMsg = `Thank you for picking up your piece "${piece.name}"! We hope you loved crafting it at Arty Café.`;
       } else if (status === 'Bisque Firing') {
@@ -2091,7 +2091,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         type: 'customer',
         customerPhone: piece.customerPhone,
         title: status === 'Ready for Collection'
-          ? '🎁 Piece Ready for Pickup!'
+          ? 'Piece Ready for Pickup!'
           : status === 'Broken'
             ? `Piece ${piece.pieceCode || piece.id} marked as broken`
             : `Piece Status Update: ${status}`,
@@ -2109,9 +2109,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         id: `NOTIF-STAFF-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
         type: 'staff',
         title: status === 'Ready for Collection'
-          ? '🚨 Piece Ready for Pickup Alert'
+          ? 'Piece Ready for Pickup Alert'
           : status === 'Broken'
-            ? '⚠️ Piece Marked Broken'
+            ? 'Piece Marked Broken'
             : 'Piece Status Shifted',
         message: `Piece ${piece.id} (${piece.customerName}) moved to "${status}" by ${performerUser}.${reason ? ` Reason: ${reason}` : ''}`,
         pieceId: piece.id,

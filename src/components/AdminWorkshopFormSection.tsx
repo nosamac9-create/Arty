@@ -1567,9 +1567,11 @@ export const AdminWorkshopFormSection: React.FC = () => {
                               spaceExclusion: editingExclusion,
                               ownSessions: workshopSessions
                             });
+                            // An <option> renders text only, so this pair reads
+                            // as words rather than symbols or an icon.
                             const availLabel = ruleConflict
-                              ? `✕ Busy: ${formatSlotDate(ruleConflict.date)} ${ruleConflict.startTime}–${ruleConflict.endTime}`
-                              : '✓ Available';
+                              ? `Busy: ${formatSlotDate(ruleConflict.date)} ${ruleConflict.startTime}–${ruleConflict.endTime}`
+                              : 'Available';
                             return (
                               <option key={st.id} value={st.id}>
                                 {st.name} ({availLabel})

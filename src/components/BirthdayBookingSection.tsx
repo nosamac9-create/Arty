@@ -9,7 +9,7 @@ import { useApp } from '../context/AppContext';
 import {
   ArrowLeft, Cake, Upload, Check, ChevronDown,
   ShieldAlert, CalendarDays, Clock, PartyPopper
-} from 'lucide-react';
+, Info } from 'lucide-react';
 import { getMinBirthdayBookingDateStr } from '../utils/dateUtils';
 import { PhoneInput } from './PhoneInput';
 import {
@@ -553,7 +553,8 @@ export const BirthdayBookingSection: React.FC = () => {
               className={inputClass(errors.bookingDate)}
             />
             <p className="mt-1.5 text-[11px] font-semibold text-brand-terracotta">
-              📌 Birthday packages must be booked at least {minNoticeDays} days in advance.
+              <Info className="inline h-3.5 w-3.5 me-1 align-[-2px]" />
+              Birthday packages must be booked at least {minNoticeDays} days in advance.
             </p>
             {selectedPackage?.availableDays?.length ? (
               <p className="mt-0.5 text-[11px] font-semibold text-brand-muted">

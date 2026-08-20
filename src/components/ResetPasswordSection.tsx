@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { KeyRound, CheckCircle2, AlertCircle } from 'lucide-react';
+import { KeyRound, CheckCircle2, AlertCircle , Check } from 'lucide-react';
 import { PasswordField } from './PasswordField';
 import { passwordChecklist, validatePasswordRule, validatePasswordConfirmation } from '../utils/validation';
 
@@ -179,7 +179,11 @@ export const ResetPasswordSection: React.FC = () => {
                         item.met ? 'text-brand-sage' : 'text-brand-charcoal/45'
                       }`}
                     >
-                      <span>{item.met ? '✓' : '•'}</span>
+                      <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+                            {item.met
+                              ? <Check className="h-3.5 w-3.5" />
+                              : <span className="h-1 w-1 rounded-full bg-current opacity-60" />}
+                          </span>
                       <span>{item.label}</span>
                     </li>
                   ))}

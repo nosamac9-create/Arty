@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Sparkles, Calendar, Box, Flame, Compass, Clock, LogIn, Hash } from 'lucide-react';
+import { Sparkles, Calendar, Box, Flame, Compass, Clock, LogIn, Hash , CheckCircle2, Check } from 'lucide-react';
 import { PotteryPiece, stageCustomerLabel, migrateLegacyPieceStatus } from '../types';
 import { formatDateTime } from '../utils/calendarConfig';
 import Reveal from './ui/Reveal';
@@ -244,8 +244,9 @@ export const MyPiecesSection: React.FC = () => {
                 
                 {/* Ready Banner */}
                 {isReady && !isBroken && (
-                  <div className="absolute top-0 left-0 right-0 bg-brand-terracotta text-brand-cream text-center text-xs font-semibold py-2 rounded-t-[30px] tracking-wider">
-                    🎉 Ready! Ready for collection at Arty Café shelf.
+                  <div className="absolute top-0 left-0 right-0 flex items-center justify-center gap-1.5 bg-brand-terracotta text-brand-cream text-center text-xs font-semibold py-2 rounded-t-[30px] tracking-wider">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    <span>Ready! Ready for collection at Arty Café shelf.</span>
                   </div>
                 )}
 
@@ -332,7 +333,7 @@ export const MyPiecesSection: React.FC = () => {
                                   : 'bg-brand-sand border-brand-clay text-brand-charcoal/30 text-[10px]'
                             }`}
                           >
-                            {isCompleted ? '✓' : idx + 1}
+                            {isCompleted ? <Check className="h-3.5 w-3.5" /> : idx + 1}
                           </div>
                         </div>
                       );

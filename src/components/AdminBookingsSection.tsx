@@ -8,7 +8,7 @@ import { useApp, getRiyadhNow, parseBookingDateTimeToRiyadhDate, getRiyadhDateSt
 import { 
   Search, Filter, RefreshCw, X, Download, User, Calendar, 
   MapPin, Clock, Edit2, ShieldAlert, Receipt, CheckCircle, ChevronRight, Bell, AlertTriangle
-} from 'lucide-react';
+, Phone, Mail } from 'lucide-react';
 import { Booking, Workshop } from '../types';
 import { resolveBookingInstructor } from '../utils/queueUtils';
 import { DateInput } from './DateInput';
@@ -827,8 +827,14 @@ export const AdminBookingsSection: React.FC = () => {
                 <h4 className="text-xs font-bold text-brand-charcoal uppercase tracking-widest text-brand-sage">Customer Info</h4>
                 <div className="p-3 bg-brand-sand/30 rounded-xl border border-brand-clay/40 space-y-2">
                   <p className="text-sm font-bold text-brand-charcoal">{activeBookingDetail.customerName}</p>
-                  <p className="text-xs font-medium text-brand-charcoal/70">📞 {activeBookingDetail.customerPhone}</p>
-                  <p className="text-xs font-medium text-brand-charcoal/70">✉ {activeBookingDetail.customerEmail}</p>
+                  <p className="flex items-center gap-1.5 text-xs font-medium text-brand-charcoal/70">
+                    <Phone className="h-3.5 w-3.5 text-brand-charcoal/45" />
+                    <span>{activeBookingDetail.customerPhone}</span>
+                  </p>
+                  <p className="flex items-center gap-1.5 text-xs font-medium text-brand-charcoal/70">
+                    <Mail className="h-3.5 w-3.5 text-brand-charcoal/45" />
+                    <span>{activeBookingDetail.customerEmail}</span>
+                  </p>
                 </div>
               </div>
 

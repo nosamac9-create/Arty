@@ -632,7 +632,8 @@ export const AdminDashboardSection: React.FC = () => {
 
         {overduePickupPieces.length === 0 ? (
           <div className="p-8 text-center text-xs text-brand-charcoal/50 italic bg-brand-cream/30 rounded-2xl border border-dashed border-brand-clay">
-            🎉 Excellent! No pottery pieces are currently overdue for collection (7+ days).
+            <CheckCircle2 className="inline h-4 w-4 me-1.5 align-[-3px] text-brand-sage" />
+            Excellent! No pottery pieces are currently overdue for collection (7+ days).
           </div>
         ) : (
           <>

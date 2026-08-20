@@ -10,7 +10,7 @@ import {
   UserPlus, Shield, Info, AlertTriangle, Palette, Clock, Lock, 
   MapPin, Sliders, Settings, Users, BookOpen, Calendar, HelpCircle, 
   ChevronDown, ChevronUp, GripVertical, RotateCcw
-} from 'lucide-react';
+, Pencil } from 'lucide-react';
 import {
   PipelineStage, StaffMember, WorkshopOption, StaffRole,
   WORKSHOP_OPTION_LISTS, isWorkshopOptionEnabled,
@@ -1241,7 +1241,8 @@ export const AdminSettingsSection: React.FC = () => {
                     </div>
                   ) : (
                     <div className="text-[10px] font-bold text-brand-sage flex items-center gap-1 bg-brand-sage/5 p-2 rounded-lg border border-brand-sage/10">
-                      <span>✓ Unconditional Booking: Customers can immediately click purchase.</span>
+                      <Check className="h-3.5 w-3.5 shrink-0" />
+                      <span>Unconditional Booking: Customers can immediately click purchase.</span>
                     </div>
                   )}
 
@@ -1281,8 +1282,9 @@ export const AdminSettingsSection: React.FC = () => {
                 handleAddStaff(e);
               }
             }} className="p-5 bg-brand-sand/30 border border-brand-clay/50 rounded-2xl space-y-4">
-              <h3 className="text-xs font-bold text-brand-charcoal uppercase tracking-wider">
-                {editingStaffId ? '✏️ Edit Staff Profile' : '➕ Register New Staff Member'}
+              <h3 className="flex items-center gap-1.5 text-xs font-bold text-brand-charcoal uppercase tracking-wider">
+                {editingStaffId ? <Pencil className="h-3.5 w-3.5" /> : <UserPlus className="h-3.5 w-3.5" />}
+                <span>{editingStaffId ? 'Edit Staff Profile' : 'Register New Staff Member'}</span>
               </h3>
               
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">

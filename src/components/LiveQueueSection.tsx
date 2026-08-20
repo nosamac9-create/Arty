@@ -9,8 +9,9 @@ import {
   Users, Clock, Play, CheckCircle, PhoneCall, MoreVertical, 
   Plus, CalendarCheck, X, Edit2, Trash2, AlertTriangle, Check, Sparkles,
   ChevronDown, ChevronUp
-} from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+, GraduationCap
+, Hourglass } from 'lucide-react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { QueueItem } from '../types';
 import { validateSaudiPhone, normaliseSaudiPhone } from '../utils/phoneUtils';
 import { PhoneInput } from './PhoneInput';
@@ -130,11 +131,13 @@ const WaitingCard: React.FC<{
               {/* Badges metadata: guest count, instructor, self-guided */}
               <div className="flex flex-wrap gap-2 pt-1 text-[11px] text-brand-charcoal/60">
                 <span className="font-bold flex items-center gap-1 bg-brand-sand/50 px-2 py-0.5 rounded">
-                  👥 {item.participants} Guests
+                  <Users className="h-3 w-3" />
+                  <span>{item.participants} Guests</span>
                 </span>
                 {!isSelfGuided(item) ? (
                   <span className="font-bold flex items-center gap-1 bg-brand-sage/20 text-brand-sage-hover px-2 py-0.5 rounded">
-                    🎓 {instructorName}
+                    <GraduationCap className="h-3 w-3" />
+                    <span>{instructorName}</span>
                   </span>
                 ) : (
                   <span className="font-bold flex items-center gap-1 bg-purple-50 text-purple-700 px-2 py-0.5 rounded">
@@ -152,7 +155,7 @@ const WaitingCard: React.FC<{
               {/* Check-in time and elapsed wait time */}
               <div className="bg-brand-sand/10 p-2 rounded-xl border border-brand-clay/20 text-[11px] space-y-1 text-brand-charcoal/70">
                 <div className="flex justify-between font-bold">
-                  <span>🕒 Check-In Time:</span>
+                  <span className="flex items-center gap-1"><Clock className="h-3 w-3" />Check-In Time:</span>
                   <span className="font-mono">{item.checkInTime}</span>
                 </div>
                 <div className="flex justify-between font-bold">
@@ -272,11 +275,13 @@ const CalledCard: React.FC<{
               {/* Badges metadata: guest count, instructor */}
               <div className="flex flex-wrap gap-2 pt-1 text-[11px] text-brand-charcoal/60">
                 <span className="font-bold flex items-center gap-1 bg-brand-sand/50 px-2 py-0.5 rounded">
-                  👥 {item.participants} Guests
+                  <Users className="h-3 w-3" />
+                  <span>{item.participants} Guests</span>
                 </span>
                 {!isSelfGuided(item) && (
                   <span className="font-bold flex items-center gap-1 bg-brand-sage/20 text-brand-sage-hover px-2 py-0.5 rounded">
-                    🎓 {instructorName}
+                    <GraduationCap className="h-3 w-3" />
+                    <span>{instructorName}</span>
                   </span>
                 )}
               </div>
@@ -284,7 +289,7 @@ const CalledCard: React.FC<{
               {/* Check-in time and elapsed wait time */}
               <div className="bg-brand-sand/10 p-2 rounded-xl border border-brand-clay/20 text-[11px] space-y-1 text-brand-charcoal/70">
                 <div className="flex justify-between font-bold">
-                  <span>🕒 Check-In Time:</span>
+                  <span className="flex items-center gap-1"><Clock className="h-3 w-3" />Check-In Time:</span>
                   <span className="font-mono">{item.checkInTime}</span>
                 </div>
                 <div className="flex justify-between font-bold">
@@ -433,36 +438,54 @@ const InProgressCard: React.FC<{
         }}
         className="focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-terracotta rounded-xl cursor-pointer flex flex-col gap-2 select-none text-left"
       >
-        <div className="flex justify-between items-start">
-          <div className="flex items-center gap-2">
-            <div className="bg-brand-charcoal text-brand-cream text-xs font-extrabold px-2.5 py-1.5 rounded-lg font-mono">
-              No. {item.id.replace('Q-', '')}
-            </div>
-            <span className={`text-[10px] font-bold px-2 py-1 rounded-md border ${
-              item.source === 'Website' 
-                ? 'bg-blue-50 border-blue-200 text-blue-700' 
-                : 'bg-amber-50 border-amber-200 text-amber-700'
-            }`}>
-              {item.source}
-            </span>
-          </div>
+        {/* One flow with a single gap, so the timing badge reads as its own
+            piece of information instead of butting against the source label
+            whichever source it is. */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex h-6 items-center rounded-lg bg-brand-charcoal px-2.5 font-mono text-xs font-extrabold text-brand-cream">
+            No. {item.id.replace('Q-', '')}
+          </span>
+          <span className={`inline-flex h-6 items-center rounded-md border px-2 text-[10px] font-bold ${
+            item.source === 'Website'
+              ? 'bg-blue-50 border-blue-200 text-blue-700'
+              : 'bg-amber-50 border-amber-200 text-amber-700'
+          }`}>
+            {item.source}
+          </span>
 
-          <div className="flex items-center gap-1">
-            {(isExceeded || isEndingSoon) && (
-              <div className="bg-red-100 border border-red-300 rounded-lg p-1 text-red-700 flex items-center gap-0.5 text-[9px] font-extrabold animate-bounce">
-                <AlertTriangle className="h-3 w-3" />
-                <span>{isExceeded ? 'OVERTIME' : '5 MIN LEFT'}</span>
-              </div>
-            )}
-            <div className="text-brand-charcoal/40 p-1">
-              <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${isExpanded ? 'rotate-180 text-brand-terracotta' : ''}`} />
-            </div>
-          </div>
+          {(isExceeded || isEndingSoon) && (
+            <span className={`inline-flex h-6 items-center gap-1 rounded-md border px-2 text-[10px] font-bold ${
+              isExceeded
+                ? 'border-red-200 bg-red-50 text-red-700'
+                : 'border-amber-300 bg-amber-50 text-amber-800'
+            }`}>
+              <AlertTriangle className="h-3 w-3" />
+              <span>{isExceeded ? 'Overtime' : '5 min left'}</span>
+            </span>
+          )}
+
+          <ChevronDown className={`ms-auto h-4 w-4 shrink-0 text-brand-charcoal/40 transition-transform duration-200 ${isExpanded ? 'rotate-180 text-brand-terracotta' : ''}`} />
         </div>
 
         <div className="space-y-0.5 text-left">
           <h3 className="font-display text-sm font-bold text-brand-charcoal">{item.name}</h3>
-          <p className="text-[11px] font-mono text-brand-charcoal/50 font-bold">{item.phone}</p>
+          {/* The same `timerStr` the expanded box used to show — one timer,
+              read in a second place, so there is nothing extra to keep in
+              step. Quiet by default, and it takes the warning accent when the
+              session is nearly up or already over. */}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+            <p className="font-mono text-[11px] font-bold text-brand-charcoal/50">{item.phone}</p>
+            <span className={`inline-flex items-center gap-1 font-mono text-[11px] font-bold ${
+              isExceeded
+                ? 'text-red-700'
+                : isEndingSoon
+                  ? 'text-amber-700'
+                  : 'text-brand-charcoal/45'
+            }`}>
+              <Clock className="h-3.5 w-3.5" />
+              <span>{timerStr}</span>
+            </span>
+          </div>
         </div>
       </div>
 
@@ -485,29 +508,22 @@ const InProgressCard: React.FC<{
                 </p>
               </div>
 
-              {/* Running timer */}
-              <div className="flex items-center justify-between text-xs font-bold text-brand-charcoal bg-brand-sand/20 p-2 rounded-xl border border-brand-clay/20">
-                <span className="flex items-center gap-1 text-brand-charcoal/60">
-                  <Clock className="h-3.5 w-3.5 text-brand-terracotta" />
-                  <span>Session Time:</span>
-                </span>
-                <span className="font-mono text-brand-terracotta bg-brand-sand/40 px-2 py-1 rounded">
-                  {timerStr}
-                </span>
-              </div>
+              {/* The Session Time box was removed: the timer now sits beside
+                  the phone number, where it is readable without expanding. */}
 
               {/* Instructor and Workshop where applicable */}
+              {/* No Self-Guided chip: the activity line above already reads
+                  "Walk-in (No Instructor…)", so the tag repeated it. The row
+                  wraps on its own gap, so nothing is left behind. */}
               <div className="flex flex-wrap gap-2 pt-1 text-[11px] text-brand-charcoal/60">
                 <span className="font-bold flex items-center gap-1 bg-brand-sand/50 px-2 py-0.5 rounded">
-                  👥 {item.participants} Guests
+                  <Users className="h-3 w-3" />
+                  <span>{item.participants} Guests</span>
                 </span>
-                {!isSelfGuided(item) ? (
+                {!isSelfGuided(item) && (
                   <span className="font-bold flex items-center gap-1 bg-brand-sage/20 text-brand-sage-hover px-2 py-0.5 rounded">
-                    🎓 {instructorName}
-                  </span>
-                ) : (
-                  <span className="font-bold flex items-center gap-1 bg-purple-50 text-purple-700 px-2 py-0.5 rounded">
-                    Self-Guided
+                    <GraduationCap className="h-3 w-3" />
+                    <span>{instructorName}</span>
                   </span>
                 )}
               </div>
@@ -541,11 +557,11 @@ const InProgressCard: React.FC<{
               {/* Check-in time & Seated time */}
               <div className="bg-brand-sand/10 p-2 rounded-xl border border-brand-clay/20 text-[11px] space-y-1 text-brand-charcoal/70 font-bold">
                 <div className="flex justify-between">
-                  <span>🕒 Check-In Time:</span>
+                  <span className="flex items-center gap-1"><Clock className="h-3 w-3" />Check-In Time:</span>
                   <span className="font-mono">{item.checkInTime}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>🕒 Seated At:</span>
+                  <span className="flex items-center gap-1"><Clock className="h-3 w-3" />Seated At:</span>
                   <span className="font-mono">{item.seatedTime ? new Date(item.seatedTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : ''}</span>
                 </div>
               </div>
@@ -608,22 +624,22 @@ const CompletedCard: React.FC<{
         }}
         className="focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-terracotta rounded-xl cursor-pointer flex flex-col gap-2 select-none text-left"
       >
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <div className="bg-brand-clay text-brand-charcoal/70 text-[11px] font-extrabold px-2 py-1 rounded-md font-mono">
-              No. {item.id.replace('Q-', '')}
-            </div>
-            <span className="bg-blue-50 border border-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded">
-              {item.source}
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="text-brand-sage flex items-center gap-1 text-xs font-bold">
-              <CheckCircle className="h-4 w-4" />
-              <span>Completed</span>
-            </div>
-            <ChevronDown className={`h-4 w-4 text-brand-charcoal/40 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
-          </div>
+        {/* One row, one gap rhythm: the pieces used to sit in two clusters
+            pushed to opposite edges, which left the status stranded away from
+            everything else. Each chip now has the same height and the same
+            2-unit gap, with only the chevron pinned to the end. */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex h-6 items-center rounded-md bg-brand-clay px-2 font-mono text-[11px] font-extrabold text-brand-charcoal/70">
+            No. {item.id.replace('Q-', '')}
+          </span>
+          <span className="inline-flex h-6 items-center rounded-md border border-blue-100 bg-blue-50 px-2 text-[10px] font-bold text-blue-700">
+            {item.source}
+          </span>
+          <span className="inline-flex h-6 items-center gap-1 rounded-md border border-brand-sage-line bg-brand-sage-soft px-2 text-[10px] font-bold text-brand-sage-hover">
+            <CheckCircle className="h-3.5 w-3.5" />
+            <span>Completed</span>
+          </span>
+          <ChevronDown className={`ms-auto h-4 w-4 shrink-0 text-brand-charcoal/40 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
         </div>
 
         <div className="space-y-0.5 text-left">
@@ -652,27 +668,38 @@ const CompletedCard: React.FC<{
 
               {/* Stats footer */}
               <div className="flex items-center justify-between text-[11px] font-bold text-brand-charcoal/60 pt-2 border-t border-brand-clay/30">
-                <span>👥 {item.participants} Guests</span>
+                <span className="flex items-center gap-1">
+                  <Users className="h-3 w-3" />
+                  <span>{item.participants} Guests</span>
+                </span>
                 <span className="flex items-center gap-1 font-mono text-brand-sage-hover">
-                  🕒 {timeSpentStr} spent
+                  <Clock className="h-3 w-3" />
+                  <span>{timeSpentStr} spent</span>
                 </span>
               </div>
 
-              <div className="flex items-center justify-between text-[11px] font-bold text-brand-charcoal/60">
-                <span>{isSelfGuided(item) ? 'Self-Guided' : `🎓 ${instructorName}`}</span>
-                {item.hours !== undefined && <span>{item.hours} hrs booked</span>}
-              </div>
+              {/* The instructor line only when there is one — a self-guided
+                  session says so in its activity text. `ms-auto` keeps the
+                  hours on the trailing edge when they are the only item, so no
+                  empty slot is left where the tag used to be. */}
+              {(!isSelfGuided(item) || item.hours !== undefined) && (
+                <div className="flex items-center justify-between gap-2 text-[11px] font-bold text-brand-charcoal/60">
+                  {!isSelfGuided(item) && (
+                    <span className="flex items-center gap-1">
+                      <GraduationCap className="h-3 w-3" />
+                      <span>{instructorName}</span>
+                    </span>
+                  )}
+                  {item.hours !== undefined && (
+                    <span className={isSelfGuided(item) ? 'ms-auto' : ''}>{item.hours} hrs booked</span>
+                  )}
+                </div>
+              )}
 
-              {item.extendedByQueueId && (
-                <p className="text-[10px] font-bold text-brand-terracotta">
-                  Extended into queue entry No. {item.extendedByQueueId.replace('Q-', '')} — this completed session is kept as history.
-                </p>
-              )}
-              {item.returnedFromQueueId && (
-                <p className="text-[10px] font-bold text-brand-charcoal/50">
-                  Continuation of completed entry No. {item.returnedFromQueueId.replace('Q-', '')}.
-                </p>
-              )}
+              {/* `extendedByQueueId` and `returnedFromQueueId` still link a
+                  completed session to the entry that continued it — the
+                  relationship is untouched on the record, it just is not
+                  spelled out on the card. */}
             </div>
           </motion.div>
         )}
@@ -682,12 +709,15 @@ const CompletedCard: React.FC<{
           stay completed and are never restarted. */}
       {isSelfGuided(item) && (
         <div className="pt-2 border-t border-brand-clay/30">
+          {/* `whitespace-nowrap` on the label stops it breaking at the slash
+              into a ragged two lines; the fixed height keeps the icon and text
+              on one baseline whatever the column width. */}
           <button
             onClick={() => onReturnToWaiting(item)}
-            className="cursor-pointer w-full py-2 border border-brand-terracotta/50 text-brand-terracotta hover:bg-brand-terracotta/5 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5"
+            className="flex h-9 w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-brand-terracotta/50 px-3 text-[11px] font-bold text-brand-terracotta transition-colors hover:bg-brand-terracotta/5"
           >
-            <Plus className="h-3.5 w-3.5" />
-            <span>Add More Time / Return to Waiting</span>
+            <Plus className="h-3.5 w-3.5 shrink-0" />
+            <span className="whitespace-nowrap">Add time / Return to waiting</span>
           </button>
         </div>
       )}
@@ -749,6 +779,7 @@ export const LiveQueueSection: React.FC = () => {
   };
 
   // Force re-render every second for live timers
+  const prefersReducedMotion = useReducedMotion();
   const [now, setNow] = useState<Date>(new Date());
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 1000);
@@ -1337,8 +1368,8 @@ export const LiveQueueSection: React.FC = () => {
               ~{waitingItems.length > 0 ? Math.max(10, Math.round((waitingItems.length * 15) / Math.max(1, availableTables))) : 0} min wait
             </span>
           </div>
-          <div className="flex items-center justify-center h-10 w-10 bg-brand-sage/30 text-brand-sage-hover rounded-xl font-bold text-xs">
-            ⏳
+          <div className="flex items-center justify-center h-10 w-10 bg-brand-sage/30 text-brand-sage-hover rounded-xl">
+            <Hourglass className="h-4 w-4" />
           </div>
         </div>
       </div>
@@ -1372,37 +1403,49 @@ export const LiveQueueSection: React.FC = () => {
         })}
       </div>
 
-      {/* FIVE-MINUTE WARNINGS — one banner per guest, dismissed individually.
-          Dismissal is keyed on the visit's end time, so closing one does not
-          silence the next guest and does not come back on the next tick. */}
+      {/* FIVE-MINUTE WARNINGS — a staff alert, not a celebration: console
+          cream and clay with one amber accent, a short fade-and-rise, and no
+          animation once it has arrived. Stacked, one per guest, each dismissed
+          on its own. Dismissal is keyed on the visit's end time, so closing one
+          does not silence the next guest and does not come back on the next
+          tick. */}
       {visibleWarnings.length > 0 && (
         <div className="space-y-2">
           {visibleWarnings.map(warning => (
-            <div
+            <motion.div
               key={warning.key}
+              initial={prefersReducedMotion ? false : { opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25, ease: 'easeOut' }}
               role="status"
-              className="flex items-start gap-3 rounded-2xl border-2 border-amber-300 bg-amber-50 p-4 shadow-card-sm"
+              className="flex items-start gap-3 rounded-2xl border border-brand-clay bg-brand-cream p-3.5 shadow-2xs"
             >
-              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+              <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-amber-200 bg-amber-50 text-amber-700">
+                <Clock className="h-3.5 w-3.5" />
+              </span>
+
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-bold text-amber-900">
-                  {warning.item.name} has {warning.minutesLeft} minute{warning.minutesLeft === 1 ? '' : 's'} left
+                <p className="text-xs font-bold text-brand-charcoal">
+                  {warning.item.name} · {warning.minutesLeft} minute{warning.minutesLeft === 1 ? '' : 's'} remaining
                 </p>
-                <p className="mt-0.5 text-xs font-semibold text-amber-800/80">
-                  {warning.item.activity || 'Studio session'}
-                  {warning.item.id ? ` · ${warning.item.id}` : ''}
-                  {warning.item.staffName ? ` · with ${warning.item.staffName}` : ''}
+                <p className="mt-0.5 text-[11px] font-semibold text-brand-charcoal/55">
+                  {[
+                    warning.item.activity,
+                    warning.item.staffName ? `with ${warning.item.staffName}` : null,
+                    `No. ${warning.item.id.replace('Q-', '')}`
+                  ].filter(Boolean).join(' · ')}
                 </p>
               </div>
+
               <button
                 type="button"
                 onClick={() => setDismissedWarnings(prev => [...prev, warning.key])}
                 aria-label={`Dismiss the warning for ${warning.item.name}`}
-                className="shrink-0 rounded-lg p-1 text-amber-700 transition-colors hover:bg-amber-100 cursor-pointer"
+                className="shrink-0 rounded-lg p-1 text-brand-charcoal/40 transition-colors hover:bg-brand-sand hover:text-brand-charcoal cursor-pointer"
               >
                 <X className="h-4 w-4" />
               </button>
-            </div>
+            </motion.div>
           ))}
         </div>
       )}

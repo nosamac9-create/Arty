@@ -306,7 +306,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
 
     const isReady = status === 'Ready for Collection';
     triggerToast(
-      isReady ? '🚨 Ready for Collection pickup!' : 'Status Shipped Successfully',
+      isReady ? 'Ready for Collection pickup!' : 'Status Shipped Successfully',
       `Piece ${piece.pieceCode || pieceId} (${piece.customerName}) has been updated to "${status}" by ${user}.${reason ? ` Reason: ${reason}` : ''}`,
       isReady
     );
@@ -1578,7 +1578,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                   }
 
                   triggerToast(
-                    '🎨 Ceramic Piece Added Successfully',
+                    'Ceramic Piece Added Successfully',
                     `Logged piece "${pieceCodeInput}" under customer "${manualName}".`,
                     false
                   );
@@ -1625,9 +1625,10 @@ export const AdminPiecesTrackingSection: React.FC = () => {
             </div>
             <button
               onClick={() => setToasts(prev => prev.filter(item => item.id !== t.id))}
-              className="text-xs font-bold hover:scale-110 cursor-pointer shrink-0 opacity-60 hover:opacity-100"
+              className="cursor-pointer shrink-0 opacity-60 hover:opacity-100"
+              aria-label="Dismiss"
             >
-              ✕
+              <X className="h-3.5 w-3.5" />
             </button>
           </div>
         ))}
