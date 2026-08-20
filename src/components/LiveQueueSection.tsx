@@ -1198,7 +1198,62 @@ export const LiveQueueSection: React.FC = () => {
   // Categories of filtered queue lists for today
   const waitingItems = useMemo(() => todayQueue.filter(q => q.status === 'Waiting'), [todayQueue]);
   const calledItems = useMemo(() => todayQueue.filter(q => q.status === 'Called'), [todayQueue]);
-  const inProgressItems = useMemo(() => todayQueue.filter(q => q.status === 'In Progress'), [todayQueue]);
+  /**
+   * In Progress, with anyone in their last five minutes lifted to the top.
+   *
+   * The ordering is derived from the same `getVisitTiming` the card itself
+   * uses, so the list and the card can never disagree about who is urgent.
+   * Within each group the original queue order is kept, so two urgent guests
+   * stay in the order they were seated rather than swapping places on a tick.
+   */
+  const inProgressItems = useMemo(() => {
+    const active = todayQueue.filter(q => q.status === 'In Progress');
+    return active
+      .map((item, index) => ({
+        item,
+        index,
+        timing: getVisitTiming(item, todayDateStr, now)
+      }))
+      .sort((a, b) => {
+        // Overtime counts as urgent too — it is past the warning, not before it.
+        const aUrgent = a.timing.isEndingSoon || a.timing.isExceeded;
+        const bUrgent = b.timing.isEndingSoon || b.timing.isExceeded;
+        if (aUrgent !== bUrgent) return aUrgent ? -1 : 1;
+        if (aUrgent && bUrgent) {
+          // Least time left first.
+          return (a.timing.remainingMs ?? 0) - (b.timing.remainingMs ?? 0);
+        }
+        return a.index - b.index;
+      })
+      .map(entry => entry.item);
+  }, [todayQueue, todayDateStr, now]);
+
+  /**
+   * Whose five-minute warning is currently live.
+   *
+   * Keyed on the visit's end time as well as the entry id, so a guest who is
+   * seated again later warns again — while a warning that has been dismissed
+   * stays dismissed for that session, however many times this re-renders.
+   */
+  const endingSoonWarnings = useMemo(
+    () =>
+      todayQueue
+        .filter(q => q.status === 'In Progress')
+        .map(item => {
+          const timing = getVisitTiming(item, todayDateStr, now);
+          return { item, timing };
+        })
+        .filter(entry => entry.timing.isEndingSoon && entry.timing.endTime)
+        .map(entry => ({
+          key: `${entry.item.id}:${entry.timing.endTime!.getTime()}`,
+          item: entry.item,
+          minutesLeft: Math.max(1, Math.ceil((entry.timing.remainingMs ?? 0) / 60000))
+        })),
+    [todayQueue, todayDateStr, now]
+  );
+
+  const [dismissedWarnings, setDismissedWarnings] = useState<string[]>([]);
+  const visibleWarnings = endingSoonWarnings.filter(w => !dismissedWarnings.includes(w.key));
   const completedItems = useMemo(() => todayQueue.filter(q => q.status === 'Completed'), [todayQueue]);
 
   return (
@@ -1317,6 +1372,41 @@ export const LiveQueueSection: React.FC = () => {
         })}
       </div>
 
+      {/* FIVE-MINUTE WARNINGS — one banner per guest, dismissed individually.
+          Dismissal is keyed on the visit's end time, so closing one does not
+          silence the next guest and does not come back on the next tick. */}
+      {visibleWarnings.length > 0 && (
+        <div className="space-y-2">
+          {visibleWarnings.map(warning => (
+            <div
+              key={warning.key}
+              role="status"
+              className="flex items-start gap-3 rounded-2xl border-2 border-amber-300 bg-amber-50 p-4 shadow-card-sm"
+            >
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold text-amber-900">
+                  {warning.item.name} has {warning.minutesLeft} minute{warning.minutesLeft === 1 ? '' : 's'} left
+                </p>
+                <p className="mt-0.5 text-xs font-semibold text-amber-800/80">
+                  {warning.item.activity || 'Studio session'}
+                  {warning.item.id ? ` · ${warning.item.id}` : ''}
+                  {warning.item.staffName ? ` · with ${warning.item.staffName}` : ''}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDismissedWarnings(prev => [...prev, warning.key])}
+                aria-label={`Dismiss the warning for ${warning.item.name}`}
+                className="shrink-0 rounded-lg p-1 text-amber-700 transition-colors hover:bg-amber-100 cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* KANBAN BOARD WRAPPER: All columns side-by-side on lg screen, tab-filtered on mobile */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
         
@@ -1330,7 +1420,11 @@ export const LiveQueueSection: React.FC = () => {
             <span className="bg-brand-sand px-2 py-0.5 rounded-full text-xs font-bold text-brand-charcoal/60">{waitingItems.length}</span>
           </div>
 
-          <div className="space-y-4">
+          {/* Three cards tall, then the list scrolls inside itself — one busy
+              column must not stretch the page and push the others out of
+              reach. `always-scrollbar` keeps the bar visible so it is obvious
+              there is more below. */}
+          <div className="max-h-[27rem] space-y-4 overflow-y-auto always-scrollbar pe-1">
             {waitingItems.length === 0 ? (
               <div className="py-12 text-center text-xs text-brand-charcoal/40 bg-white/40 rounded-2xl border border-dashed border-brand-clay/50">
                 No guests waiting.
@@ -1362,7 +1456,7 @@ export const LiveQueueSection: React.FC = () => {
             <span className="bg-brand-sand px-2 py-0.5 rounded-full text-xs font-bold text-brand-charcoal/60">{calledItems.length}</span>
           </div>
 
-          <div className="space-y-4">
+          <div className="max-h-[27rem] space-y-4 overflow-y-auto always-scrollbar pe-1">
             {calledItems.length === 0 ? (
               <div className="py-12 text-center text-xs text-brand-charcoal/40 bg-white/40 rounded-2xl border border-dashed border-brand-clay/50">
                 No called entries.
@@ -1393,7 +1487,7 @@ export const LiveQueueSection: React.FC = () => {
             <span className="bg-brand-sand px-2 py-0.5 rounded-full text-xs font-bold text-brand-charcoal/60">{inProgressItems.length}</span>
           </div>
 
-          <div className="space-y-4">
+          <div className="max-h-[27rem] space-y-4 overflow-y-auto always-scrollbar pe-1">
             {inProgressItems.length === 0 ? (
               <div className="py-12 text-center text-xs text-brand-charcoal/40 bg-white/40 rounded-2xl border border-dashed border-brand-clay/50">
                 No active studio sessions.
@@ -1425,7 +1519,7 @@ export const LiveQueueSection: React.FC = () => {
             <span className="bg-brand-sand px-2 py-0.5 rounded-full text-xs font-bold text-brand-charcoal/60">{completedItems.length}</span>
           </div>
 
-          <div className="space-y-4">
+          <div className="max-h-[27rem] space-y-4 overflow-y-auto always-scrollbar pe-1">
             {completedItems.length === 0 ? (
               <div className="py-12 text-center text-xs text-brand-charcoal/40 bg-white/40 rounded-2xl border border-dashed border-brand-clay/50">
                 No sessions completed yet today.

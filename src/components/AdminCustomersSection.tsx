@@ -18,6 +18,7 @@ import {
   ACTIVITY_CATEGORIES, ActivityCategory, getCustomerActivityCategories
 } from '../utils/activityUtils';
 import { hasWebsiteAccount, matchesAccountType, getAccountType } from '../utils/accountUtils';
+import { matchesQuery, useDebouncedValue } from '../utils/search';
 
 /** Badge colour per activity category. */
 const categoryBadgeClass = (category: ActivityCategory) => {
@@ -52,6 +53,10 @@ export const AdminCustomersSection: React.FC = () => {
 
   // Filters state
   const [searchQuery, setSearchQuery] = useState('');
+  /* Every row here is derived from bookings, queue entries and pieces, so the
+     whole set is rebuilt on each keystroke. Debouncing the query is what keeps
+     that from feeling like a freeze on a large customer list. */
+  const debouncedSearch = useDebouncedValue(searchQuery);
   const [sourceFilter, setSourceFilter] = useState<string>('All');
   const [accountTypeFilter, setAccountTypeFilter] = useState<string>('All'); // All, Registered, Guest
   const [hasUpcomingFilter, setHasUpcomingFilter] = useState(false);
@@ -376,17 +381,17 @@ export const AdminCustomersSection: React.FC = () => {
       const metrics = customerMetricsMap.get(c.id);
 
       // Search matching (Name, Phone normalized or raw, Email, ID)
-      if (searchQuery.trim()) {
-        const q = searchQuery.trim().toLowerCase();
-        const normQ = getNormalizedPhone(searchQuery);
+      if (debouncedSearch.trim()) {
+        const q = debouncedSearch.trim().toLowerCase();
+        const normQ = getNormalizedPhone(debouncedSearch);
         const normPhone = getNormalizedPhone(c.phone);
 
-        const matchName = (c.name || '').toLowerCase().includes(q);
-        const matchEmail = (c.email || '').toLowerCase().includes(q);
-        const matchId = (c.id || '').toLowerCase().includes(q);
-        const matchPhone = c.phone.includes(q) || (normQ && normPhone && normPhone.includes(normQ));
+        // `c.phone` is optional on a derived customer, so it is read through
+        // the shared helper rather than directly.
+        const matchText = matchesQuery([c.name, c.email, c.id, c.phone], q);
+        const matchPhone = !!(normQ && normPhone && normPhone.includes(normQ));
 
-        if (!matchName && !matchEmail && !matchId && !matchPhone) {
+        if (!matchText && !matchPhone) {
           return false;
         }
       }
@@ -417,12 +422,12 @@ export const AdminCustomersSection: React.FC = () => {
 
       return true;
     });
-  }, [allDerivedCustomers, customerMetricsMap, customerCategoriesMap, searchQuery, sourceFilter, accountTypeFilter, hasUpcomingFilter, hasUnpaidFilter]);
+  }, [allDerivedCustomers, customerMetricsMap, customerCategoriesMap, debouncedSearch, sourceFilter, accountTypeFilter, hasUpcomingFilter, hasUnpaidFilter]);
 
   // Reset page to 1 whenever filters or search query changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, sourceFilter, accountTypeFilter, hasUpcomingFilter, hasUnpaidFilter]);
+  }, [debouncedSearch, sourceFilter, accountTypeFilter, hasUpcomingFilter, hasUnpaidFilter]);
 
   const totalCustomerPages = Math.max(1, Math.ceil(filteredCustomers.length / CUSTOMERS_PER_PAGE));
   const paginatedCustomers = useMemo(() => {
@@ -714,72 +719,33 @@ export const AdminCustomersSection: React.FC = () => {
 
           {/* TAB 1: OVERVIEW & NOTES */}
           {profileTab === 'overview' && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="md:col-span-2 bg-white border border-brand-clay/70 rounded-2xl p-6 shadow-2xs space-y-4">
-                <h3 className="font-display font-bold text-lg text-brand-charcoal flex items-center gap-2">
-                  <UserCheck className="h-5 w-5 text-brand-terracotta" />
-                  <span>Internal Customer Notes & Preferences</span>
-                </h3>
-                <p className="text-xs text-brand-charcoal/60">
-                  Notes are private to staff and never shared with the customer.
+            <div className="bg-white border border-brand-clay/70 rounded-2xl p-6 shadow-2xs space-y-4">
+              <h3 className="font-display font-bold text-lg text-brand-charcoal flex items-center gap-2">
+                <UserCheck className="h-5 w-5 text-brand-terracotta" />
+                <span>Internal Customer Notes & Preferences</span>
+              </h3>
+              <p className="text-xs text-brand-charcoal/60">
+                Notes are private to staff and never shared with the customer.
+              </p>
+
+              <textarea
+                rows={4}
+                value={selectedCustomer.notes || ''}
+                onChange={async (e) => {
+                  const newNotes = e.target.value;
+                  await updateCustomer(selectedCustomer.id, { notes: newNotes });
+                }}
+                placeholder="Add optional notes, seating preferences, pottery interests, or birthday reminders..."
+                className="w-full bg-brand-cream/50 border border-brand-clay rounded-xl p-3 text-xs font-medium text-brand-charcoal resize-y focus:outline-none focus:border-brand-terracotta"
+              />
+
+              <div className="p-4 rounded-xl bg-brand-sand/30 border border-brand-clay/50 text-xs space-y-2">
+                <p className="font-bold text-brand-charcoal">Account Integration Status</p>
+                <p className="text-brand-charcoal/70">
+                  {hasWebsiteAccount(selectedCustomer)
+                    ? '✅ Linked to an active website account (Customer can log in).'
+                    : 'ℹ️ Guest / Walk-in profile (No online login created yet). If this customer creates a website account later with matching phone/email, it will connect automatically.'}
                 </p>
-
-                <textarea
-                  rows={4}
-                  value={selectedCustomer.notes || ''}
-                  onChange={async (e) => {
-                    const newNotes = e.target.value;
-                    await updateCustomer(selectedCustomer.id, { notes: newNotes });
-                  }}
-                  placeholder="Add optional notes, seating preferences, pottery interests, or birthday reminders..."
-                  className="w-full bg-brand-cream/50 border border-brand-clay rounded-xl p-3 text-xs font-medium text-brand-charcoal resize-y focus:outline-none focus:border-brand-terracotta"
-                />
-
-                <div className="p-4 rounded-xl bg-brand-sand/30 border border-brand-clay/50 text-xs space-y-2">
-                  <p className="font-bold text-brand-charcoal">Account Integration Status</p>
-                  <p className="text-brand-charcoal/70">
-                    {hasWebsiteAccount(selectedCustomer)
-                      ? '✅ Linked to an active website account (Customer can log in).'
-                      : 'ℹ️ Guest / Walk-in profile (No online login created yet). If this customer creates a website account later with matching phone/email, it will connect automatically.'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="bg-white border border-brand-clay/70 rounded-2xl p-6 shadow-2xs space-y-4">
-                <h3 className="font-display font-bold text-base text-brand-charcoal">Quick Actions</h3>
-                <div className="space-y-2.5">
-                  <button
-                    onClick={() => {
-                      setPendingBooking({
-                        workshopId: 'ws-1',
-                        workshopTitle: 'Wheel Throwing Masterclass',
-                        date: todayDateStr,
-                        time: '16:00',
-                        participants: 1,
-                        totalPrice: 320,
-                        customerName: selectedCustomer.name,
-                        customerPhone: selectedCustomer.phone,
-                        customerEmail: selectedCustomer.email
-                      });
-                      setCustomerTab('checkout-info');
-                      viewCustomerSite();
-                    }}
-                    className="w-full bg-brand-terracotta text-brand-cream py-2.5 rounded-xl text-xs font-bold hover:bg-brand-terracotta-hover transition-colors flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <Calendar className="h-4 w-4" />
-                    <span>Create New Workshop Booking</span>
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      setAdminTab('queue');
-                    }}
-                    className="w-full bg-brand-sand border border-brand-clay py-2.5 rounded-xl text-xs font-bold text-brand-charcoal hover:bg-brand-clay/30 transition-colors flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <ListOrdered className="h-4 w-4 text-brand-terracotta" />
-                    <span>Add to Live Queue</span>
-                  </button>
-                </div>
               </div>
             </div>
           )}

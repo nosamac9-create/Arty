@@ -126,7 +126,12 @@ export default function App() {
           {/* min-w-0 lets this column shrink below its content's natural width.
               Without it a wide child (the Kanban board, the sessions table)
               blows the layout out sideways instead of scrolling inside itself. */}
-          <div className="flex-1 min-w-0 flex flex-col overflow-y-auto min-h-screen bg-brand-cream">
+          {/* Marked so a modal can lock this scroller: the console scrolls in
+              this column, not on the document. */}
+          <div
+            data-console-scroll
+            className="flex-1 min-w-0 flex flex-col overflow-y-auto min-h-screen bg-brand-cream"
+          >
             <AdminTopBar />
             
             <main className="flex-1">

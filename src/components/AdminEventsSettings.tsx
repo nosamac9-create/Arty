@@ -12,6 +12,7 @@ import {
 import {
   Save, Check, Calendar, Gift, Info, Plus, Trash2, ChevronUp, ChevronDown, ListChecks, ShieldAlert
 } from 'lucide-react';
+import { LineListTextarea } from './ui/LineListTextarea';
 
 export const AdminEventsSettings: React.FC = () => {
   const {
@@ -142,12 +143,8 @@ export const AdminEventsSettings: React.FC = () => {
 
   return (
     <div className="space-y-6 text-left animate-in fade-in duration-200">
-      <div className="border-b border-brand-clay/40 pb-4">
-        <h2 className="font-display text-xl font-extrabold text-brand-charcoal">Events & Birthday Settings</h2>
-        <p className="text-xs text-brand-charcoal/70 mt-1">
-          Configure global notice windows, capacity restrictions, and deposit parameters for private events and birthday bookings.
-        </p>
-      </div>
+      {/* The page keeps the System Settings header above; this section's own
+          title lives on the first card, so it is not repeated here. */}
 
       {savedSuccess && (
         <div className="p-3 bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs font-bold rounded-xl flex items-center gap-2">
@@ -156,7 +153,17 @@ export const AdminEventsSettings: React.FC = () => {
         </div>
       )}
 
-      <form onSubmit={handleSave} className="space-y-6">
+      <form onSubmit={handleSave} className="space-y-6 bg-white border border-brand-clay/70 rounded-3xl p-5 sm:p-6 shadow-2xs">
+        <div className="border-b border-brand-clay/50 pb-3">
+          <h3 className="font-display text-lg font-extrabold text-brand-charcoal flex items-center gap-2">
+            <Gift className="h-5 w-5 text-brand-terracotta" />
+            <span>Events &amp; Birthday Settings</span>
+          </h3>
+          <p className="text-xs text-brand-charcoal/70 mt-1">
+            The booking rules the customer site enforces: notice periods, guest ceilings, deposit and cancellation window.
+          </p>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           
           {/* Min Birthday Booking Notice */}
@@ -267,8 +274,8 @@ export const AdminEventsSettings: React.FC = () => {
       {/* BIRTHDAY TERMS & GUIDELINES — the customer-facing text, editable   */}
       {/* here rather than hardcoded on the Customer Site.                   */}
       {/* ================================================================= */}
-      <div className="pt-6 border-t border-brand-clay/40 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="bg-white border border-brand-clay/70 rounded-3xl p-5 sm:p-6 shadow-2xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-brand-clay/50 pb-3">
           <div>
             <h3 className="font-display text-lg font-extrabold text-brand-charcoal flex items-center gap-2">
               <ShieldAlert className="h-5 w-5 text-brand-terracotta" />
@@ -318,10 +325,10 @@ export const AdminEventsSettings: React.FC = () => {
 
             <div className="space-y-1">
               <label className="text-[10px] font-bold text-brand-charcoal/70 uppercase block">Opening Lines (one per line)</label>
-              <textarea
+              <LineListTextarea
                 rows={2}
-                value={terms.leadingItems.join('\n')}
-                onChange={e => setTerms({ ...terms, leadingItems: e.target.value.split('\n').map(v => v.trim()).filter(Boolean) })}
+                value={terms.leadingItems}
+                onChange={lines => setTerms({ ...terms, leadingItems: lines })}
                 className="w-full bg-white border border-brand-clay rounded-xl py-2 px-3 text-xs font-semibold text-brand-charcoal"
               />
             </div>
@@ -338,20 +345,20 @@ export const AdminEventsSettings: React.FC = () => {
 
             <div className="space-y-1">
               <label className="text-[10px] font-bold text-brand-charcoal/70 uppercase block">Supplies List (one per line, shown numbered)</label>
-              <textarea
+              <LineListTextarea
                 rows={4}
-                value={terms.supplies.join('\n')}
-                onChange={e => setTerms({ ...terms, supplies: e.target.value.split('\n').map(v => v.trim()).filter(Boolean) })}
+                value={terms.supplies}
+                onChange={lines => setTerms({ ...terms, supplies: lines })}
                 className="w-full bg-white border border-brand-clay rounded-xl py-2 px-3 text-xs font-semibold text-brand-charcoal"
               />
             </div>
 
             <div className="space-y-1">
               <label className="text-[10px] font-bold text-brand-charcoal/70 uppercase block">Closing Lines (one per line)</label>
-              <textarea
+              <LineListTextarea
                 rows={4}
-                value={terms.trailingItems.join('\n')}
-                onChange={e => setTerms({ ...terms, trailingItems: e.target.value.split('\n').map(v => v.trim()).filter(Boolean) })}
+                value={terms.trailingItems}
+                onChange={lines => setTerms({ ...terms, trailingItems: lines })}
                 className="w-full bg-white border border-brand-clay rounded-xl py-2 px-3 text-xs font-semibold text-brand-charcoal"
               />
             </div>
@@ -394,8 +401,8 @@ export const AdminEventsSettings: React.FC = () => {
       {/* BIRTHDAY BOOKING FORM FIELDS — configured here, not on the        */}
       {/* Birthday Event page (which edits package details only).           */}
       {/* ================================================================= */}
-      <div className="pt-6 border-t border-brand-clay/40 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="bg-white border border-brand-clay/70 rounded-3xl p-5 sm:p-6 shadow-2xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-brand-clay/50 pb-3">
           <div>
             <h3 className="font-display text-lg font-extrabold text-brand-charcoal flex items-center gap-2">
               <ListChecks className="h-5 w-5 text-brand-terracotta" />
@@ -542,12 +549,10 @@ export const AdminEventsSettings: React.FC = () => {
                 {field.type === 'dropdown' && (
                   <div className="sm:col-span-3 space-y-1">
                     <label className="font-bold text-brand-charcoal/70 block">Options (one per line)</label>
-                    <textarea
+                    <LineListTextarea
                       rows={4}
-                      value={(field.options || []).join('\n')}
-                      onChange={e => handleFieldChange(field.id, {
-                        options: e.target.value.split('\n').map(v => v.trim()).filter(Boolean)
-                      })}
+                      value={field.options || []}
+                      onChange={options => handleFieldChange(field.id, { options })}
                       className="w-full bg-brand-cream/40 border border-brand-clay rounded-xl p-2 font-semibold"
                     />
                   </div>

@@ -33,6 +33,15 @@ import { PhoneInput } from './PhoneInput';
 import { DateInput } from './DateInput';
 import { formatDateTime } from '../utils/calendarConfig';
 import { hasWebsiteAccount } from '../utils/accountUtils';
+import { matchesQuery, useDebouncedValue } from '../utils/search';
+import { usePagination, TablePager } from './ui/TablePager';
+
+/**
+ * Reached by their own buttons underneath the dropdown, so they are left out of
+ * it — two controls for one transition is how a piece ends up marked collected
+ * by someone who meant to advance it a stage.
+ */
+const DEDICATED_BUTTON_STATUSES: string[] = ['Ready for Collection', ...PIECE_END_STATES];
 
 export const AdminPiecesTrackingSection: React.FC = () => {
   const {
@@ -44,6 +53,10 @@ export const AdminPiecesTrackingSection: React.FC = () => {
   // Views and Filters state
   const [viewMode, setViewMode] = useState<'Board' | 'Table'>('Board');
   const [search, setSearch] = useState('');
+  /* The board re-derives every column from the full piece list; debouncing the
+     filter keeps typing responsive once the studio has a few thousand pieces.
+     The input itself is unaffected — only the filtering waits. */
+  const debouncedSearch = useDebouncedValue(search);
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [awaitingCollectionOnly, setAwaitingCollectionOnly] = useState(false);
 
@@ -393,7 +406,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
 
     // Search the shared piece records: trimmed, case-insensitive, and matching
     // phone numbers regardless of formatting. Runs alongside the other filters.
-    const rawSearch = search.trim();
+    const rawSearch = debouncedSearch.trim();
     if (rawSearch) {
       const q = rawSearch.toLowerCase();
       const phoneSearch = isPhoneQuery(rawSearch);
@@ -441,7 +454,11 @@ export const AdminPiecesTrackingSection: React.FC = () => {
     }
 
     return result;
-  }, [pieces, search, overdueOnly, awaitingCollectionOnly, startDate, endDate, dateField]);
+  }, [pieces, debouncedSearch, overdueOnly, awaitingCollectionOnly, startDate, endDate, dateField]);
+
+  /* Ten rows a page in the table. The board is unaffected — its columns are
+     already bounded by their own scroll. */
+  const tablePager = usePagination(processedPieces, 10);
 
   const selectedPiece = useMemo(() => {
     return pieces.find(p => p.id === selectedPieceId) || null;
@@ -761,7 +778,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-brand-clay/30">
-                {processedPieces.map((p) => {
+                {tablePager.pageItems.map((p) => {
                   const isOverdue = p.daysElapsed >= 10 && p.status !== 'Collected';
                   return (
                     <tr 
@@ -794,13 +811,25 @@ export const AdminPiecesTrackingSection: React.FC = () => {
               </tbody>
             </table>
           </div>
+
+          <div className="px-4 pb-4">
+            <TablePager
+              page={tablePager.page}
+              totalPages={tablePager.totalPages}
+              from={tablePager.from}
+              to={tablePager.to}
+              total={tablePager.total}
+              onPage={tablePager.setPage}
+              noun="pieces"
+            />
+          </div>
         </div>
       )}
 
       {/* PIECE DETAIL DIALOG MODAL */}
       {selectedPiece && (
         <div className="fixed inset-0 bg-brand-charcoal/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-brand-cream border border-brand-clay rounded-3xl p-6 shadow-2xl max-w-lg w-full text-left space-y-6 animate-in zoom-in-95 duration-200">
+          <div className="bg-brand-cream border border-brand-clay rounded-3xl p-6 shadow-2xl max-w-3xl w-full max-h-[calc(100vh-3rem)] overflow-y-auto always-scrollbar text-left space-y-5 animate-in zoom-in-95 duration-200">
             
             {/* Modal Header */}
             <div className="flex justify-between items-center border-b border-brand-clay/60 pb-3">
@@ -827,13 +856,30 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                   <img src={selectedPiece.image} alt={selectedPiece.name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
                 </div>
                 
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   <span className="text-[9px] font-bold text-brand-sage uppercase tracking-wider block">Assigned Pottery Staff</span>
                   <div className="flex items-center gap-2">
-                    <div className="h-6 w-6 rounded-full bg-brand-terracotta text-brand-cream flex items-center justify-center font-bold text-[10px]">
+                    <div className="h-6 w-6 shrink-0 rounded-full bg-brand-terracotta text-brand-cream flex items-center justify-center font-bold text-[10px]">
                       {selectedPiece.assignedStaff?.charAt(0) || '?'}
                     </div>
-                    <span className="text-xs font-bold text-brand-charcoal">{selectedPiece.assignedStaff || 'Unassigned'}</span>
+                    {/* Reassigning is done here rather than in a separate step. */}
+                    <select
+                      value={selectedPiece.assignedStaff || ''}
+                      onChange={async e => {
+                        await updatePiece(selectedPiece.id, { assignedStaff: e.target.value });
+                        triggerToast('Piece Reassigned', `Now assigned to ${e.target.value || 'nobody'}.`, false);
+                      }}
+                      className="min-w-0 flex-1 bg-white border border-brand-clay/80 rounded-xl p-1.5 text-xs font-bold text-brand-charcoal cursor-pointer"
+                    >
+                      <option value="">Unassigned</option>
+                      {selectedPiece.assignedStaff &&
+                        !assignableStaff.some(st => st.name === selectedPiece.assignedStaff) && (
+                        <option value={selectedPiece.assignedStaff}>{selectedPiece.assignedStaff}</option>
+                      )}
+                      {assignableStaff.map(st => (
+                        <option key={st.id} value={st.name}>{st.name}</option>
+                      ))}
+                    </select>
                   </div>
                   {/* Historical assignment kept even if that staff member is no longer active */}
                   {selectedPiece.assignedStaff && !assignableStaff.some(s => s.name === selectedPiece.assignedStaff) && (
@@ -930,30 +976,6 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                   </button>
                 </div>
 
-                {/* Status history — staff member and Riyadh date/time per change */}
-                <div className="space-y-1.5 pt-1">
-                  <span className="font-bold text-brand-charcoal/50 block">Status History</span>
-                  <div className="max-h-32 overflow-y-auto space-y-1.5 bg-brand-cream/40 border border-brand-clay/50 rounded-xl p-2.5">
-                    {(selectedPiece.history || []).length === 0 ? (
-                      <p className="text-[10px] font-semibold text-brand-charcoal/40 italic">No history recorded yet.</p>
-                    ) : (
-                      [...(selectedPiece.history || [])].reverse().map((h, idx) => (
-                        <div key={`${h.timestamp}-${idx}`} className="text-[10px] font-semibold text-brand-charcoal/80 border-b border-brand-clay/25 last:border-b-0 pb-1 last:pb-0">
-                          <div className="flex justify-between gap-2">
-                            <span className={`font-bold ${h.status === 'Broken' ? 'text-red-700' : 'text-brand-charcoal'}`}>{h.status}</span>
-                            <span className="font-mono text-brand-charcoal/50">
-                              {h.riyadhTime || formatDateTime(h.timestamp)}
-                            </span>
-                          </div>
-                          <p className="text-brand-charcoal/60">
-                            by {h.user}{h.reason ? ` — ${h.reason}` : ''}
-                          </p>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-
                 {/* Status selector directly within the detail dialog */}
                 <div className="space-y-1.5 pt-1">
                   <label className="font-bold text-brand-charcoal/50 block">Advance Lifecycle State</label>
@@ -962,12 +984,14 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                     onChange={e => onAttemptStatusChange(selectedPiece.id, e.target.value as any)}
                     className="w-full bg-brand-cream border border-brand-clay rounded-xl p-2 font-bold text-brand-charcoal cursor-pointer"
                   >
-                    {/* Every stage, not just the board's columns: Collected and
-                        Broken are end-states with no column of their own, and
-                        this dropdown is one of the ways a piece reaches them.
-                        Disabled stages are not selectable, but the piece's own
-                        current stage stays listed so its status is never lost. */}
-                    {allStageNames.filter(col => selectableStatuses.includes(col) || col === selectedPiece.status)
+                    {/* Making stages only. Ready for Pickup, Collected and
+                        Broken have dedicated buttons below, and offering them
+                        here as well gave two routes to the same transition.
+                        The piece's own stage stays listed even when it is an
+                        end-state, so its status is never lost. */}
+                    {allStageNames
+                      .filter(col => !DEDICATED_BUTTON_STATUSES.includes(col) || col === selectedPiece.status)
+                      .filter(col => selectableStatuses.includes(col) || col === selectedPiece.status)
                       .map(col => (
                         <option key={col} value={col}>
                           {col}{!selectableStatuses.includes(col) ? ' (disabled)' : ''}

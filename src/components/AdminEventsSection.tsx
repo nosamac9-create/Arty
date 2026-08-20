@@ -6,8 +6,11 @@ import { formatDateTime } from '../utils/calendarConfig';
 import { 
   Sparkles, Calendar, Clock, User, Save, Search, Filter, CheckCircle2, 
   Package, Users, Phone, Mail, DollarSign, AlertCircle, X, ShieldAlert,
-  Plus, Trash2, ChevronUp, ChevronDown, Download, Upload, Image as ImageIcon
+  Plus, Trash2, Download, Upload, Image as ImageIcon
 } from 'lucide-react';
+import { LineListTextarea } from './ui/LineListTextarea';
+import { matchesQuery } from '../utils/search';
+import { AdminBirthdayPackageEditor } from './AdminBirthdayPackageEditor';
 
 /** One label/value line. Optional answers are shown as "Not provided", never dropped. */
 const DetailRow: React.FC<{ label: string; value?: string; mono?: boolean }> = ({ label, value, mono }) => (
@@ -28,7 +31,6 @@ export const AdminEventsSection: React.FC = () => {
     addBirthdayPackage,
     updateBirthdayPackage,
     deleteBirthdayPackage,
-    reorderBirthdayPackages,
     assignBookingStaff,
     staff,
     workshopSessions,
@@ -46,63 +48,26 @@ export const AdminEventsSection: React.FC = () => {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  // Draft edits per package, committed to the shared record on save
-  const [expandedPackageId, setExpandedPackageId] = useState<string | null>(null);
-  const [packageDrafts, setPackageDrafts] = useState<Record<string, BirthdayPackage>>({});
-
-  // Keep drafts in step with the shared records
-  useEffect(() => {
-    setPackageDrafts(prev => {
-      const next: Record<string, BirthdayPackage> = {};
-      birthdayPackages.forEach(p => { next[p.id] = prev[p.id] || p; });
-      return next;
-    });
-  }, [birthdayPackages]);
-
-  const setDraftField = (id: string, key: keyof BirthdayPackage, value: any) => {
-    setPackageDrafts(prev => ({
-      ...prev,
-      [id]: { ...(prev[id] || birthdayPackages.find(p => p.id === id)!), [key]: value }
-    }));
-  };
-
   /**
-   * Reads a chosen photo into the draft as a data URL — the same way workshop
-   * photos are handled, so packages and workshops store their images alike.
-   * Nothing is written until the package itself is saved.
+   * Which package is open in the editor, if any.
+   *
+   * The draft used to live here as a map keyed by package id, kept in step with
+   * the records by an effect. That is what tied editing to the list: reordering
+   * or adding a package re-ran the sync while a half-finished draft — including
+   * a freshly uploaded photo that had not been saved yet — was still in it. The
+   * editor owns its own draft now, so the two cannot interfere.
    */
-  const handlePackagePhoto = (id: string, e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = ''; // lets the same file be picked again after a remove
-    if (!file) return;
+  const [editingPackageId, setEditingPackageId] = useState<string | null>(null);
+  const editingPackage = useMemo(
+    () => (editingPackageId ? birthdayPackages.find(p => p.id === editingPackageId) || null : null),
+    [editingPackageId, birthdayPackages]
+  );
 
-    if (!file.type.startsWith('image/')) {
-      showToast('That file is not an image.');
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      showToast('That photo is over 5MB. Please choose a smaller one.');
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onloadend = () => setDraftField(id, 'image', reader.result as string);
-    reader.onerror = () => showToast('That photo could not be read. Please try again.');
-    reader.readAsDataURL(file);
-  };
-
-  const handleSavePackage = async (e: React.FormEvent, id: string) => {
-    e.preventDefault();
-    const draft = packageDrafts[id];
-    if (!draft) return;
-    if (!draft.name.trim()) {
-      showToast('Package name is required.');
-      return;
-    }
-    // Writes to the one shared record the customer site reads from.
-    const { id: _ignored, ...updates } = draft;
+  /** Writes to the one shared record the customer site reads from. */
+  const handleSavePackage = async (id: string, updates: Partial<BirthdayPackage>) => {
     await updateBirthdayPackage(id, updates);
-    showToast(`"${draft.name}" saved. The customer site now shows these details.`);
+    showToast(`"${updates.name || 'Package'}" saved. The customer site now shows these details.`);
+    setEditingPackageId(null);
   };
 
   const handleAddPackage = async () => {
@@ -143,15 +108,6 @@ export const AdminEventsSection: React.FC = () => {
     showToast(`"${name}" deleted.`);
   };
 
-  const handleMovePackage = async (index: number, direction: -1 | 1) => {
-    const target = index + direction;
-    if (target < 0 || target >= birthdayPackages.length) return;
-    const reordered = [...birthdayPackages];
-    const [moved] = reordered.splice(index, 1);
-    reordered.splice(target, 0, moved);
-    await reorderBirthdayPackages(reordered);
-  };
-
   // Table Filters & Search & Pagination
   const [tableSearch, setTableSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -174,13 +130,10 @@ export const AdminEventsSection: React.FC = () => {
 
       if (!isEventBooking) return false;
 
-      const q = tableSearch.toLowerCase();
-      const matchesSearch = 
-        (b.id || '').toLowerCase().includes(q) ||
-        (b.customerName || '').toLowerCase().includes(q) ||
-        (b.customerPhone || '').toLowerCase().includes(q) ||
-        (b.customerEmail || '').toLowerCase().includes(q) ||
-        wTitle.includes(q);
+      const matchesSearch = matchesQuery(
+        [b.id, b.customerName, b.customerPhone, b.customerEmail, b.workshopTitle, b.status],
+        tableSearch
+      );
 
       const matchesStatus = statusFilter === 'all' || b.status === statusFilter;
 
@@ -232,8 +185,20 @@ export const AdminEventsSection: React.FC = () => {
     showToast(`Booking ${id} has been cancelled.`);
   };
 
+  // The editor takes over the page, so the management view stays an overview.
+  if (editingPackage) {
+    return (
+      <AdminBirthdayPackageEditor
+        pkg={editingPackage}
+        onBack={() => setEditingPackageId(null)}
+        onSave={updates => handleSavePackage(editingPackage.id, updates)}
+        onNotify={showToast}
+      />
+    );
+  }
+
   return (
-    <div className="space-y-8 text-left pb-12 animate-in fade-in duration-300">
+    <div className="p-4 sm:p-6 space-y-8 text-left pb-12 animate-in fade-in duration-300">
       
       {/* Toast Banner */}
       {toastMessage && (
@@ -243,16 +208,14 @@ export const AdminEventsSection: React.FC = () => {
         </div>
       )}
 
-      {/* Header Banner */}
-      <div className="bg-brand-cream border border-brand-clay p-6 rounded-3xl shadow-xs flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <Sparkles className="h-5 w-5 text-brand-terracotta" />
-            <span className="text-xs font-bold uppercase tracking-wider text-brand-terracotta">Events & Socials Console</span>
-          </div>
-          <h1 className="font-display text-2xl font-bold text-brand-charcoal">Birthday Package Management</h1>
-          <p className="text-xs text-brand-charcoal/60 mt-0.5">Edit the package details customers see, and view all package reservations.</p>
+      {/* Page heading — plain on the page, like every other console section. */}
+      <div>
+        <div className="flex items-center gap-2 mb-1">
+          <Sparkles className="h-5 w-5 text-brand-terracotta" />
+          <span className="text-xs font-bold uppercase tracking-wider text-brand-terracotta">Events & Socials Console</span>
         </div>
+        <h1 className="font-display text-2xl font-bold text-brand-charcoal">Birthday Package Management</h1>
+        <p className="text-xs text-brand-charcoal/60 mt-0.5">Edit the package details customers see, and view all package reservations.</p>
       </div>
 
       {/* ========================================================== */}
@@ -285,10 +248,7 @@ export const AdminEventsSection: React.FC = () => {
           <p className="text-xs text-brand-charcoal/50 italic py-4">No birthday packages yet. Add one to publish it on the customer site.</p>
         ) : (
           <div className="space-y-4">
-            {birthdayPackages.map((pkg, index) => {
-              const isOpen = expandedPackageId === pkg.id;
-              const draft = packageDrafts[pkg.id] || pkg;
-
+            {birthdayPackages.map(pkg => {
               return (
                 <div key={pkg.id} className="border border-brand-clay/70 rounded-2xl overflow-hidden">
 
@@ -296,7 +256,7 @@ export const AdminEventsSection: React.FC = () => {
                   <div className="flex items-center justify-between gap-3 p-4 bg-brand-cream/40">
                     <button
                       type="button"
-                      onClick={() => setExpandedPackageId(isOpen ? null : pkg.id)}
+                      onClick={() => setEditingPackageId(pkg.id)}
                       className="flex items-center gap-3 text-left cursor-pointer flex-1 min-w-0"
                     >
                       {pkg.image && (
@@ -308,6 +268,9 @@ export const AdminEventsSection: React.FC = () => {
                           {pkg.price} SAR · {pkg.pricingType} · {pkg.duration}
                         </p>
                       </div>
+                      <span className="ms-auto hidden shrink-0 text-[11px] font-bold text-brand-terracotta sm:block">
+                        Edit package
+                      </span>
                     </button>
 
                     <div className="flex items-center gap-2 shrink-0">
@@ -319,24 +282,6 @@ export const AdminEventsSection: React.FC = () => {
 
                       <button
                         type="button"
-                        title="Move up"
-                        disabled={index === 0}
-                        onClick={() => handleMovePackage(index, -1)}
-                        className="p-1.5 rounded-lg border border-brand-clay/60 text-brand-charcoal/60 hover:bg-brand-sand disabled:opacity-30 cursor-pointer"
-                      >
-                        <ChevronUp className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        title="Move down"
-                        disabled={index === birthdayPackages.length - 1}
-                        onClick={() => handleMovePackage(index, 1)}
-                        className="p-1.5 rounded-lg border border-brand-clay/60 text-brand-charcoal/60 hover:bg-brand-sand disabled:opacity-30 cursor-pointer"
-                      >
-                        <ChevronDown className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
                         title="Delete package"
                         onClick={() => handleDeletePackage(pkg.id, pkg.name)}
                         className="p-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 cursor-pointer"
@@ -346,354 +291,8 @@ export const AdminEventsSection: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Package editor */}
-                  {isOpen && (
-                    <form
-                      onSubmit={e => handleSavePackage(e, pkg.id)}
-                      className="p-5 space-y-4 border-t border-brand-clay/60 text-xs"
-                    >
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="sm:col-span-2 space-y-1">
-                          <label className="font-bold text-brand-charcoal/80 block">Package Name *</label>
-                          <input
-                            type="text"
-                            required
-                            value={draft.name}
-                            onChange={e => setDraftField(pkg.id, 'name', e.target.value)}
-                            className="w-full bg-brand-cream/40 border border-brand-clay rounded-xl p-2.5 font-semibold"
-                          />
-                        </div>
-
-                        {/* Package photo — uploaded from the machine rather than
-                            pasted as a link, which is what staff actually have.
-                            A link still works for anything already hosted. */}
-                        <div className="sm:col-span-2 space-y-1">
-                          <label className="font-bold text-brand-charcoal/80 block">Package Photo</label>
-                          <div className="flex flex-col sm:flex-row items-start gap-4 p-4 rounded-2xl border-2 border-dashed border-brand-clay bg-brand-cream/40">
-                            {draft.image ? (
-                              <img
-                                src={draft.image}
-                                alt=""
-                                className="h-24 w-24 shrink-0 rounded-xl object-cover border border-brand-clay"
-                                referrerPolicy="no-referrer"
-                              />
-                            ) : (
-                              <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-xl bg-brand-sand/60 text-brand-muted">
-                                <ImageIcon className="h-7 w-7" />
-                              </div>
-                            )}
-
-                            <div className="flex-1 min-w-0 space-y-2">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  id={`pkg-photo-${pkg.id}`}
-                                  className="hidden"
-                                  onChange={e => handlePackagePhoto(pkg.id, e)}
-                                />
-                                <label
-                                  htmlFor={`pkg-photo-${pkg.id}`}
-                                  className="inline-flex items-center gap-2 cursor-pointer rounded-xl border border-brand-clay bg-brand-cream px-4 py-2 font-semibold text-brand-terracotta hover:bg-brand-sand/50 transition-colors"
-                                >
-                                  <Upload className="h-3.5 w-3.5" />
-                                  <span>{draft.image ? 'Replace photo' : 'Upload photo'}</span>
-                                </label>
-                                {draft.image && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setDraftField(pkg.id, 'image', '')}
-                                    className="rounded-xl border border-brand-clay px-3 py-2 font-semibold text-brand-muted hover:text-brand-charcoal cursor-pointer"
-                                  >
-                                    Remove
-                                  </button>
-                                )}
-                              </div>
-
-                              <p className="text-[11px] text-brand-muted">
-                                JPG or PNG, up to 5MB. Shown on the birthday packages page.
-                              </p>
-
-                              <input
-                                type="text"
-                                value={draft.image.startsWith('data:') ? '' : draft.image}
-                                placeholder="Or paste an image link"
-                                onChange={e => setDraftField(pkg.id, 'image', e.target.value)}
-                                className="w-full bg-brand-cream/60 border border-brand-clay rounded-xl p-2.5 font-semibold"
-                              />
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="sm:col-span-2 space-y-1">
-                          <label className="font-bold text-brand-charcoal/80 block">Short Description</label>
-                          <input
-                            type="text"
-                            value={draft.shortDescription}
-                            onChange={e => setDraftField(pkg.id, 'shortDescription', e.target.value)}
-                            className="w-full bg-brand-cream/40 border border-brand-clay rounded-xl p-2.5 font-semibold"
-                          />
-                        </div>
-
-                        <div className="sm:col-span-2 space-y-1">
-                          <label className="font-bold text-brand-charcoal/80 block">Full Description</label>
-                          <textarea
-                            rows={3}
-                            value={draft.fullDescription}
-                            onChange={e => setDraftField(pkg.id, 'fullDescription', e.target.value)}
-                            className="w-full bg-brand-cream/40 border border-brand-clay rounded-xl p-2.5 font-semibold"
-                          />
-                        </div>
-
-                        <div className="space-y-1">
-                          <label className="font-bold text-brand-charcoal/80 block">Price (SAR)</label>
-                          <input
-                            type="number"
-                            min={0}
-                            value={draft.price}
-                            onChange={e => setDraftField(pkg.id, 'price', Number(e.target.value) || 0)}
-                            className="w-full bg-brand-cream/40 border border-brand-clay rounded-xl p-2.5 font-semibold"
-                          />
-                        </div>
-
-                        <div className="space-y-1">
-                          <label className="font-bold text-brand-charcoal/80 block">Pricing Type</label>
-                          <select
-                            value={draft.pricingType}
-                            onChange={e => setDraftField(pkg.id, 'pricingType', e.target.value)}
-                            className="w-full bg-brand-cream/40 border border-brand-clay rounded-xl p-2.5 font-semibold"
-                          >
-                            <option value="Per child">Per child</option>
-                            <option value="Per person">Per person</option>
-                            <option value="Fixed price">Fixed price</option>
-                          </select>
-                        </div>
-
-                        <div className="space-y-1">
-                          <label className="font-bold text-brand-charcoal/80 block">Pricing Label (shown to customers)</label>
-                          <input
-                            type="text"
-                            placeholder="e.g. Per Child"
-                            value={draft.pricingLabel || ''}
-                            onChange={e => setDraftField(pkg.id, 'pricingLabel', e.target.value)}
-                            className="w-full bg-brand-cream/40 border border-brand-clay rounded-xl p-2.5 font-semibold"
-                          />
-                        </div>
-
-                        <div className="space-y-1">
-                          <label className="font-bold text-brand-charcoal/80 block">Duration</label>
-                          <input
-                            type="text"
-                            placeholder="e.g. 2 Hours"
-                            value={draft.duration}
-                            onChange={e => setDraftField(pkg.id, 'duration', e.target.value)}
-                            className="w-full bg-brand-cream/40 border border-brand-clay rounded-xl p-2.5 font-semibold"
-                          />
-                        </div>
-
-                        <div className="space-y-1">
-                          <label className="font-bold text-brand-charcoal/80 block">Deposit (SAR)</label>
-                          <input
-                            type="number"
-                            min={0}
-                            value={draft.depositAmount ?? 0}
-                            onChange={e => setDraftField(pkg.id, 'depositAmount', Number(e.target.value) || 0)}
-                            className="w-full bg-brand-cream/40 border border-brand-clay rounded-xl p-2.5 font-semibold"
-                          />
-                        </div>
-
-                        <div className="space-y-1">
-                          <label className="font-bold text-brand-charcoal/80 block">Minimum Guests</label>
-                          <input
-                            type="number"
-                            min={1}
-                            value={draft.minGuests}
-                            onChange={e => setDraftField(pkg.id, 'minGuests', Number(e.target.value) || 1)}
-                            className="w-full bg-brand-cream/40 border border-brand-clay rounded-xl p-2.5 font-semibold"
-                          />
-                        </div>
-
-                        <div className="space-y-1">
-                          <label className="font-bold text-brand-charcoal/80 block">Maximum Guests</label>
-                          <input
-                            type="number"
-                            min={1}
-                            value={draft.maxGuests}
-                            onChange={e => setDraftField(pkg.id, 'maxGuests', Number(e.target.value) || 1)}
-                            className="w-full bg-brand-cream/40 border border-brand-clay rounded-xl p-2.5 font-semibold"
-                          />
-                        </div>
-
-                        <div className="space-y-1">
-                          <label className="font-bold text-brand-charcoal/80 block">Age Information</label>
-                          <input
-                            type="text"
-                            placeholder="e.g. 4+ years"
-                            value={draft.ageInformation}
-                            onChange={e => setDraftField(pkg.id, 'ageInformation', e.target.value)}
-                            className="w-full bg-brand-cream/40 border border-brand-clay rounded-xl p-2.5 font-semibold"
-                          />
-                        </div>
-
-                        <div className="space-y-1">
-                          <label className="font-bold text-brand-charcoal/80 block">Status</label>
-                          <select
-                            value={draft.status}
-                            onChange={e => setDraftField(pkg.id, 'status', e.target.value)}
-                            className="w-full bg-brand-cream/40 border border-brand-clay rounded-xl p-2.5 font-semibold"
-                          >
-                            <option value="Published">Published (visible to customers)</option>
-                            <option value="Draft">Draft (hidden from customers)</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      {/* List fields — one entry per line */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-brand-clay/50">
-                        {([
-                          ['includedItems', 'Includes (one per line)'],
-                          ['activityChoices', 'Activity Choices (one per line)'],
-                          ['additionalInfo', 'Additional Information (one per line)'],
-                          ['availableDays', 'Available Days'],
-                          ['availableTimes', 'Available Times']
-                        ] as const).map(([key, label]) => (
-                          <div key={key} className="space-y-1">
-                            <label className="font-bold text-brand-charcoal/80 block">{label}</label>
-                            <textarea
-                              rows={3}
-                              placeholder="One entry per line"
-                              value={(draft[key] || []).join('\n')}
-                              onChange={e => setDraftField(pkg.id, key, e.target.value.split('\n').map(v => v.trim()).filter(Boolean))}
-                              className="w-full bg-brand-cream/40 border border-brand-clay rounded-xl p-2.5 font-semibold"
-                            />
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* Customized cake — structured, editable rows */}
-                      <div className="pt-2 border-t border-brand-clay/50 space-y-3">
-                        <div className="space-y-1">
-                          <label className="font-bold text-brand-charcoal/80 block">Cake Description</label>
-                          <input
-                            type="text"
-                            placeholder="Send us your cake design and we will do it."
-                            value={draft.cakeDescription}
-                            onChange={e => setDraftField(pkg.id, 'cakeDescription', e.target.value)}
-                            className="w-full bg-brand-cream/40 border border-brand-clay rounded-xl p-2.5 font-semibold"
-                          />
-                        </div>
-
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <label className="font-bold text-brand-charcoal/80 block">Cake Sizes &amp; Prices</label>
-                            <button
-                              type="button"
-                              onClick={() => setDraftField(pkg.id, 'cakeSizes', [
-                                ...(draft.cakeSizes || []),
-                                { id: `cake-${Date.now()}`, label: 'New size', price: 0 }
-                              ])}
-                              className="text-[11px] font-bold text-brand-terracotta hover:underline flex items-center gap-1 cursor-pointer"
-                            >
-                              <Plus className="h-3 w-3" />
-                              <span>Add Size</span>
-                            </button>
-                          </div>
-
-                          {(draft.cakeSizes || []).length === 0 ? (
-                            <p className="text-[11px] text-brand-charcoal/50 italic">No cake sizes listed.</p>
-                          ) : (
-                            <div className="space-y-1.5">
-                              {(draft.cakeSizes || []).map((size, sizeIdx) => (
-                                <div key={size.id} className="flex items-center gap-2">
-                                  <input
-                                    type="text"
-                                    placeholder="e.g. Small (15 cm)"
-                                    value={size.label}
-                                    onChange={e => setDraftField(pkg.id, 'cakeSizes',
-                                      (draft.cakeSizes || []).map((c, i) => i === sizeIdx ? { ...c, label: e.target.value } : c))}
-                                    className="flex-1 bg-brand-cream/40 border border-brand-clay rounded-xl p-2 font-semibold"
-                                  />
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    value={size.price}
-                                    onChange={e => setDraftField(pkg.id, 'cakeSizes',
-                                      (draft.cakeSizes || []).map((c, i) => i === sizeIdx ? { ...c, price: Number(e.target.value) || 0 } : c))}
-                                    className="w-24 bg-brand-cream/40 border border-brand-clay rounded-xl p-2 font-semibold"
-                                  />
-                                  <span className="text-[11px] font-bold text-brand-charcoal/50">SAR</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => setDraftField(pkg.id, 'cakeSizes',
-                                      (draft.cakeSizes || []).filter((_, i) => i !== sizeIdx))}
-                                    className="p-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 cursor-pointer"
-                                    title="Remove size"
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </button>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Trainer and delivery information */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-brand-clay/50">
-                        <div className="space-y-1">
-                          <label className="font-bold text-brand-charcoal/80 block">Trainer Information</label>
-                          <input
-                            type="text"
-                            placeholder="Includes Professional Trainer/Artist upon request."
-                            value={draft.trainerInfo}
-                            onChange={e => setDraftField(pkg.id, 'trainerInfo', e.target.value)}
-                            className="w-full bg-brand-cream/40 border border-brand-clay rounded-xl p-2.5 font-semibold"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="font-bold text-brand-charcoal/80 block">Delivery / Pickup Information</label>
-                          <input
-                            type="text"
-                            placeholder="Pottery will be delivered or collected after firing."
-                            value={draft.deliveryInfo}
-                            onChange={e => setDraftField(pkg.id, 'deliveryInfo', e.target.value)}
-                            className="w-full bg-brand-cream/40 border border-brand-clay rounded-xl p-2.5 font-semibold"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-brand-clay/50">
-                        <div className="space-y-1">
-                          <label className="font-bold text-brand-charcoal/80 block">Terms</label>
-                          <textarea
-                            rows={3}
-                            value={draft.terms}
-                            onChange={e => setDraftField(pkg.id, 'terms', e.target.value)}
-                            className="w-full bg-brand-cream/40 border border-brand-clay rounded-xl p-2.5 font-semibold"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="font-bold text-brand-charcoal/80 block">Customer-Visible Notes</label>
-                          <textarea
-                            rows={3}
-                            value={draft.customerNotes}
-                            onChange={e => setDraftField(pkg.id, 'customerNotes', e.target.value)}
-                            className="w-full bg-brand-cream/40 border border-brand-clay rounded-xl p-2.5 font-semibold"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="pt-3 border-t border-brand-clay/60 flex justify-end">
-                        <button
-                          type="submit"
-                          className="cursor-pointer px-5 py-2.5 bg-brand-terracotta hover:bg-brand-terracotta/90 text-brand-cream rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs"
-                        >
-                          <Save className="h-4 w-4" />
-                          <span>Save Package</span>
-                        </button>
-                      </div>
-                    </form>
-                  )}
+                  {/* The editor is its own view now — see
+                      AdminBirthdayPackageEditor. */}
                 </div>
               );
             })}
@@ -1003,7 +602,6 @@ export const AdminEventsSection: React.FC = () => {
                   label="Package selected"
                   value={selectedEventPackage?.name || eventDetails?.packageName || selectedEventBooking.workshopTitle}
                 />
-                <DetailRow label="Package ID" value={eventDetails?.packageId} mono />
                 <DetailRow label="Event date" value={eventDetails?.eventDate || selectedEventBooking.date} mono />
                 <DetailRow label="Event time" value={eventDetails?.eventTime || selectedEventBooking.time} mono />
                 <DetailRow label="Number of guests" value={String(eventDetails?.guestCount ?? selectedEventBooking.participants)} />
@@ -1021,7 +619,7 @@ export const AdminEventsSection: React.FC = () => {
                     All Submitted Form Answers
                   </h3>
                   <p className="text-[10px] text-brand-charcoal/50">
-                    Stored against stable field keys, so answers stay readable if labels are renamed later.
+                    Everything the customer filled in on the reservation form.
                   </p>
                   {eventDetails.fieldValues.map(field => {
                     const isImageField = !!field.imageUrl || /photo|image/i.test(field.key);
@@ -1031,7 +629,6 @@ export const AdminEventsSection: React.FC = () => {
                         <div key={field.key} className="border-b border-brand-clay/25 last:border-b-0 py-2 space-y-1.5">
                           <span className="text-brand-charcoal/60 font-semibold block">
                             {field.label}
-                            <span className="text-[9px] font-mono text-brand-charcoal/35 ml-1">({field.key})</span>
                           </span>
 
                           {field.imageUrl ? (
@@ -1074,7 +671,6 @@ export const AdminEventsSection: React.FC = () => {
                       <div key={field.key} className="flex justify-between gap-3 border-b border-brand-clay/25 last:border-b-0 py-1">
                         <span className="text-brand-charcoal/60 font-semibold">
                           {field.label}
-                          <span className="text-[9px] font-mono text-brand-charcoal/35 ml-1">({field.key})</span>
                         </span>
                         <span className="font-bold text-brand-charcoal text-right">
                           {field.value || <span className="text-brand-charcoal/30 italic">Not provided</span>}

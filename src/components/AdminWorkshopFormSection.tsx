@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useApp } from '../context/AppContext';
 import {
   RecurringScheduleRule, isWorkshopOptionEnabled,
@@ -25,12 +26,12 @@ import {
   Search, ArrowUpDown, ChevronUp, ChevronDown, Layers, Calendar, User, Clock, RefreshCw
 } from 'lucide-react';
 import { DateInput } from './DateInput';
+import { matchesQuery } from '../utils/search';
 
 export const AdminWorkshopFormSection: React.FC = () => {
   const { 
     addWorkshop, 
     updateWorkshop, 
-    setAdminTab, 
     setCustomerTab, 
     editingWorkshopId, 
     setEditingWorkshopId,
@@ -212,6 +213,81 @@ export const AdminWorkshopFormSection: React.FC = () => {
     setCustomFieldValues({});
     setCustomTagInputs({});
     setErrorTouched(false);
+    // Whatever the form has just been set to becomes the new clean state.
+    setBaselinePending(true);
+  };
+
+  /**
+   * Is there unsaved work?
+   *
+   * Derived by comparing the whole form against the state it was last reset or
+   * loaded into, rather than by each control reporting a change. A per-field
+   * flag would have to be added to every input — and forgotten on the next one
+   * — while this covers images, materials, sessions and admin-defined custom
+   * fields for free.
+   */
+  const formSnapshot = useMemo(() => JSON.stringify({
+    title, category, categoryInput, hook, description, fullDetails, price, duration,
+    capacity, tutorStaffId, room, roomId, status, skillLevel, images, materials,
+    ageRange, sessions, recurringSchedules, customFieldValues, customTagInputs
+  }), [
+    title, category, categoryInput, hook, description, fullDetails, price, duration,
+    capacity, tutorStaffId, room, roomId, status, skillLevel, images, materials,
+    ageRange, sessions, recurringSchedules, customFieldValues, customTagInputs
+  ]);
+
+  const [pristineSnapshot, setPristineSnapshot] = useState<string | null>(null);
+  const [baselinePending, setBaselinePending] = useState(true);
+
+  /*
+   * The baseline is captured a render after it is requested, not inside
+   * `resetForm`: those setters are queued, so reading the snapshot immediately
+   * would record the values being replaced.
+   */
+  useEffect(() => {
+    if (!baselinePending) return;
+    setPristineSnapshot(formSnapshot);
+    setBaselinePending(false);
+  }, [baselinePending, formSnapshot]);
+
+  const isFormDirty = pristineSnapshot !== null && formSnapshot !== pristineSnapshot;
+
+  /**
+   * The action bar belongs to an in-progress workshop, so it appears when one
+   * is being edited or when a new one has been touched at all — and goes away
+   * again on publish, save, cancel or reset, each of which resets the form and
+   * therefore the baseline.
+   */
+  const showActionBar = !!editingWorkshopId || isFormDirty;
+
+  /**
+   * Pins the sessions grid to exactly two rows.
+   *
+   * The height comes from a real card rather than a guessed pixel value: a
+   * session card grows a line when its room or instructor name wraps, and a
+   * fixed cap would then slice the second row in half. Re-measured whenever a
+   * card resizes or the session count changes.
+   */
+  const sessionsGridRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const grid = sessionsGridRef.current;
+    const firstCard = grid?.firstElementChild as HTMLElement | null;
+    if (!grid || !firstCard) return;
+
+    const apply = () => {
+      grid.style.setProperty('--session-row-height', `${firstCard.offsetHeight}px`);
+    };
+    apply();
+
+    const observer = new ResizeObserver(apply);
+    observer.observe(firstCard);
+    return () => observer.disconnect();
+  }, [sessions.length]);
+
+  /** The top of the form, so an edit starts where the fields are. */
+  const formTopRef = useRef<HTMLDivElement>(null);
+  const scrollFormIntoView = () => {
+    formTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   // Load data for editing
@@ -258,6 +334,12 @@ export const AdminWorkshopFormSection: React.FC = () => {
         // Admin-created field values, kept even for fields later disabled.
         setCustomFieldValues(ws.customFields || {});
         setErrorTouched(false);
+        // The loaded workshop is the clean state; edits are measured from here.
+        setBaselinePending(true);
+        // The Edit buttons live in the table far below the form, so loading a
+        // workshop without moving left staff staring at the list they just
+        // clicked in, with no sign anything had happened.
+        scrollFormIntoView();
       }
     } else {
       resetForm();
@@ -408,8 +490,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
   // Process data for category combobox filter
   const filteredCategories = useMemo(() => {
     if (!categoryInput.trim()) return dbCategories;
-    const q = categoryInput.toLowerCase();
-    return dbCategories.filter(c => c.name.toLowerCase().includes(q));
+    return dbCategories.filter(c => matchesQuery([c.name], categoryInput));
   }, [dbCategories, categoryInput]);
 
   /**
@@ -1132,10 +1213,16 @@ export const AdminWorkshopFormSection: React.FC = () => {
   };
 
   return (
-    <div className="p-4 sm:p-6 text-left bg-brand-cream min-h-full min-w-0 pb-36 relative animate-in fade-in duration-300">
+    <div className={`p-4 sm:p-6 text-left bg-brand-cream min-h-full min-w-0 relative animate-in fade-in duration-300 ${
+      showActionBar ? 'pb-36' : 'pb-8'
+    }`}>
       
-      {/* Page Title & Edit Mode indicator */}
-      <div className="mb-8 pb-4 border-b border-brand-clay/60 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      {/* Page Title & Edit Mode indicator. Also the scroll anchor: an edit
+          starts here, where the "Editing" heading and the first fields are. */}
+      <div
+        ref={formTopRef}
+        className="mb-8 pb-4 border-b border-brand-clay/60 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 scroll-mt-6"
+      >
         <div>
           <h1 className="font-display text-2xl font-bold text-brand-charcoal">
             {editingWorkshopId ? (
@@ -1649,10 +1736,26 @@ export const AdminWorkshopFormSection: React.FC = () => {
             </div>
           </div>
 
+
+          </div>
+
+        {/* SESSIONS — full width beneath both columns. In the 5-column
+            side rail this became an extremely long vertical strip; across
+            the whole grid the same rows fit several to a line. */}
+        <div className="lg:col-span-12">
           {/* Section: Sessions repeating rows */}
           <div className="bg-white border border-brand-clay/70 rounded-2xl p-4 sm:p-5 shadow-2xs space-y-4 min-w-0 overflow-hidden">
-            <div className="flex flex-wrap gap-2 justify-between items-center">
-              <h4 className="text-xs font-bold uppercase tracking-widest text-brand-sage">Sessions Calendar</h4>
+            {/* Sits above the scroll area, so the heading and Add Session stay
+                put while sessions 7+ scroll past underneath. */}
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
+              <h4 className="text-xs font-bold uppercase tracking-widest text-brand-sage">
+                Sessions Calendar
+                {sessions.length > 0 && (
+                  <span className="text-brand-charcoal/45 ltr-numerals">
+                    {' · '}{sessions.length} session{sessions.length === 1 ? '' : 's'}
+                  </span>
+                )}
+              </h4>
               <button
                 type="button"
                 onClick={handleAddSession}
@@ -1663,7 +1766,15 @@ export const AdminWorkshopFormSection: React.FC = () => {
               </button>
             </div>
 
-            <div className="space-y-3">
+            {/* Three across, two rows deep: six sessions visible, the rest
+                reached by scrolling inside this box. `session-grid-2-rows`
+                sets the height from the row height itself, so it stays two
+                rows however tall a card renders — a fixed pixel cap would cut
+                the second row in half as soon as a card grew a line. */}
+            <div
+              ref={sessionsGridRef}
+              className="session-grid-2-rows grid min-h-0 grid-cols-1 gap-3 overflow-y-auto always-scrollbar md:grid-cols-2 xl:grid-cols-3"
+            >
               {sessions.map((sess) => (
                 <div 
                   key={sess.id}
@@ -1793,7 +1904,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
                       <span className="bg-brand-sand/40 border border-brand-clay/60 p-0.5 rounded font-bold text-xs text-brand-charcoal w-12 text-center">
                         {sess.spotsLeft}
                       </span>
-                      
+                    
                       {sess.isFull ? (
                         <span className="text-[9px] bg-red-100 text-red-800 border border-red-200 px-1.5 py-0.5 rounded font-extrabold uppercase">
                           Fully Booked
@@ -1816,8 +1927,8 @@ export const AdminWorkshopFormSection: React.FC = () => {
                 </div>
               ))}
             </div>
+        </div>
 
-          </div>
 
         </div>
 
@@ -2136,8 +2247,14 @@ export const AdminWorkshopFormSection: React.FC = () => {
 
       </div>
 
-      {/* STICKY FOOTER ACTION BAR */}
-      <div className="fixed bottom-0 left-0 lg:left-64 right-0 z-40 bg-brand-cream border-t border-brand-clay p-4 flex justify-between items-center shadow-2xl animate-in slide-in-from-bottom duration-300">
+      {/* STICKY FOOTER ACTION BAR
+          Portalled to the body. `.page-transition` wraps every console page and
+          runs a filling `transform` animation, which makes it the containing
+          block for fixed children — so `bottom-0` was resolving to the bottom
+          of the page content rather than the window, which is why the bar was
+          clipped instead of sitting on the viewport edge. */}
+      {showActionBar && createPortal(
+      <div className="fixed bottom-0 left-0 lg:left-64 right-0 z-40 flex flex-wrap items-center justify-between gap-3 border-t border-brand-clay bg-brand-cream p-4 shadow-2xl animate-in slide-in-from-bottom duration-300">
         <button
           type="button"
           onClick={handleSaveDraft}
@@ -2153,12 +2270,11 @@ export const AdminWorkshopFormSection: React.FC = () => {
             type="button"
             disabled={isSaving}
             onClick={() => {
-              if (editingWorkshopId) {
-                setEditingWorkshopId(null);
-                resetForm();
-              } else {
-                setAdminTab('dashboard');
-              }
+              // Cancel abandons the draft, it does not leave the page — routing
+              // to the Dashboard lost the rest of the workshop list too.
+              setEditingWorkshopId(null);
+              resetForm();
+              scrollFormIntoView();
             }}
             className="cursor-pointer px-5 py-3 text-xs font-bold text-brand-charcoal/60 hover:text-brand-charcoal disabled:opacity-50"
           >
@@ -2175,7 +2291,9 @@ export const AdminWorkshopFormSection: React.FC = () => {
             <span>{isSaving ? 'Saving...' : (editingWorkshopId ? 'Update Workshop' : 'Publish Workshop')}</span>
           </button>
         </div>
-      </div>
+      </div>,
+      document.body
+      )}
 
     </div>
   );

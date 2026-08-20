@@ -174,6 +174,45 @@ balloons {
   balloons { display: none; }
 }
 
+/* =============================================================================
+   CONSOLE MODAL
+   Two declarations each: the vh line is the fallback, the dvh line wins where
+   it is supported. dvh tracks Safari's collapsing toolbars, so the card cannot
+   end up taller than the visible window on a phone or a short laptop screen.
+   ============================================================================= */
+
+.console-modal-overlay {
+  height: 100vh;
+  height: 100dvh;
+}
+
+.console-modal-card {
+  max-height: calc(100vh - 3rem);
+  max-height: calc(100dvh - 3rem);
+}
+
+/* =============================================================================
+   SESSIONS CALENDAR
+   Two rows of cards, whatever a card's own height turns out to be: the grid's
+   auto rows are fixed to the first row's height, so the visible box is exactly
+   two of them plus the gap between. Sessions beyond the sixth scroll inside.
+   ============================================================================= */
+
+.session-grid-2-rows {
+  /* Cards are uniform, so every row matches the tallest card in row one. */
+  grid-auto-rows: min-content;
+  max-height: calc((2 * var(--session-row-height, 6.5rem)) + 0.75rem);
+}
+
+/* One card per row below `md`, so two rows would show only two sessions. Three
+   rows keeps the section a similar size without becoming taller than the page
+   it is meant to shorten. */
+@media (max-width: 767px) {
+  .session-grid-2-rows {
+    max-height: calc((3 * var(--session-row-height, 6.5rem)) + (2 * 0.75rem));
+  }
+}
+
 /* Overlay scrollbars (the macOS default) fade out when idle, so a list that
    scrolls looks identical to one that does not until you try. These lists are
    how staff find a customer among many, so the bar is drawn permanently:
