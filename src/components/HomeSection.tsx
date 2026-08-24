@@ -652,62 +652,80 @@ export const HomeSection: React.FC = () => {
             <motion.div
               key="custom-events-contact"
               {...customEventsSwap}
-              className="relative"
+              /* Laid straight onto the slab — no wrapper card of its own. The
+                 minimum height is the photograph's on the other face, so the
+                 slab stays roughly the same size through the swap instead of
+                 collapsing; the content centres in it rather than leaving a
+                 band of empty sand underneath. */
+              className="relative text-start lg:min-h-[26rem] lg:flex lg:flex-col lg:justify-center"
             >
-              <div className="bg-brand-cream border-2 border-brand-terracotta/40 rounded-3xl p-6 md:p-8 max-w-2xl mx-auto text-start shadow-card-sm space-y-6">
-                <div className="flex items-center gap-3 pb-4 border-b border-brand-clay">
+              {/* Same five/seven split as the pitch: the heading holds the
+                  narrow column, the details take the wider one. */}
+              <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-12 lg:gap-14">
+
+                <div className="lg:col-span-5">
                   <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-terracotta text-brand-cream shrink-0">
                     <UserCheck className="h-6 w-6" />
                   </div>
-                  <div>
-                    <h3 className="font-display text-xl font-semibold text-brand-charcoal">Owner & Event Host Contact</h3>
-                    <p className="text-xs text-brand-ink">Connect directly with our owner to craft custom events, corporate gatherings, or private parties.</p>
-                  </div>
+                  <h3 className="mt-5 font-display text-[28px] leading-tight font-semibold text-brand-charcoal md:text-[34px]">
+                    Owner &amp; Event Host Contact
+                  </h3>
+                  <p className="mt-4 max-w-md text-[15px] leading-[1.75] text-brand-ink">
+                    Connect directly with our owner to craft custom events, corporate gatherings, or private parties.
+                  </p>
+
+                  {/* Reverses the swap — the pitch, button and photograph wipe
+                      back in. The button that opened this is part of the face
+                      that just left, so the way back lives here. Sits where
+                      that button sat, so the control does not appear to jump
+                      across the card between the two faces. */}
+                  <button
+                    type="button"
+                    onClick={() => setShowOwnerContact(false)}
+                    className="group mt-8 cursor-pointer inline-flex items-center gap-2 rounded-full border border-brand-clay bg-brand-cream px-6 py-3.5 text-sm font-semibold text-brand-ink transition-colors hover:text-brand-charcoal hover:border-brand-muted active:scale-[0.98]"
+                  >
+                    <ArrowLeft className="h-4 w-4 transition-transform duration-200 group-hover:-translate-x-0.5 flip-rtl" />
+                    <span>Back</span>
+                  </button>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-                  <div className="bg-brand-sand/40 p-4 rounded-2xl border border-brand-clay flex items-start gap-3">
-                    <Phone className="h-5 w-5 text-brand-terracotta shrink-0 mt-0.5" />
-                    <div>
-                      <span className="text-[10px] font-semibold text-brand-muted uppercase block">Direct Phone & WhatsApp</span>
-                      <a href="tel:+966501234567" className="font-semibold text-brand-charcoal hover:text-brand-terracotta font-mono">
-                        +966 50 123 4567
-                      </a>
+                <div className="space-y-4 lg:col-span-7">
+                  {/* Cream on sand, where these sub-boxes used to be sand on
+                      cream — the tones swap with the background they now sit
+                      on so the blocks stay legible. */}
+                  <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
+                    <div className="bg-brand-cream p-5 rounded-2xl border border-brand-clay flex items-start gap-3">
+                      <Phone className="h-5 w-5 text-brand-terracotta shrink-0 mt-0.5" />
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-semibold text-brand-muted uppercase block">Direct Phone &amp; WhatsApp</span>
+                        <a href="tel:+966501234567" className="mt-1 block font-semibold text-brand-charcoal hover:text-brand-terracotta font-mono ltr-numerals">
+                          +966 50 123 4567
+                        </a>
+                      </div>
+                    </div>
+
+                    <div className="bg-brand-cream p-5 rounded-2xl border border-brand-clay flex items-start gap-3">
+                      <Mail className="h-5 w-5 text-brand-terracotta shrink-0 mt-0.5" />
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-semibold text-brand-muted uppercase block">Owner Email</span>
+                        <a href="mailto:events@artycafe.sa" className="mt-1 block break-words font-semibold text-brand-charcoal hover:text-brand-terracotta">
+                          events@artycafe.sa
+                        </a>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="bg-brand-sand/40 p-4 rounded-2xl border border-brand-clay flex items-start gap-3">
-                    <Mail className="h-5 w-5 text-brand-terracotta shrink-0 mt-0.5" />
-                    <div>
-                      <span className="text-[10px] font-semibold text-brand-muted uppercase block">Owner Email</span>
-                      <a href="mailto:events@artycafe.sa" className="font-semibold text-brand-charcoal hover:text-brand-terracotta">
-                        events@artycafe.sa
-                      </a>
-                    </div>
+                  <div className="bg-brand-cream p-5 rounded-2xl border border-brand-clay text-[13px] text-brand-ink space-y-1.5">
+                    <p className="font-semibold text-brand-charcoal flex items-center gap-1.5">
+                      <Star className="h-3.5 w-3.5 text-brand-terracotta fill-brand-terracotta" />
+                      Bespoke Custom Event Planning
+                    </p>
+                    <p className="leading-[1.7]">
+                      Have a unique theme, adult pottery party, corporate team-building, or bridal shower in mind? Reach out via WhatsApp or email for custom quotes, private venue buyout availability, and tailored artist arrangements!
+                    </p>
                   </div>
                 </div>
 
-                <div className="bg-brand-sand/40 p-4 rounded-2xl border border-brand-clay text-xs text-brand-ink space-y-1">
-                  <p className="font-semibold text-brand-charcoal flex items-center gap-1.5">
-                    <Star className="h-3.5 w-3.5 text-brand-terracotta fill-brand-terracotta" />
-                    Bespoke Custom Event Planning
-                  </p>
-                  <p className="leading-relaxed">
-                    Have a unique theme, adult pottery party, corporate team-building, or bridal shower in mind? Reach out via WhatsApp or email for custom quotes, private venue buyout availability, and tailored artist arrangements!
-                  </p>
-                </div>
-
-                {/* Reverses the swap — the pitch, button and photograph wipe
-                    back in. The button that opened this is part of the face
-                    that just left, so the way back lives here. */}
-                <button
-                  type="button"
-                  onClick={() => setShowOwnerContact(false)}
-                  className="group cursor-pointer inline-flex items-center gap-2 rounded-full border border-brand-clay bg-brand-sand/40 px-5 py-3 text-sm font-semibold text-brand-ink transition-colors hover:text-brand-charcoal hover:border-brand-muted active:scale-[0.98]"
-                >
-                  <ArrowLeft className="h-4 w-4 transition-transform duration-200 group-hover:-translate-x-0.5 flip-rtl" />
-                  <span>Back</span>
-                </button>
               </div>
             </motion.div>
           )}
