@@ -16,9 +16,7 @@ import { BirthdayBalloons } from './ui/BirthdayBalloons';
 import { AppImage } from './ui/AppImage';
 import {
   ContainerStagger,
-  ContainerAnimated,
-  GalleryGrid,
-  GalleryGridCell
+  ContainerAnimated
 } from './ui/CtaSectionWithGallery';
 import { formatDate } from '../utils/calendarConfig';
 import { isWorkshopFullyBooked } from '../utils/queueUtils';
@@ -216,20 +214,26 @@ export const HomeSection: React.FC = () => {
       {/* FEATURED WORKSHOPS — a white full-bleed band, so the cards read against
           a clean backdrop instead of blending into the cream page. */}
       <section className="bg-white border-y border-brand-clay/60 py-16 md:py-20">
-      <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-10 px-4 sm:px-6 lg:grid-cols-2 lg:gap-16 lg:px-8">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
 
-        {/* Left: the section's own words, played in as a stagger. */}
-        <ContainerStagger className="text-start">
-          <ContainerAnimated className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-sage">
-            This week
-          </ContainerAnimated>
-          <ContainerAnimated className="mt-2 font-display text-3xl md:text-[38px] font-semibold text-brand-charcoal">
-            <h2>Featured Workshops</h2>
-          </ContainerAnimated>
-          <ContainerAnimated className="mt-3 max-w-xl text-brand-ink">
-            Led by professional artisan tutors. Spaces are kept tight for custom, hands-on feedback.
-          </ContainerAnimated>
-          <ContainerAnimated className="mt-7">
+        {/* Header — the words and the View All action share one row, the action
+            sitting against the trailing edge on the same baseline as the
+            heading. The whole row is one stagger, so the button still plays in
+            on its own beat as the last line of the sequence. */}
+        <ContainerStagger className="flex flex-col gap-6 text-start sm:flex-row sm:items-end sm:justify-between sm:gap-10">
+          <div className="min-w-0">
+            <ContainerAnimated className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-sage">
+              This week
+            </ContainerAnimated>
+            <ContainerAnimated className="mt-2 font-display text-3xl md:text-[38px] font-semibold text-brand-charcoal">
+              <h2>Featured Workshops</h2>
+            </ContainerAnimated>
+            <ContainerAnimated className="mt-3 max-w-xl text-brand-ink">
+              Led by professional artisan tutors. Spaces are kept tight for custom, hands-on feedback.
+            </ContainerAnimated>
+          </div>
+
+          <ContainerAnimated className="shrink-0">
             <button
               onClick={() => {
                 setWorkshopsInitialCategory('All');
@@ -243,19 +247,31 @@ export const HomeSection: React.FC = () => {
           </ContainerAnimated>
         </ContainerStagger>
 
-        {/* Right: the real workshop cards, in the offset grid. Same cards and
-            same live fields as before — only the arrangement is new. */}
-        <GalleryGrid>
+        {/* One row of three, not the offset two-column grid this used to use:
+            with three cards that grid always left the third stranded below a
+            gap. Equal columns, stretched cells and h-full cards, so the three
+            share a top and bottom edge and their price rows line up.
+            Same cards, same fields, same click — only the arrangement is new. */}
+        <div className="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-6 lg:mt-12 lg:grid-cols-3 items-stretch">
           {featuredWorkshops.map((ws, index) => (
-            <GalleryGridCell key={ws.id} index={index}>
+            <ScrollReveal
+              key={ws.id}
+              once
+              viewOptions={{ once: true, amount: 0.3, margin: '0px 0px -80px 0px' }}
+              transition={{ delay: index * 0.12, duration: 0.5, ease: 'easeOut' }}
+              variants={{ hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0 } }}
+              className="h-full"
+            >
             <div
               onClick={() => handleCardClick(ws.id)}
               className="group cursor-pointer rounded-[22px] border border-brand-clay/60 bg-white shadow-card hover:shadow-card hover:-translate-y-1 transition-all duration-300 text-start flex flex-col h-full overflow-hidden"
             >
               {/* Photo — flush with the card's top and side edges. A fixed
                   height (not aspect-video) so every card's image locks to the
-                  same box regardless of the source photo's own dimensions. */}
-              <div className="relative h-48 sm:h-52 shrink-0 bg-brand-sand">
+                  same box regardless of the source photo's own dimensions.
+                  Shorter at lg, where three cards share the row: the card is
+                  narrower there, and the old height left it tall and thin. */}
+              <div className="relative h-48 sm:h-52 lg:h-44 shrink-0 bg-brand-sand">
                 <AppImage
                   src={ws.image}
                   alt={ws.title}
@@ -302,9 +318,9 @@ export const HomeSection: React.FC = () => {
                 </div>
               </div>
             </div>
-            </GalleryGridCell>
+            </ScrollReveal>
           ))}
-        </GalleryGrid>
+        </div>
 
       </div>
       </section>
