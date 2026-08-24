@@ -17,16 +17,19 @@
 import { Workshop, WorkshopSessionRecord, Booking, QueueItem } from '../types';
 import { getSessionSeatUsage, isActiveBookingRecord } from './queueUtils';
 import { normalizeDateString, timeToMinutes } from './timeUtils';
+import { getRiyadhDateString } from './dateUtils';
 
 /** The carousel never shows more than this, however many qualify. */
 export const FEATURED_WORKSHOPS_MAX = 4;
 
 /**
- * "This week" is the next seven days inclusive of today, not a Sun–Sat block.
- * The project has no week-boundary helper to reuse, and a calendar week would
- * make the section empty every Friday evening for a workshop running Monday.
+ * "This week" is the real calendar week, Sunday to Saturday — the convention
+ * the console's own This Week filters already use (AdminBookingsSection's
+ * booking filter and AdminStaffSection's schedule both take Sunday as day
+ * zero). A workshop running Monday is next week's, not this week's, even
+ * though it falls inside the next seven days.
  */
-const WEEK_LENGTH_DAYS = 7;
+const WEEK_STARTS_ON = 0; // Sunday, matching JS getDay()/getUTCDay().
 
 /** Rolling, so the ranking never resets on the 1st of the month. */
 const RANKING_WINDOW_DAYS = 30;
@@ -48,6 +51,30 @@ function addDays(dateStr: string, days: number): string {
   const [year, month, day] = normalizeDateString(dateStr).split('-').map(Number);
   const stamp = Date.UTC(year, (month || 1) - 1, day || 1) + days * 86_400_000;
   return new Date(stamp).toISOString().slice(0, 10);
+}
+
+/** Day of the week for a calendar date, read in UTC for the same reason. */
+function weekdayOf(dateStr: string): number {
+  const [year, month, day] = normalizeDateString(dateStr).split('-').map(Number);
+  return new Date(Date.UTC(year, (month || 1) - 1, day || 1)).getUTCDay();
+}
+
+/**
+ * The Riyadh calendar date a booking was created on.
+ *
+ * `createdAt` is an instant (`timestamptz` in Postgres, `toISOString()` in
+ * `addBooking`), so it has to be read in the studio's timezone before being
+ * compared against a Riyadh calendar window — a booking taken at 1am Riyadh is
+ * the previous day in UTC, and would otherwise fall out of the window a day
+ * early. Bookings written before the field existed fall back to the session
+ * date, which is the only other date they carry.
+ */
+function bookingDateKey(booking: Booking): string {
+  if (booking.createdAt) {
+    const created = new Date(booking.createdAt);
+    if (!Number.isNaN(created.getTime())) return getRiyadhDateString(created);
+  }
+  return normalizeDateString(booking.date);
 }
 
 interface Ranked {
@@ -75,7 +102,9 @@ export function selectFeaturedWorkshops(
   const { workshops, workshopSessions, bookings, queue = [] } = sources;
 
   const today = normalizeDateString(todayDateStr);
-  const weekEnd = addDays(today, WEEK_LENGTH_DAYS - 1);
+  // Saturday of the week today falls in. The lower bound of the search stays
+  // `today` regardless, since a session earlier this week has already run.
+  const weekEnd = addDays(today, 6 - ((weekdayOf(today) - WEEK_STARTS_ON + 7) % 7));
   // Inclusive of today, so a 30-day window is today minus 29.
   const windowStart = addDays(today, -(RANKING_WINDOW_DAYS - 1));
 
@@ -108,13 +137,16 @@ export function selectFeaturedWorkshops(
 
     if (nextSession === Number.POSITIVE_INFINITY) return;
 
-    // Popularity: bookings that still stand, over the trailing window. Dated by
-    // when the session ran, not when it was booked, so the count reflects what
-    // the studio has actually been running lately.
+    // Popularity: bookings that still stand, by when they were taken, over the
+    // trailing window. `isActiveBookingRecord` is the site's own test for a
+    // booking that still counts — it drops cancelled, auto-cancelled, no-show
+    // and draft records, and failed or declined payments, while Completed,
+    // Checked In, In Progress and Pending all count, which is what popularity
+    // should mean: a finished workshop is the strongest evidence of demand.
     const recentBookings = bookings.reduce((total, booking) => {
       if (String(booking.workshopId) !== String(workshop.id)) return total;
       if (!isActiveBookingRecord(booking)) return total;
-      const date = normalizeDateString(booking.date);
+      const date = bookingDateKey(booking);
       if (!date || date < windowStart || date > today) return total;
       return total + 1;
     }, 0);
