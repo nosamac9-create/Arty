@@ -121,8 +121,9 @@ export const WorkshopsBrowsingSection: React.FC = () => {
       <div className="bg-brand-cream border-b border-brand-clay">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-10 md:py-14">
 
-      {/* Header Title */}
-      <div className="pb-8">
+      {/* Header Title — no bottom padding on the birthday view, where the
+          filter row below it is gone and the packages follow directly. */}
+      <div className={isBirthdayView ? '' : 'pb-8'}>
         <Reveal index={0}>
           <span className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-sage">
             {isBirthdayView ? 'Private Parties' : 'Catalogue'}
@@ -142,7 +143,12 @@ export const WorkshopsBrowsingSection: React.FC = () => {
         </Reveal>
       </div>
 
-      {/* Filter and Search Bar */}
+      {/* Filter and Search Bar — hidden entirely on the birthday view. The
+          category chips in particular made a page the visitor already chose
+          look like the general workshops catalogue. Only the controls go; the
+          category itself is still applied, so nothing about what is listed
+          changes. */}
+      {!isBirthdayView && (
       <div className="mt-8 space-y-4">
         <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-center justify-between">
           
@@ -227,6 +233,7 @@ export const WorkshopsBrowsingSection: React.FC = () => {
         </span>
         </div>
       </div>
+      )}
 
       </div>
       </div>
@@ -234,7 +241,11 @@ export const WorkshopsBrowsingSection: React.FC = () => {
       {/* Grid — full-bleed white band, matching the rest of the site instead
           of a page-level card. */}
       <div className="bg-white">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-10 md:py-14 pb-20">
+      <div className={`mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pb-20 ${
+        // Tighter top on the birthday view so the two panels read as part of
+        // the heading above them rather than a separate block far below it.
+        isBirthdayView ? 'pt-8 md:pt-10' : 'py-10 md:py-14'
+      }`}>
 
       {/* DYNAMIC VIEWS GRID */}
       <div>

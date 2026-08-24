@@ -6,8 +6,8 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
-  Cake, CalendarRange, CheckCircle2, ChevronRight, Clock, Compass,
-  Paintbrush, Sparkles, Users, ArrowLeft, ScrollText
+  Cake, CalendarRange, CheckCircle2, ChevronRight, Compass,
+  Paintbrush, Sparkles, ArrowLeft, ScrollText
 } from 'lucide-react';
 import { BirthdayPackage } from '../types';
 import { AppImage } from './ui/AppImage';
@@ -130,84 +130,117 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
         )}
       </AnimatePresence>
 
-      {/* OVERVIEW — both packages, revealed in sequence rather than together. */}
+      {/* OVERVIEW — two packages, so they are shown as a pair of editorial
+          panels rather than a grid that happens to hold two items: tall image,
+          quiet meta line, price anchored to the foot of both panels so the two
+          read across at the same height. Neither is marked as the better
+          choice; they are deliberately identical in weight. */}
       {!focused && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 items-start">
-          {packages.map((pkg, index) => (
-            <motion.button
-              key={pkg.id}
-              type="button"
-              onClick={() => focus(pkg.id)}
-              initial={prefersReducedMotion ? false : { opacity: 0, y: 28 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: prefersReducedMotion ? 0 : index * 0.14, duration: 0.55, ease }}
-              className="group w-full overflow-hidden rounded-[32px] bg-white text-start shadow-card ring-1 ring-brand-clay/70 transition-shadow hover:shadow-2xl hover:shadow-brand-terracotta/10 cursor-pointer"
-            >
-              <motion.div
-                layoutId={`bday-media-${pkg.id}`}
-                transition={spring}
-                className="relative h-56 w-full overflow-hidden bg-brand-sand sm:h-64"
+        <div>
+          <motion.div
+            initial={prefersReducedMotion ? false : { opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease }}
+            className="max-w-xl"
+          >
+            <h2 className="font-display text-[22px] sm:text-2xl font-semibold text-brand-charcoal">
+              Choose your celebration
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-brand-ink">
+              Two ways to spend the afternoon — both run by our studio team, start to finish.
+            </p>
+          </motion.div>
+
+          {/* items-stretch + h-full on the panels: the price rows line up
+              across the pair even when one description runs a line longer. */}
+          <div className="mt-7 grid grid-cols-1 gap-6 lg:mt-9 lg:grid-cols-2 lg:gap-8 items-stretch">
+            {packages.map((pkg, index) => (
+              <motion.button
+                key={pkg.id}
+                type="button"
+                onClick={() => focus(pkg.id)}
+                initial={prefersReducedMotion ? false : { opacity: 0, y: 28 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: prefersReducedMotion ? 0 : index * 0.14, duration: 0.55, ease }}
+                className="group flex h-full w-full flex-col overflow-hidden rounded-[32px] bg-white text-start shadow-card ring-1 ring-brand-clay/70 transition-all duration-300 hover:shadow-2xl hover:shadow-brand-terracotta/10 hover:ring-brand-clay motion-safe:hover:-translate-y-1 cursor-pointer"
               >
-                {pkg.image && (
-                  <AppImage
-                    src={pkg.image}
-                    alt=""
-                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
-                    referrerPolicy="no-referrer"
-                  />
-                )}
-                <div className="absolute inset-0 bg-gradient-to-t from-brand-charcoal/75 via-brand-charcoal/10 to-transparent" />
-
-                <div className="absolute inset-x-0 bottom-0 p-6">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-cream/70">
-                    Package {String(index + 1).padStart(2, '0')}
-                  </span>
-                  <motion.h3
-                    layoutId={`bday-title-${pkg.id}`}
-                    transition={spring}
-                    className="mt-1 font-display text-[26px] font-semibold text-brand-cream"
-                  >
-                    {pkg.name}
-                  </motion.h3>
-                </div>
-              </motion.div>
-
-              <div className="p-6 sm:p-7">
-                {pkg.shortDescription && (
-                  <p className="text-sm leading-relaxed text-brand-ink">{pkg.shortDescription}</p>
-                )}
-
-                <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-[13px] text-brand-ink">
-                  {pkg.duration && (
-                    <span className="inline-flex items-center gap-1.5">
-                      <Clock className="h-4 w-4 text-brand-sage" />{pkg.duration}
-                    </span>
+                <motion.div
+                  layoutId={`bday-media-${pkg.id}`}
+                  transition={spring}
+                  className="relative h-64 w-full shrink-0 overflow-hidden bg-brand-sand sm:h-72 lg:h-[21rem]"
+                >
+                  {pkg.image && (
+                    <AppImage
+                      src={pkg.image}
+                      alt=""
+                      className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]"
+                      referrerPolicy="no-referrer"
+                    />
                   )}
-                  <span className="inline-flex items-center gap-1.5">
-                    <Users className="h-4 w-4 text-brand-sage" />{pkg.minGuests}–{pkg.maxGuests} guests
-                  </span>
-                  {pkg.ageInformation && (
-                    <span className="inline-flex items-center gap-1.5">
-                      <Sparkles className="h-4 w-4 text-brand-sage" />{pkg.ageInformation}
-                    </span>
-                  )}
-                </div>
+                  <div className="absolute inset-0 bg-gradient-to-t from-brand-charcoal/75 via-brand-charcoal/10 to-transparent" />
 
-                <div className="mt-6 flex items-end justify-between gap-4 border-t border-brand-clay pt-5">
-                  <div>
-                    <span className="font-display text-[30px] font-semibold text-brand-charcoal ltr-numerals">
-                      {pkg.price}
+                  <div className="absolute inset-x-0 bottom-0 p-6 sm:p-7">
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-cream/70">
+                      Package {String(index + 1).padStart(2, '0')}
                     </span>
-                    <span className="ms-1.5 text-xs font-medium text-brand-muted">SAR {priceLine(pkg)}</span>
+                    <motion.h3
+                      layoutId={`bday-title-${pkg.id}`}
+                      transition={spring}
+                      className="mt-1.5 font-display text-[28px] font-semibold leading-tight text-brand-cream sm:text-[32px]"
+                    >
+                      {pkg.name}
+                    </motion.h3>
                   </div>
-                  <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-terracotta">
-                    Explore package
-                    <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-1 flip-rtl" />
-                  </span>
+                </motion.div>
+
+                <div className="flex flex-1 flex-col p-6 sm:p-7">
+                  {pkg.shortDescription && (
+                    <p className="text-[15px] leading-[1.7] text-brand-ink">{pkg.shortDescription}</p>
+                  )}
+
+                  {/* One quiet line instead of three icon chips — the icons
+                      read as a badge row, which is the catalogue look this
+                      layout is moving away from. */}
+                  <p className="mt-4 text-[13px] text-brand-muted">
+                    {[
+                      pkg.duration || null,
+                      `${pkg.minGuests}–${pkg.maxGuests} Guests`,
+                      pkg.ageInformation || null,
+                    ]
+                      .filter(Boolean)
+                      .map((entry, entryIndex, list) => (
+                        <span key={entry as string}>
+                          <span className="ltr-numerals">{entry}</span>
+                          {entryIndex < list.length - 1 && (
+                            <span className="mx-2 text-brand-sage" aria-hidden="true">·</span>
+                          )}
+                        </span>
+                      ))}
+                  </p>
+
+                  {/* mt-auto is what anchors the price to the foot of the
+                      panel, so the two prices sit on the same line. */}
+                  <div className="mt-auto flex items-end justify-between gap-4 border-t border-brand-clay pt-5 sm:pt-6">
+                    <div>
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="font-display text-[34px] font-semibold leading-none text-brand-charcoal ltr-numerals">
+                          {pkg.price}
+                        </span>
+                        <span className="text-sm font-medium text-brand-charcoal">SAR</span>
+                      </div>
+                      <span className="mt-1.5 block text-xs font-medium text-brand-muted">
+                        {priceLine(pkg)}
+                      </span>
+                    </div>
+                    <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-terracotta">
+                      Explore package
+                      <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-1 flip-rtl" />
+                    </span>
+                  </div>
                 </div>
-              </div>
-            </motion.button>
-          ))}
+              </motion.button>
+            ))}
+          </div>
         </div>
       )}
 
