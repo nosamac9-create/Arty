@@ -4,9 +4,10 @@
  *
  * The HTTP request/response contract for provision-staff. Kept separate from
  * logic.ts (the decision rules) and index.ts (the Deno/Supabase plumbing) so
- * it is the one place a future frontend wrapper needs to read to know the
- * shape of this function. Mirrored (not imported — Vite and Deno are
- * different toolchains) in src/types/staffProvisioning.ts for that purpose.
+ * it is the one place a frontend wrapper needs to read to know the shape of
+ * this function. Mirrored (not imported — Vite and Deno are different
+ * toolchains) in src/context/AppContext.tsx, next to provisionStaff(), the
+ * client-side wrapper that calls this function. Change both together.
  */
 
 export interface ProvisionStaffRequest {

@@ -28,6 +28,7 @@ import { hasWebsiteAccount, buildAccountLink } from '../utils/accountUtils';
 import {
   supabase, supabaseStaff, isSupabaseConfigured, SUPABASE_NOT_CONFIGURED, setStaffSessionActive
 } from '../lib/supabase';
+import { FunctionsHttpError } from '@supabase/supabase-js';
 import {
   normalizeCustomerPhone, toDisplayPhone, findCustomerMatch, buildCustomerIdentity,
   mergeCustomerDetails, findDuplicateGroups, customerPhoneKey
@@ -50,13 +51,65 @@ import {
 import { validateSaudiPhone, normaliseSaudiPhone, normalisePhone } from '../utils/phoneUtils';
 import { getConfiguredTables, computeTableStates, validateTableSelection } from '../utils/tableSeatingUtils';
 
-export { 
-  getRiyadhNow, 
-  parseBookingDateTimeToRiyadhDate, 
-  getRiyadhDateString, 
-  getRiyadhFormattedDate, 
-  getRelativeRiyadhDateStr 
+export {
+  getRiyadhNow,
+  parseBookingDateTimeToRiyadhDate,
+  getRiyadhDateString,
+  getRiyadhFormattedDate,
+  getRelativeRiyadhDateStr
 };
+
+/**
+ * Mirrors supabase/functions/provision-staff/contract.ts (audit finding
+ * C-3). Not imported directly — the Edge Function runs on Deno, the app on
+ * Vite/Node, different toolchains — so this is kept in sync by hand. Change
+ * both files together.
+ */
+export interface ProvisionStaffSuccess {
+  success: true;
+  staffId: string;
+  status: 'invited' | 'already-provisioned';
+}
+
+export interface ProvisionStaffCollision {
+  success: false;
+  staffId: string;
+  code: 'identity_collision';
+  message: string;
+  hasExistingCustomerRecord: boolean;
+}
+
+export interface ProvisionStaffError {
+  success: false;
+  staffId?: string;
+  code:
+    | 'unauthenticated'
+    | 'forbidden'
+    | 'not_found'
+    | 'invalid_input'
+    | 'inactive_staff'
+    | 'duplicate_email'
+    | 'linked_identity_mismatch'
+    | 'linked_identity_missing'
+    | 'identity_belongs_to_other_staff'
+    | 'internal_error';
+  message: string;
+}
+
+export type ProvisionStaffResponse =
+  | ProvisionStaffSuccess
+  | ProvisionStaffCollision
+  | ProvisionStaffError;
+
+/**
+ * What provisionStaff() actually returns: either the function ran and gave
+ * a structured answer (success, idempotent, collision, or a specific
+ * rejection reason), or the request never reached it at all. Callers must
+ * not conflate the two — see provisionStaff()'s own comment.
+ */
+export type ProvisionStaffOutcome =
+  | { kind: 'response'; response: ProvisionStaffResponse }
+  | { kind: 'network_error'; message: string };
 
 interface AppContextType {
   // Navigation
@@ -317,6 +370,8 @@ interface AppContextType {
   addStaffMember: (member: Omit<StaffMember, 'id'>) => Promise<void>;
   updateStaffMember: (id: string, updates: Partial<StaffMember>) => Promise<void>;
   deleteStaffMember: (id: string) => Promise<{ success: boolean; message?: string; assignmentsCount?: number }>;
+  /** Establishes staff.user_id through the provision-staff Edge Function (audit finding C-3). Super Admin only — the function re-verifies that server-side regardless of who calls it. */
+  provisionStaff: (staffId: string) => Promise<ProvisionStaffOutcome>;
 
   addWorkshopOption: (option: Omit<WorkshopOption, 'id' | 'order'>) => Promise<void>;
   updateWorkshopOption: (id: string, value: string) => Promise<void>;
@@ -2930,6 +2985,58 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true };
   };
 
+  /**
+   * Calls provision-staff to establish staff.user_id (audit finding C-3).
+   * Uses the staff client, not the customer one — only an authenticated
+   * console session can reach this, and the function itself re-verifies the
+   * caller is an active Super Admin server-side regardless.
+   *
+   * `kind: 'network_error'` means the request never got a structured answer
+   * (offline, DNS, the relay couldn't reach the function, an unparseable
+   * response) — distinct from `kind: 'response'`, where the function DID run
+   * and answered, successfully or not. A non-2xx status from the function
+   * (FunctionsHttpError) still carries its JSON body in `error.context` —
+   * that's the function's own structured rejection (collision, duplicate
+   * email, forbidden, ...), not a failure to reach it, so it's parsed and
+   * returned as a normal 'response', the same as a 200.
+   */
+  const provisionStaff = async (staffId: string): Promise<ProvisionStaffOutcome> => {
+    if (!supabaseStaff) {
+      return { kind: 'network_error', message: SUPABASE_NOT_CONFIGURED };
+    }
+
+    try {
+      const { data, error } = await supabaseStaff.functions.invoke('provision-staff', {
+        body: { staffId }
+      });
+
+      if (!error) {
+        return { kind: 'response', response: data as ProvisionStaffResponse };
+      }
+
+      if (error instanceof FunctionsHttpError) {
+        try {
+          const body = await error.context.json();
+          return { kind: 'response', response: body as ProvisionStaffResponse };
+        } catch {
+          return { kind: 'network_error', message: 'The server returned an unexpected response. Please try again.' };
+        }
+      }
+
+      // FunctionsRelayError / FunctionsFetchError / anything else the SDK
+      // throws before a structured answer exists.
+      return {
+        kind: 'network_error',
+        message: error.message || 'Could not reach the server. Check your connection and try again.'
+      };
+    } catch (err: any) {
+      return {
+        kind: 'network_error',
+        message: err?.message || 'Could not reach the server. Check your connection and try again.'
+      };
+    }
+  };
+
   // Workshop Option Mutators
   const addWorkshopOption = async (option: Omit<WorkshopOption, 'id' | 'order'>) => {
     const all = await db.workshopOptions.where('type').equals(option.type).toArray();
@@ -3227,7 +3334,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       addEvent, updateEvent, deleteEvent,
       addPipelineStage, updatePipelineStage, deletePipelineStage, reorderPipelineStages,
       addCustomer, updateCustomer,
-      addStaffMember, updateStaffMember, deleteStaffMember,
+      addStaffMember, updateStaffMember, deleteStaffMember, provisionStaff,
       addWorkshopOption, updateWorkshopOption, deleteWorkshopOption, reorderWorkshopOptions,
       addEventOption, updateEventOption, deleteEventOption, reorderEventOptions,
       updateSetting, removeAllData, reseedSampleData

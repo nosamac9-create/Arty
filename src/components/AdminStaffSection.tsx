@@ -4,8 +4,9 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { useApp } from '../context/AppContext';
+import { useApp, ProvisionStaffOutcome } from '../context/AppContext';
 import { StaffMember, StaffTimeOff, StaffScheduleDayEntry, StaffWeeklyShift } from '../types';
+import { isSuperAdmin } from '../utils/adminAccess';
 import {
   Users, UserPlus, Calendar, Clock, CheckCircle2, AlertCircle, XCircle,
   Search, Filter, Edit3, Trash2, CalendarDays, Award, Phone, Mail,
@@ -41,7 +42,74 @@ export const AdminStaffSection: React.FC = () => {
     addStaffMember,
     updateStaffMember,
     birthdayPackages,
+    currentStaff,
+    provisionStaff,
 } = useApp();
+
+  /** Only a Super Admin may provision a staff account (audit finding C-3) — mirrors the same check AdminSettingsSection.tsx already uses for its own Super-Admin-only actions. The Edge Function re-verifies this server-side regardless. */
+  const isCurrentUserSuperAdmin = isSuperAdmin(currentStaff);
+
+  /** staffId -> true while a provision request for that row is in flight. */
+  const [provisioningStaffId, setProvisioningStaffId] = useState<Record<string, boolean>>({});
+  /** staffId -> the last outcome shown for that row, cleared at the start of each new attempt. */
+  const [provisionOutcomes, setProvisionOutcomes] = useState<Record<string, { tone: 'success' | 'info' | 'error'; text: string }>>({});
+
+  /**
+   * Turns a ProvisionStaffOutcome into what the card shows. Leans on the
+   * Edge Function's own message for every rejection reason — those are
+   * already specific and PII-safe per audit finding C-3 (see logic.ts) — and
+   * only adds the non-sensitive hasExistingCustomerRecord hint for the
+   * identity_collision case, exactly as designed: no PII beyond what the
+   * response already includes, and no "proceed anyway" action.
+   */
+  const describeProvisionOutcome = (outcome: ProvisionStaffOutcome) => {
+    // Fully explicit if/else throughout — this project doesn't enable
+    // strictNullChecks, under which an early-return-then-fall-through
+    // pattern (`if (!x.success) return ...; return x.something;`) does not
+    // reliably narrow a boolean-discriminated union; verified directly
+    // against this exact tsconfig before writing it this way.
+    if (outcome.kind === 'network_error') {
+      return { tone: 'error' as const, text: `Could not reach the server — ${outcome.message}` };
+    } else {
+      const response = outcome.response;
+      if (response.success === true) {
+        return response.status === 'already-provisioned'
+          ? { tone: 'info' as const, text: 'Already provisioned — this staff member is already linked to a sign-in account. Nothing was changed.' }
+          : { tone: 'success' as const, text: 'Invite sent — this staff member can set their own password from the link emailed to their Work Email.' };
+      } else {
+        // Non-sensitive hint only for the collision case — per audit finding
+        // C-3, never any PII beyond what contract.ts already includes.
+        if (response.code === 'identity_collision') {
+          return {
+            tone: 'error' as const,
+            text: response.message + (response.hasExistingCustomerRecord
+              ? ' (That account also has an existing ARTY customer record.)'
+              : '')
+          };
+        } else {
+          return { tone: 'error' as const, text: response.message };
+        }
+      }
+    }
+  };
+
+  const handleProvisionStaff = async (member: StaffMember) => {
+    setProvisioningStaffId(prev => ({ ...prev, [member.id]: true }));
+    setProvisionOutcomes(prev => {
+      const next = { ...prev };
+      delete next[member.id];
+      return next;
+    });
+
+    const outcome = await provisionStaff(member.id);
+
+    setProvisioningStaffId(prev => {
+      const next = { ...prev };
+      delete next[member.id];
+      return next;
+    });
+    setProvisionOutcomes(prev => ({ ...prev, [member.id]: describeProvisionOutcome(outcome) }));
+  };
 
   // Navigation / View Tabs inside Staff Section
   const [activeTab, setActiveTab] = useState<'roster' | 'calendar' | 'schedule'>('roster');
@@ -611,6 +679,53 @@ export const AdminStaffSection: React.FC = () => {
                       </span>
                     </div>
                   </div>
+
+                  {/* Provisioning (audit finding C-3): only shown while this
+                      row has no linked Auth account. Once staff.user_id is
+                      set, this block simply stops rendering — no separate
+                      "provisioned" state to maintain. */}
+                  {!member.userId && (
+                    <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                      <div className="flex items-center gap-2 text-[11px] font-bold text-amber-800">
+                        <Shield className="h-3.5 w-3.5 shrink-0" />
+                        <span>Not yet provisioned — no linked sign-in account</span>
+                      </div>
+
+                      {provisionOutcomes[member.id] && (
+                        <p className={`mt-2 text-[11px] font-semibold ${
+                          provisionOutcomes[member.id].tone === 'success' ? 'text-emerald-700' :
+                          provisionOutcomes[member.id].tone === 'info' ? 'text-brand-charcoal/70' :
+                          'text-red-700'
+                        }`}>
+                          {provisionOutcomes[member.id].text}
+                        </p>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => handleProvisionStaff(member)}
+                        disabled={!isCurrentUserSuperAdmin || !!provisioningStaffId[member.id]}
+                        title={isCurrentUserSuperAdmin ? undefined : 'Only a Super Admin can provision staff accounts.'}
+                        className={`mt-2 w-full rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 ${
+                          !isCurrentUserSuperAdmin
+                            ? 'bg-brand-cream text-brand-charcoal/40 cursor-not-allowed'
+                            : 'bg-brand-terracotta text-white hover:bg-brand-terracotta/90 cursor-pointer disabled:opacity-60 disabled:cursor-wait'
+                        }`}
+                      >
+                        {provisioningStaffId[member.id] ? (
+                          <>
+                            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                            <span>Provisioning…</span>
+                          </>
+                        ) : (
+                          <>
+                            <Shield className="h-3.5 w-3.5" />
+                            <span>Provision Account</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Card footer actions */}
