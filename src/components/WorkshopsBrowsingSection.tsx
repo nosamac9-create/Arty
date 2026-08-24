@@ -325,99 +325,100 @@ export const WorkshopsBrowsingSection: React.FC = () => {
                 >
                 <div
                   onClick={() => handleCardClick(ws)}
-                  /* Phone: a compact horizontal row — thumbnail left, details
-                     right. From sm up it is the original vertical card. */
-                  className={`group relative bg-white rounded-[22px] sm:rounded-[32px] shadow-card shadow-brand-charcoal/5 border border-brand-terracotta/5 transition-all duration-300 flex flex-row sm:flex-col h-full text-start overflow-hidden ${
+                  /* The birthday package panel's shell: same radius, ring,
+                     shadow and hover lift, so the two card families read as one
+                     system. Vertical at every width, as those panels are — the
+                     compact phone row this replaced could not carry a title
+                     over the image. */
+                  className={`group relative flex h-full w-full flex-col overflow-hidden rounded-[32px] bg-white text-start shadow-card ring-1 ring-brand-clay/70 transition-all duration-300 ${
                     isFull
                       ? 'opacity-70 saturate-75 cursor-not-allowed'
-                      : 'cursor-pointer hover:shadow-2xl hover:shadow-brand-terracotta/10 hover:-translate-y-1'
+                      : 'cursor-pointer hover:shadow-2xl hover:shadow-brand-terracotta/10 hover:ring-brand-clay motion-safe:hover:-translate-y-1'
                   }`}
                 >
-                  {/* Card Image banner — flush with the card's top and side edges.
-                      A fixed height (not aspect-video) so every image locks to
-                      the same box regardless of its own source dimensions —
-                      aspect-ratio on a flex item with a replaced (object-cover)
-                      child is unreliable and was letting square photos render
-                      taller than widescreen ones. */}
-                  <div className="relative m-3 h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-brand-sand sm:m-0 sm:h-52 sm:w-auto sm:rounded-none">
+                  {/* Image banner. Shorter than the package panels' at lg,
+                      where these sit three to a row rather than two, so the
+                      card does not turn tall and narrow. */}
+                  <div className="relative h-60 w-full shrink-0 overflow-hidden bg-brand-sand sm:h-64 lg:h-[17rem]">
                     {/* The workshop's own photographs, cross-fading inside this
-                        frame. The container, its sizes and the image's crop and
-                        hover zoom are unchanged — only what fills it cycles,
-                        and the cycling state lives inside the component so a
-                        change re-renders one card's frame, not this page. */}
+                        frame — unchanged by this layout pass. */}
                     <WorkshopCardSlideshow
                       images={workshopGalleryImages(ws)}
                       alt={ws.title}
                       cardIndex={cardIndex}
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.04]"
                     />
+
+                    {/* Weighted to the foot of the frame, so the photograph
+                        stays clear where it is not carrying text. */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-brand-charcoal/75 via-brand-charcoal/10 to-transparent" />
 
                     {/* Availability pill — silent unless every upcoming date
                         is full, since exposing live seat counts here just
                         confuses a workshop that runs on multiple dates. */}
                     {isFull && (
-                      <div className="absolute top-3 left-3 hidden sm:block">
+                      <div className="absolute top-4 start-4 z-10">
                         <span className="inline-flex items-center rounded-lg bg-brand-charcoal/85 text-brand-cream px-2.5 py-1 text-xs font-semibold tracking-wide shadow-card-sm">
                           FULLY BOOKED
                         </span>
                       </div>
                     )}
-                  </div>
 
-                  {/* Core details */}
-                  <div className="flex-1 min-w-0 flex flex-col justify-between py-3 pe-3 sm:p-6">
-                    <div className="min-w-0">
-                      <span className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-muted">
+                    {/* Category over the photograph where the package number
+                        sits on those panels, then the name. The skill level
+                        stays appended to the category, as it was on this card
+                        before — it is existing content, not new metadata. */}
+                    <div className="absolute inset-x-0 bottom-0 p-6 sm:p-7">
+                      <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-cream/70">
                         {ws.category}{ws.skillLevel ? ` · ${ws.skillLevel}` : ''}
                       </span>
-                      <h3 className="mt-1 font-display text-base sm:text-xl font-semibold text-brand-charcoal group-hover:text-brand-terracotta transition-colors line-clamp-2 sm:line-clamp-none sm:mt-1.5">
+                      <h3 className="mt-1.5 font-display text-[24px] font-semibold leading-tight text-brand-cream sm:text-[26px] line-clamp-2">
                         {ws.title}
                       </h3>
-                      {/* The hook is the one thing the compact row drops — it is
-                          the longest line and the least scannable. */}
-                      <p className="hidden sm:block text-sm text-brand-ink mt-1.5 line-clamp-2">
-                        {ws.hook}
-                      </p>
                     </div>
+                  </div>
 
-                    {/* Phone: availability (only when fully booked) and price on one line. */}
-                    <div className="mt-2 flex items-end justify-between gap-3 sm:hidden">
-                      {isFull ? (
-                        <span className="text-[11px] font-semibold text-brand-muted">Fully booked</span>
-                      ) : <span />}
-                      <span className="font-display text-base font-semibold text-brand-charcoal ltr-numerals">
-                        {ws.price} <span className="text-[10px] font-medium text-brand-muted">SAR</span>
-                      </span>
-                    </div>
+                  <div className="flex flex-1 flex-col p-6 sm:p-7">
+                    {/* The description opens the white area — the title is over
+                        the image now and is not repeated here. */}
+                    {ws.hook && (
+                      <p className="text-[15px] leading-[1.7] text-brand-ink line-clamp-2">{ws.hook}</p>
+                    )}
 
-                    {/* Meta and Price row */}
-                    <div className="mt-6 pt-4 border-t border-brand-clay hidden sm:flex items-end justify-between gap-3">
-                      {/* Same meta treatment as the birthday package cards:
-                          lucide at h-4 w-4 in sage, 1.5 gap. Text and data are
-                          untouched — the icons only replace the dot that used
-                          to separate duration from age. */}
-                      <div className="text-[13px] text-brand-ink space-y-1.5 min-w-0">
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 min-w-0">
+                    {/* The site's meta treatment: lucide at h-4 w-4 in sage,
+                        1.5 gap. Same fields as before — nothing added. */}
+                    <div className="mt-4 text-[13px] text-brand-ink space-y-2">
+                      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 min-w-0">
+                        {ws.duration && (
                           <span className="inline-flex min-w-0 items-center gap-1.5">
                             <Clock className="h-4 w-4 shrink-0 text-brand-sage" />
                             <span className="truncate ltr-numerals">{ws.duration}</span>
                           </span>
+                        )}
+                        {ws.ageRange && (
                           <span className="inline-flex min-w-0 items-center gap-1.5">
                             <Sparkles className="h-4 w-4 shrink-0 text-brand-sage" />
                             <span className="truncate ltr-numerals">{ws.ageRange}</span>
                           </span>
-                        </div>
-                        {ws.instructor && (
-                          <p className="inline-flex min-w-0 max-w-full items-center gap-1.5 text-brand-muted">
-                            <Paintbrush className="h-4 w-4 shrink-0 text-brand-sage" />
-                            <span className="truncate">Instructor {ws.instructor}</span>
-                          </p>
                         )}
                       </div>
-                      <div className="text-end shrink-0">
-                        <span className="font-display text-[22px] font-semibold text-brand-charcoal ltr-numerals">
-                          {ws.price} <span className="text-xs font-medium text-brand-muted">SAR</span>
+                      {ws.instructor && (
+                        <p className="inline-flex min-w-0 max-w-full items-center gap-1.5 text-brand-muted">
+                          <Paintbrush className="h-4 w-4 shrink-0 text-brand-sage" />
+                          <span className="truncate">Instructor {ws.instructor}</span>
+                        </p>
+                      )}
+                    </div>
+
+                    {/* mt-auto anchors the price to the foot, so prices line up
+                        across a row whatever length the descriptions run. No
+                        CTA beside it: the whole card is the click target. */}
+                    <div className="mt-auto border-t border-brand-clay pt-5 sm:pt-6">
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="font-display text-[32px] font-semibold leading-none text-brand-charcoal ltr-numerals">
+                          {ws.price}
                         </span>
+                        <span className="text-sm font-medium text-brand-charcoal">SAR</span>
                       </div>
                     </div>
                   </div>
