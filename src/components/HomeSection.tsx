@@ -278,15 +278,21 @@ export const HomeSection: React.FC = () => {
               /* Narrower cards on a phone, so a neighbour still shows at the
                  edges without the active card losing the frame. */
               cardWidth="clamp(190px, 46vw, 320px)"
-              /* Softer rake than the reference default: these are photographs
-                 of a studio, not album art, and a hard tilt makes the
-                 neighbours unreadable. */
-              rotate={38}
-              depth={0.5}
-              perspective={3.2}
+              /* Tuned for depth rather than a flat row: a harder tilt, a
+                 shorter viewer distance (a wider lens exaggerates the rake),
+                 neighbours pushed further back and scaled down, and a little
+                 more air between cards so the recession is legible rather
+                 than a stack. Stops short of edge-on — these are photographs
+                 of a studio, and a neighbour turned too far stops reading. */
+              rotate={52}
+              depth={0.85}
+              perspective={2.1}
+              falloff={0.62}
+              shrink={0.16}
+              fade={0.16}
+              gap={0.12}
               autoPlay
               autoPlayInterval={4500}
-              showNavigation
               showPagination
               onSelectedChange={setFeaturedIndex}
               onActivate={index => {

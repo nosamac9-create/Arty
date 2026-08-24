@@ -45,6 +45,12 @@ export interface CoverflowCarouselProps {
   falloff?: number;
   /** Opacity lost per step from the centre. */
   fade?: number;
+  /**
+   * Size lost per step from the centre, as a fraction. Perspective alone only
+   * shrinks a neighbour by however much `depth` pushes it back, which reads
+   * flat at a shallow lens; this is what makes the centre card dominant.
+   */
+  shrink?: number;
   /** Any CSS length. Everything else is derived from it, so the rake scales. */
   cardWidth?: string;
   /** Space between cards, as a fraction of card width. */
@@ -72,6 +78,7 @@ export function CoverflowCarousel({
   perspective = 3,
   falloff = 0.56,
   fade = 0.1,
+  shrink = 0.12,
   cardWidth = 'clamp(148px, 22vw, 260px)',
   gap = 0.05,
   loop = true,
@@ -145,9 +152,12 @@ export function CoverflowCarousel({
       // Capped short of edge-on so a far card never turns its back.
       const tilt = Math.min(rotate * ramp, 82) * Math.sign(offset);
 
+      // Scale last, so it shrinks the card rather than the distance it has
+      // already been translated — otherwise the row closes up as it recedes.
       card.style.transform =
         `translateX(calc(-50% + ${offset * pitch}px)) ` +
-        `translateZ(${-depth * width * ramp}px) rotateY(${-tilt}deg)`;
+        `translateZ(${-depth * width * ramp}px) rotateY(${-tilt}deg) ` +
+        `scale(${Math.max(0.4, 1 - shrink * ramp)})`;
 
       // A card is teleported across the ring at exactly half a turn out, so it
       // has to be gone by then or the jump is visible.
@@ -158,7 +168,7 @@ export function CoverflowCarousel({
       // a raked neighbour that merely looks like it is under the cursor.
       card.style.pointerEvents = distance < 0.5 ? 'auto' : 'none';
     });
-  }, [count, depth, fade, falloff, gap, looping, rotate]);
+  }, [count, depth, fade, falloff, gap, looping, rotate, shrink]);
 
   const commitSelected = React.useCallback(
     (index: number) => {
