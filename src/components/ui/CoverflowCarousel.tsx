@@ -5,17 +5,29 @@
  * A coverflow carousel: the active card centred, its neighbours raked back
  * into depth.
  *
- * Adapted from the supplied reference implementation. The transform maths,
- * the ring-folding loop, the exponential settle and the drag/throw handling
- * are the reference's; what changed is everything that assumed a different
- * project — `"use client"` (this is Vite, not Next), `cn` from `@/lib/utils`
- * (absent here, so classes compose as template strings, as the rest of
- * `components/ui` does), and the bare `<img>` (swapped for `AppImage`, which
- * carries the site's retry-on-failure behaviour).
+ * This is the supplied reference implementation. Its geometry is the visual
+ * target and is reproduced exactly — the transform string, the `falloff` ramp,
+ * the 82° tilt cap, the ring-folding loop, the opacity/z-index rules, the
+ * exponential settle, the drag and throw, the `ResizeObserver` measurement and
+ * every default value (rotate 44, depth 0.6, perspective 3, falloff 0.56,
+ * fade 0.1, gap 0.05, cardWidth clamp(148px, 22vw, 260px)). Do not retune
+ * these to taste: the section around the carousel is the thing to adapt.
  *
- * Added for this project: autoplay that drives the existing settle rather than
- * jumping, and callbacks so the caller can render its own caption in the
- * site's own type instead of the generic one built in.
+ * Only what could not run in this project was changed:
+ *   - `"use client"` removed (Vite, not Next)
+ *   - `cn` from `@/lib/utils` does not exist here, so classes compose as
+ *     template strings, as the rest of `components/ui` does
+ *   - shadcn colour tokens (`bg-muted`, `bg-background`, `text-foreground`,
+ *     `ring-ring`) have no definition in this project and would render as
+ *     nothing, so each maps to its Arty equivalent. Sizes, radii and shadows
+ *     are the reference's.
+ *   - the bare `<img>` is `AppImage`, which carries the site's retry-on-failure
+ *     behaviour so a workshop photo cannot silently vanish
+ *
+ * Added for this project, none of it touching the geometry: autoplay that
+ * drives the existing settle rather than jumping, `onSelectedChange` and
+ * `onActivate` so the section can render its own caption and open a workshop,
+ * and a reduced-motion path.
  *
  * Positions are written straight to the DOM. Sixty state updates a second
  * would re-render every card for numbers React never needs to see.
@@ -23,7 +35,6 @@
 
 import * as React from 'react';
 import { useReducedMotion } from 'motion/react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { AppImage } from './AppImage';
 
 const useIsoLayoutEffect = typeof window !== 'undefined' ? React.useLayoutEffect : React.useEffect;
@@ -45,19 +56,12 @@ export interface CoverflowCarouselProps {
   falloff?: number;
   /** Opacity lost per step from the centre. */
   fade?: number;
-  /**
-   * Size lost per step from the centre, as a fraction. Perspective alone only
-   * shrinks a neighbour by however much `depth` pushes it back, which reads
-   * flat at a shallow lens; this is what makes the centre card dominant.
-   */
-  shrink?: number;
   /** Any CSS length. Everything else is derived from it, so the rake scales. */
   cardWidth?: string;
   /** Space between cards, as a fraction of card width. */
   gap?: number;
   loop?: boolean;
   showPagination?: boolean;
-  showNavigation?: boolean;
   /** Advances on its own. Ignored under reduced motion. */
   autoPlay?: boolean;
   autoPlayInterval?: number;
@@ -78,12 +82,10 @@ export function CoverflowCarousel({
   perspective = 3,
   falloff = 0.56,
   fade = 0.1,
-  shrink = 0.12,
   cardWidth = 'clamp(148px, 22vw, 260px)',
   gap = 0.05,
   loop = true,
   showPagination = false,
-  showNavigation = false,
   autoPlay = false,
   autoPlayInterval = 4500,
   onSelectedChange,
@@ -117,8 +119,10 @@ export function CoverflowCarousel({
   /** Any reason autoplay should hold: hover, focus, or a hand on the cards. */
   const [paused, setPaused] = React.useState(false);
 
-  // Only one card ever loops onto itself, and two cards would rake one behind
-  // the other rather than reading as a pair. Below three, sit them flat.
+  // The reference always loops. One card would loop onto itself and two would
+  // rake one behind the other rather than reading as a pair, so below three
+  // the ring is off — with 3+ cards, which is what this section shows, the
+  // behaviour is the reference's exactly.
   const looping = loop && count > 2;
 
   /** Nearest whole card, folded back into 0..count-1. */
@@ -152,23 +156,21 @@ export function CoverflowCarousel({
       // Capped short of edge-on so a far card never turns its back.
       const tilt = Math.min(rotate * ramp, 82) * Math.sign(offset);
 
-      // Scale last, so it shrinks the card rather than the distance it has
-      // already been translated — otherwise the row closes up as it recedes.
       card.style.transform =
         `translateX(calc(-50% + ${offset * pitch}px)) ` +
-        `translateZ(${-depth * width * ramp}px) rotateY(${-tilt}deg) ` +
-        `scale(${Math.max(0.4, 1 - shrink * ramp)})`;
+        `translateZ(${-depth * width * ramp}px) rotateY(${-tilt}deg)`;
 
       // A card is teleported across the ring at exactly half a turn out, so it
       // has to be gone by then or the jump is visible.
       const edge = looping ? Math.min(1, Math.max(0, count / 2 - distance)) : 1;
       card.style.opacity = String(Math.max(0, 1 - fade * distance) * edge);
       card.style.zIndex = String(100 - Math.round(distance));
-      // Only the centred card takes the pointer, so a click can never land on
-      // a raked neighbour that merely looks like it is under the cursor.
+      // Not geometry: only the centred card takes the pointer, so a click can
+      // never land on a raked neighbour that merely looks like it is under
+      // the cursor.
       card.style.pointerEvents = distance < 0.5 ? 'auto' : 'none';
     });
-  }, [count, depth, fade, falloff, gap, looping, rotate, shrink]);
+  }, [count, depth, fade, falloff, gap, looping, rotate]);
 
   const commitSelected = React.useCallback(
     (index: number) => {
@@ -201,8 +203,8 @@ export function CoverflowCarousel({
           rafRef.current = null;
           return;
         }
-        // Exponential ease-out, not a spring. Swap in a spring only if the
-        // settle needs overshoot.
+        // ponytail: exponential ease-out, not a spring. Swap in a spring only
+        // if the settle needs overshoot.
         posRef.current += remaining * 0.16;
         paint();
         rafRef.current = requestAnimationFrame(step);
@@ -343,8 +345,7 @@ export function CoverflowCarousel({
       onMouseLeave={() => setPaused(false)}
       onFocusCapture={() => setPaused(true)}
       onBlurCapture={event => {
-        // Only resume once focus has actually left the carousel, not when it
-        // moves between the frame and a navigation button inside it.
+        // Only resume once focus has actually left the carousel.
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setPaused(false);
       }}
     >
@@ -369,9 +370,7 @@ export function CoverflowCarousel({
             }
           }}
           // Vertical padding keeps the drop shadows clear of the overflow clip.
-          className={`overflow-hidden py-10 outline-none rounded-[28px] focus-visible:ring-2 focus-visible:ring-brand-sage ${
-            count > 1 ? 'cursor-grab active:cursor-grabbing' : ''
-          }`}
+          className="cursor-grab overflow-hidden py-10 outline-none focus-visible:ring-2 focus-visible:ring-brand-sage active:cursor-grabbing"
           style={{
             perspective: `calc(var(--cf-card) * ${perspective})`,
             // Horizontal drag is ours; the page keeps vertical scrolling.
@@ -380,7 +379,10 @@ export function CoverflowCarousel({
         >
           <div
             className="relative select-none"
-            style={{ height: 'var(--cf-card)', transformStyle: 'preserve-3d' }}
+            style={{
+              height: 'var(--cf-card)',
+              transformStyle: 'preserve-3d'
+            }}
           >
             {slides.map((slide, index) => (
               <div
@@ -395,7 +397,7 @@ export function CoverflowCarousel({
                   if (index === selected) onActivate?.(index);
                   else goTo(index);
                 }}
-                className={`absolute left-1/2 top-0 aspect-square overflow-hidden rounded-[22px] bg-brand-sand shadow-card will-change-transform ${
+                className={`absolute left-1/2 top-0 aspect-square overflow-hidden rounded-2xl bg-brand-sand shadow-xl will-change-transform ${
                   onActivate ? 'cursor-pointer' : ''
                 } ${cardClassName}`}
                 style={{ width: 'var(--cf-card)' }}
@@ -411,27 +413,6 @@ export function CoverflowCarousel({
             ))}
           </div>
         </div>
-
-        {showNavigation && count > 1 && (
-          <>
-            <button
-              type="button"
-              aria-label="Previous workshop"
-              onClick={() => nudge(-1)}
-              className="absolute start-1 sm:start-3 top-1/2 z-[200] -translate-y-1/2 cursor-pointer rounded-full border border-brand-clay bg-brand-cream/90 p-2.5 text-brand-charcoal backdrop-blur-sm transition-colors hover:bg-brand-cream"
-            >
-              <ChevronLeft className="h-5 w-5 flip-rtl" />
-            </button>
-            <button
-              type="button"
-              aria-label="Next workshop"
-              onClick={() => nudge(1)}
-              className="absolute end-1 sm:end-3 top-1/2 z-[200] -translate-y-1/2 cursor-pointer rounded-full border border-brand-clay bg-brand-cream/90 p-2.5 text-brand-charcoal backdrop-blur-sm transition-colors hover:bg-brand-cream"
-            >
-              <ChevronRight className="h-5 w-5 flip-rtl" />
-            </button>
-          </>
-        )}
       </div>
 
       {showPagination && count > 1 && (
@@ -440,11 +421,11 @@ export function CoverflowCarousel({
             <button
               key={index}
               type="button"
-              aria-label={`Go to workshop ${index + 1}`}
+              aria-label={`Go to slide ${index + 1}`}
               aria-current={index === selected}
               onClick={() => goTo(index)}
-              className={`h-2 cursor-pointer rounded-full bg-brand-charcoal transition-all duration-300 ${
-                index === selected ? 'w-5 opacity-100' : 'w-2 opacity-25 hover:opacity-50'
+              className={`size-2 cursor-pointer rounded-full bg-brand-charcoal transition-opacity ${
+                index === selected ? 'opacity-100' : 'opacity-30'
               }`}
             />
           ))}

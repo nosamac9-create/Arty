@@ -275,22 +275,13 @@ export const HomeSection: React.FC = () => {
             <CoverflowCarousel
               slides={featuredSlides}
               label="Featured workshops"
-              /* Narrower cards on a phone, so a neighbour still shows at the
-                 edges without the active card losing the frame. */
-              cardWidth="clamp(190px, 46vw, 320px)"
-              /* Tuned for depth rather than a flat row: a harder tilt, a
-                 shorter viewer distance (a wider lens exaggerates the rake),
-                 neighbours pushed further back and scaled down, and a little
-                 more air between cards so the recession is legible rather
-                 than a stack. Stops short of edge-on — these are photographs
-                 of a studio, and a neighbour turned too far stops reading. */
-              rotate={52}
-              depth={0.85}
-              perspective={2.1}
-              falloff={0.62}
-              shrink={0.16}
-              fade={0.16}
-              gap={0.12}
+              /* No geometry props on purpose. rotate, depth, perspective,
+                 falloff, fade, gap and cardWidth are all left at the reference
+                 component's own defaults, which are the visual target — this
+                 section previously overrode every one of them, and that is
+                 what flattened the rake and narrowed the neighbours. Anything
+                 to be adjusted about how this looks belongs around the
+                 carousel, not in its numbers. */
               autoPlay
               autoPlayInterval={3500}
               showPagination
