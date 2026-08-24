@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { PhotoGallery } from './ui/PhotoGallery';
 import { VerticalCutReveal } from './ui/VerticalCutReveal';
 import { CountingNumber } from './ui/CountingNumber';
@@ -22,7 +22,7 @@ import {
 } from './ui/CtaSectionWithGallery';
 import { formatDate } from '../utils/calendarConfig';
 import { isWorkshopFullyBooked } from '../utils/queueUtils';
-import { Calendar, Sparkles, ChevronRight, Paintbrush, MousePointerClick, CalendarRange, Gift, Coffee, ChevronDown, ChevronUp, Phone, Mail, UserCheck, Star } from 'lucide-react';
+import { Calendar, Sparkles, ChevronRight, Paintbrush, MousePointerClick, CalendarRange, Gift, Coffee, ChevronDown, Phone, Mail, UserCheck, Star, ArrowLeft } from 'lucide-react';
 
 /**
  * The arc gallery's photographs, in the order the studio supplied them.
@@ -65,6 +65,27 @@ export const HomeSection: React.FC = () => {
     workshopSessions, bookings, queue, todayDateStr
   } = useApp();
   const [showOwnerContact, setShowOwnerContact] = useState(false);
+  const prefersReducedMotion = useReducedMotion();
+
+  /**
+   * The wipe shared by the map and the Custom Events photograph, reused for the
+   * in-place swap between the pitch and the owner's details: in from the
+   * trailing edge, out the same way. Reduced motion gets the swap with no
+   * movement at all — the panels simply exchange.
+   */
+  const customEventsSwap = prefersReducedMotion
+    ? {
+        initial: false as const,
+        animate: { opacity: 1 },
+        exit: undefined,
+        transition: { duration: 0 }
+      }
+    : {
+        initial: { opacity: 0, clipPath: 'inset(0 0 0 100%)' },
+        animate: { opacity: 1, clipPath: 'inset(0 0 0 0%)' },
+        exit: { opacity: 0, clipPath: 'inset(0 0 0 100%)' },
+        transition: { duration: 0.7, ease: [0.22, 1, 0.36, 1] as const }
+      };
 
   // Get first 3 workshops as featured
   const featuredWorkshops = workshops.slice(0, 3);
@@ -500,7 +521,11 @@ export const HomeSection: React.FC = () => {
 
         {/* One cream slab holding the whole section: words on the left, the
             studio on the right, the image given the larger share. */}
-        <div className="relative overflow-hidden rounded-[32px] bg-brand-sand px-6 py-10 sm:px-10 sm:py-12 lg:px-14">
+        <motion.div
+          layout={!prefersReducedMotion}
+          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+          className="relative overflow-hidden rounded-[32px] bg-brand-sand px-6 py-10 sm:px-10 sm:py-12 lg:px-14"
+        >
 
           {/* Quiet studio marks — a clay curve and two sparks. Decorative only. */}
           <svg
@@ -518,7 +543,18 @@ export const HomeSection: React.FC = () => {
                   stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
           </svg>
 
-          <div className="relative grid grid-cols-1 items-center gap-10 lg:grid-cols-12 lg:gap-14">
+          {/* The card holds two states in the same slab: the pitch, and the
+              owner's details. `mode="wait"` lets the outgoing one finish its
+              wipe before the incoming one starts, so the two never overlap
+              mid-swap; `layout` on the slab absorbs the height difference
+              between them instead of snapping. */}
+          <AnimatePresence mode="wait" initial={false}>
+          {!showOwnerContact ? (
+          <motion.div
+            key="custom-events-pitch"
+            {...customEventsSwap}
+            className="relative grid grid-cols-1 items-center gap-10 lg:grid-cols-12 lg:gap-14"
+          >
 
             {/* Words — five of twelve columns, so the photograph leads. */}
             <div className="text-start lg:col-span-5">
@@ -571,9 +607,10 @@ export const HomeSection: React.FC = () => {
                 >
                   <Sparkles className="h-5 w-5 text-brand-terracotta transition-colors group-hover:text-brand-cream" />
                   <span>Create your own Event</span>
-                  {showOwnerContact
-                    ? <ChevronUp className="h-5 w-5 text-brand-cream/70 transition-transform duration-200 group-hover:-translate-y-0.5" />
-                    : <ChevronRight className="h-5 w-5 text-brand-cream/70 transition-transform duration-200 group-hover:translate-x-1 flip-rtl" />}
+                  {/* Always the forward chevron now: this button only exists on
+                      the pitch face, and the way back is the Back control on
+                      the contact face rather than a collapse here. */}
+                  <ChevronRight className="h-5 w-5 text-brand-cream/70 transition-transform duration-200 group-hover:translate-x-1 flip-rtl" />
                 </button>
               </ScrollReveal>
             </div>
@@ -608,15 +645,16 @@ export const HomeSection: React.FC = () => {
               </motion.div>
             </ScrollReveal>
 
-          </div>
-        </div>
-
-        {/* The owner's details stay exactly as they were, revealed by the
-            button above. */}
-        <div className="mt-8 text-center">
-
-            {showOwnerContact && (
-              <div className="bg-brand-cream border-2 border-brand-terracotta/40 rounded-3xl p-6 md:p-8 max-w-2xl mx-auto text-start shadow-card-sm animate-in fade-in duration-300 space-y-6">
+          </motion.div>
+          ) : (
+            /* The owner's details — same content as the card that used to open
+               below this section, now the card's second face. */
+            <motion.div
+              key="custom-events-contact"
+              {...customEventsSwap}
+              className="relative"
+            >
+              <div className="bg-brand-cream border-2 border-brand-terracotta/40 rounded-3xl p-6 md:p-8 max-w-2xl mx-auto text-start shadow-card-sm space-y-6">
                 <div className="flex items-center gap-3 pb-4 border-b border-brand-clay">
                   <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-terracotta text-brand-cream shrink-0">
                     <UserCheck className="h-6 w-6" />
@@ -658,9 +696,24 @@ export const HomeSection: React.FC = () => {
                     Have a unique theme, adult pottery party, corporate team-building, or bridal shower in mind? Reach out via WhatsApp or email for custom quotes, private venue buyout availability, and tailored artist arrangements!
                   </p>
                 </div>
+
+                {/* Reverses the swap — the pitch, button and photograph wipe
+                    back in. The button that opened this is part of the face
+                    that just left, so the way back lives here. */}
+                <button
+                  type="button"
+                  onClick={() => setShowOwnerContact(false)}
+                  className="group cursor-pointer inline-flex items-center gap-2 rounded-full border border-brand-clay bg-brand-sand/40 px-5 py-3 text-sm font-semibold text-brand-ink transition-colors hover:text-brand-charcoal hover:border-brand-muted active:scale-[0.98]"
+                >
+                  <ArrowLeft className="h-4 w-4 transition-transform duration-200 group-hover:-translate-x-0.5 flip-rtl" />
+                  <span>Back</span>
+                </button>
               </div>
-            )}
-          </div>
+            </motion.div>
+          )}
+          </AnimatePresence>
+
+        </motion.div>
       </div>
       </section>
 
