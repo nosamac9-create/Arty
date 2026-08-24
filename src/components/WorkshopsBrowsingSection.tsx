@@ -7,9 +7,9 @@ import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import Reveal from './ui/Reveal';
 import { ScrollReveal } from './ui/ScrollReveal';
-import { AppImage } from './ui/AppImage';
 import { Search, SlidersHorizontal, RefreshCw, ChevronDown, Clock, Sparkles, Paintbrush } from 'lucide-react';
 import { BackButton } from './ui/BackButton';
+import { WorkshopCardSlideshow, workshopGalleryImages } from './ui/WorkshopCardSlideshow';
 import { Workshop } from '../types';
 import { BirthdayPackagesShowcase } from './BirthdayPackagesShowcase';
 import { isWorkshopFullyBooked } from '../utils/queueUtils';
@@ -340,11 +340,16 @@ export const WorkshopsBrowsingSection: React.FC = () => {
                       child is unreliable and was letting square photos render
                       taller than widescreen ones. */}
                   <div className="relative m-3 h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-brand-sand sm:m-0 sm:h-52 sm:w-auto sm:rounded-none">
-                    <AppImage
-                      src={ws.image}
+                    {/* The workshop's own photographs, cross-fading inside this
+                        frame. The container, its sizes and the image's crop and
+                        hover zoom are unchanged — only what fills it cycles,
+                        and the cycling state lives inside the component so a
+                        change re-renders one card's frame, not this page. */}
+                    <WorkshopCardSlideshow
+                      images={workshopGalleryImages(ws)}
                       alt={ws.title}
+                      cardIndex={cardIndex}
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                      referrerPolicy="no-referrer"
                     />
 
                     {/* Availability pill — silent unless every upcoming date
