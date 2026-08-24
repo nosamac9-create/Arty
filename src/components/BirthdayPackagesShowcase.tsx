@@ -6,8 +6,8 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
-  Cake, CalendarRange, CheckCircle2, ChevronRight, Compass,
-  Paintbrush, Sparkles, ArrowLeft, ScrollText
+  Cake, CalendarRange, CheckCircle2, ChevronRight, Clock, Compass,
+  Paintbrush, Sparkles, Users, ArrowLeft, ScrollText
 } from 'lucide-react';
 import { BirthdayPackage } from '../types';
 import { AppImage } from './ui/AppImage';
@@ -136,12 +136,55 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
           read across at the same height. Neither is marked as the better
           choice; they are deliberately identical in weight. */}
       {!focused && (
-        <div>
+        <div className="relative pb-6 lg:pb-14">
+
+          {/* Studio marks, the same line-art idiom the Custom Events slab uses:
+              currentColor at 1.25 stroke in clay, oversized and very faint.
+              The layer carries its own overflow-hidden — putting it on the
+              container instead would clip the panels' hover shadow. Sits first
+              in the DOM and the content below is positioned, so the panels
+              always paint over it. */}
+          <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+            {/* Pottery: a wheel, its concentric rings and the curve of a rim —
+                behind the intro's open end, which is where the copy stops. */}
+            <svg
+              className="absolute -top-8 end-0 h-72 w-72 text-brand-clay/45 lg:h-96 lg:w-96"
+              viewBox="0 0 200 200" fill="none" aria-hidden="true"
+            >
+              <circle cx="118" cy="82" r="70" stroke="currentColor" strokeWidth="1.25" />
+              <circle cx="118" cy="82" r="48" stroke="currentColor" strokeWidth="1.25" />
+              <circle cx="118" cy="82" r="26" stroke="currentColor" strokeWidth="1.25" />
+              <path d="M30 150c26-34 58-52 96-54" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+            </svg>
+
+            {/* Canvas: a stretched frame and the arc of a loaded brush. */}
+            <svg
+              className="absolute bottom-0 start-0 h-64 w-64 text-brand-clay/40 lg:h-80 lg:w-80"
+              viewBox="0 0 200 200" fill="none" aria-hidden="true"
+            >
+              <rect x="34" y="30" width="112" height="88" rx="6" stroke="currentColor" strokeWidth="1.25" />
+              <path d="M34 96c22-26 44-38 66-36s38 16 46 42" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+              <path d="M96 118v52" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+              <path d="M70 170h52" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+            </svg>
+
+            {/* Editorial numerals, one under each column, half below the fold of
+                the layer so they read as background type rather than a badge.
+                Hidden below lg, where the panels stack and there is no column
+                for a numeral to belong to. */}
+            <span className="absolute bottom-0 start-0 hidden translate-y-1/3 font-display text-[9rem] font-semibold leading-none text-brand-clay/35 ltr-numerals lg:block">
+              01
+            </span>
+            <span className="absolute bottom-0 end-0 hidden translate-y-1/3 font-display text-[9rem] font-semibold leading-none text-brand-clay/35 ltr-numerals lg:block">
+              02
+            </span>
+          </div>
+
           <motion.div
             initial={prefersReducedMotion ? false : { opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, ease }}
-            className="max-w-xl"
+            className="relative max-w-xl"
           >
             <h2 className="font-display text-[22px] sm:text-2xl font-semibold text-brand-charcoal">
               Choose your celebration
@@ -153,7 +196,7 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
 
           {/* items-stretch + h-full on the panels: the price rows line up
               across the pair even when one description runs a line longer. */}
-          <div className="mt-7 grid grid-cols-1 gap-6 lg:mt-9 lg:grid-cols-2 lg:gap-8 items-stretch">
+          <div className="relative mt-7 grid grid-cols-1 gap-6 lg:mt-9 lg:grid-cols-2 lg:gap-8 items-stretch">
             {packages.map((pkg, index) => (
               <motion.button
                 key={pkg.id}
@@ -198,25 +241,28 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                     <p className="text-[15px] leading-[1.7] text-brand-ink">{pkg.shortDescription}</p>
                   )}
 
-                  {/* One quiet line instead of three icon chips — the icons
-                      read as a badge row, which is the catalogue look this
-                      layout is moving away from. */}
-                  <p className="mt-4 text-[13px] text-brand-muted">
-                    {[
-                      pkg.duration || null,
-                      `${pkg.minGuests}–${pkg.maxGuests} Guests`,
-                      pkg.ageInformation || null,
-                    ]
-                      .filter(Boolean)
-                      .map((entry, entryIndex, list) => (
-                        <span key={entry as string}>
-                          <span className="ltr-numerals">{entry}</span>
-                          {entryIndex < list.length - 1 && (
-                            <span className="mx-2 text-brand-sage" aria-hidden="true">·</span>
-                          )}
-                        </span>
-                      ))}
-                  </p>
+                  {/* Icons at the site's meta treatment — lucide at h-4 w-4 in
+                      sage, 1.5 gap — the same pairing the focused view and the
+                      workshop cards use. Plain rows, not pills: the site has no
+                      badge pattern for facts like these. */}
+                  <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-[13px] text-brand-ink">
+                    {pkg.duration && (
+                      <span className="inline-flex items-center gap-1.5">
+                        <Clock className="h-4 w-4 shrink-0 text-brand-sage" />
+                        <span className="ltr-numerals">{pkg.duration}</span>
+                      </span>
+                    )}
+                    <span className="inline-flex items-center gap-1.5">
+                      <Users className="h-4 w-4 shrink-0 text-brand-sage" />
+                      <span className="ltr-numerals">{pkg.minGuests}–{pkg.maxGuests} Guests</span>
+                    </span>
+                    {pkg.ageInformation && (
+                      <span className="inline-flex items-center gap-1.5">
+                        <Sparkles className="h-4 w-4 shrink-0 text-brand-sage" />
+                        <span className="ltr-numerals">{pkg.ageInformation}</span>
+                      </span>
+                    )}
+                  </div>
 
                   {/* mt-auto is what anchors the price to the foot of the
                       panel, so the two prices sit on the same line. */}

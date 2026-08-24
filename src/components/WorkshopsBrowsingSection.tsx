@@ -8,7 +8,7 @@ import { useApp } from '../context/AppContext';
 import Reveal from './ui/Reveal';
 import { ScrollReveal } from './ui/ScrollReveal';
 import { AppImage } from './ui/AppImage';
-import { Search, SlidersHorizontal, RefreshCw, ChevronDown } from 'lucide-react';
+import { Search, SlidersHorizontal, RefreshCw, ChevronDown, Clock, Sparkles, Paintbrush } from 'lucide-react';
 import { BackButton } from './ui/BackButton';
 import { Workshop } from '../types';
 import { BirthdayPackagesShowcase } from './BirthdayPackagesShowcase';
@@ -254,7 +254,10 @@ export const WorkshopsBrowsingSection: React.FC = () => {
 
       {/* Grid — full-bleed white band, matching the rest of the site instead
           of a page-level card. */}
-      <div className="bg-white">
+      {/* Warm off-white under the birthday packages rather than the flat white
+          the workshop grid sits on — enough to read as intentional, not enough
+          to become a second card behind the panels. */}
+      <div className={isBirthdayView ? 'bg-brand-sand/25' : 'bg-white'}>
       <div className={`mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pb-20 ${
         // Tighter top on the birthday view so the two panels read as part of
         // the heading above them rather than a separate block far below it.
@@ -384,9 +387,27 @@ export const WorkshopsBrowsingSection: React.FC = () => {
 
                     {/* Meta and Price row */}
                     <div className="mt-6 pt-4 border-t border-brand-clay hidden sm:flex items-end justify-between gap-3">
-                      <div className="text-[13px] text-brand-ink space-y-0.5 min-w-0">
-                        <p className="truncate">{ws.duration} · {ws.ageRange}</p>
-                        {ws.instructor && <p className="truncate text-brand-muted">Instructor {ws.instructor}</p>}
+                      {/* Same meta treatment as the birthday package cards:
+                          lucide at h-4 w-4 in sage, 1.5 gap. Text and data are
+                          untouched — the icons only replace the dot that used
+                          to separate duration from age. */}
+                      <div className="text-[13px] text-brand-ink space-y-1.5 min-w-0">
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 min-w-0">
+                          <span className="inline-flex min-w-0 items-center gap-1.5">
+                            <Clock className="h-4 w-4 shrink-0 text-brand-sage" />
+                            <span className="truncate ltr-numerals">{ws.duration}</span>
+                          </span>
+                          <span className="inline-flex min-w-0 items-center gap-1.5">
+                            <Sparkles className="h-4 w-4 shrink-0 text-brand-sage" />
+                            <span className="truncate ltr-numerals">{ws.ageRange}</span>
+                          </span>
+                        </div>
+                        {ws.instructor && (
+                          <p className="inline-flex min-w-0 max-w-full items-center gap-1.5 text-brand-muted">
+                            <Paintbrush className="h-4 w-4 shrink-0 text-brand-sage" />
+                            <span className="truncate">Instructor {ws.instructor}</span>
+                          </p>
+                        )}
                       </div>
                       <div className="text-end shrink-0">
                         <span className="font-display text-[22px] font-semibold text-brand-charcoal ltr-numerals">
