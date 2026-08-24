@@ -7,27 +7,29 @@ import { motion, useReducedMotion, type Variants } from 'motion/react';
 import { type ReactNode } from 'react';
 
 const VARIANTS: Variants = {
-  hidden: { opacity: 0, y: 40, filter: 'blur(10px)' },
+  hidden: { opacity: 0, y: 20 },
   show: (i: number = 0) => ({
     opacity: 1,
-    filter: 'blur(0px)',
     y: 0,
-    transition: { delay: i * 0.15, duration: 0.6, ease: 'easeOut' }
+    transition: { delay: i * 0.1, duration: 0.4, ease: 'easeOut' }
   })
 };
 
 /**
- * A blur-up fade-in, played once when the element scrolls into view.
+ * A fade and short rise, played once when the element scrolls into view.
+ *
+ * No blur: it read as heavy on type, and dropping it lets the whole reveal run
+ * shorter — 0.4s over 20px — without the movement becoming hard to notice.
  *
  * `index` staggers siblings against each other — a heading at 0 and its
- * subtext at 1 land 0.15s apart — which is why this is a separate component
+ * subtext at 1 land 0.1s apart — which is why this is a separate component
  * from `ContainerAnimated`: that one takes its timing from a
  * `ContainerStagger` parent and cannot be delayed on its own.
  *
  * `cn` from `@/lib/utils` does not exist in this project, so the class is
  * passed straight through. Under `prefers-reduced-motion` the children are
  * rendered in a plain div — no variants, so nothing can leave text stuck at
- * `opacity: 0` or blurred for someone who asked for less movement.
+ * `opacity: 0` or mid-rise for someone who asked for less movement.
  */
 export default function Reveal({
   children,
