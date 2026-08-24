@@ -29,7 +29,10 @@ import { Balloons, BalloonsHandle } from './Balloons';
 export const BirthdayBalloons: React.FC = () => {
   const anchorRef = useRef<HTMLDivElement>(null);
   const balloonsRef = useRef<BalloonsHandle>(null);
-  const isInView = useInView(anchorRef, { amount: 0.35 });
+  // 0.2 rather than 0.35: the launch fires a little earlier in the scroll, so
+  // the balloons are already on their way up by the time the section settles.
+  // Appearance timing only — the rise itself is the library's and untouched.
+  const isInView = useInView(anchorRef, { amount: 0.2 });
   const prefersReducedMotion = useReducedMotion();
   // Without the latch the effect would re-launch on every re-render that
   // happens while the section is still on screen.
