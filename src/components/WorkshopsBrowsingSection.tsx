@@ -8,7 +8,8 @@ import { useApp } from '../context/AppContext';
 import Reveal from './ui/Reveal';
 import { ScrollReveal } from './ui/ScrollReveal';
 import { AppImage } from './ui/AppImage';
-import { Search, SlidersHorizontal, RefreshCw, ChevronDown, ArrowLeft } from 'lucide-react';
+import { Search, SlidersHorizontal, RefreshCw, ChevronDown } from 'lucide-react';
+import { BackButton } from './ui/BackButton';
 import { Workshop } from '../types';
 import { BirthdayPackagesShowcase } from './BirthdayPackagesShowcase';
 import { isWorkshopFullyBooked } from '../utils/queueUtils';
@@ -127,19 +128,13 @@ export const WorkshopsBrowsingSection: React.FC = () => {
         {/* Way out of the birthday view, now that the category chips are gone.
             Clearing the category is the same switch those chips made, so this
             is the existing navigation rather than a new route.
-            Classes are the site's back-button style verbatim — the same string
-            the workshop detail page, checkout and the birthday booking header
-            use — so the control reads identically wherever it appears. */}
+            Styling comes from the shared BackButton, as it does on every other
+            page-level back control. */}
         {isBirthdayView && (
           <Reveal index={0}>
-            <button
-              type="button"
-              onClick={() => setSelectedCategory('All')}
-              className="mb-6 inline-flex cursor-pointer items-center gap-2 rounded-full border border-brand-clay bg-brand-cream px-4 py-2 text-xs font-semibold text-brand-terracotta hover:bg-brand-sand"
-            >
-              <ArrowLeft className="h-4 w-4 flip-rtl" />
-              <span>Back to Workshops</span>
-            </button>
+            <BackButton onClick={() => setSelectedCategory('All')} className="mb-6">
+              Back to Workshops
+            </BackButton>
           </Reveal>
         )}
 

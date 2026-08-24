@@ -5,11 +5,12 @@
 
 import React, { useEffect, useState } from 'react';
 import {
-  ArrowLeft, Save, Plus, Trash2, Upload, Image as ImageIcon,
+  Save, Plus, Trash2, Upload, Image as ImageIcon,
   Package, DollarSign, CalendarRange, Sparkles, Cake, Compass, ShieldAlert
 } from 'lucide-react';
 import { BirthdayPackage } from '../types';
 import { LineListTextarea } from './ui/LineListTextarea';
+import { BackButton } from './ui/BackButton';
 
 interface Props {
   /** The record being edited, straight from the shared data layer. */
@@ -106,14 +107,9 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
       {/* Which package this is, and the way back. */}
       <div className="flex flex-col gap-4 border-b border-brand-clay/60 pb-5 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <button
-            type="button"
-            onClick={onBack}
-            className="mb-2 inline-flex items-center gap-1.5 text-[11px] font-bold text-brand-terracotta hover:underline cursor-pointer"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            <span>Back to Birthday Package Management</span>
-          </button>
+          <BackButton onClick={onBack} className="mb-3">
+            Back to Birthday Package Management
+          </BackButton>
 
           <div className="flex items-center gap-3">
             {draft.image ? (

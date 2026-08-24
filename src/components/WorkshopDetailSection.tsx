@@ -14,8 +14,9 @@ import { getSessionSeatUsage } from '../utils/queueUtils';
 import { validateBookingForm } from '../utils/validation';
 import { MONTH_NAMES, WEEKDAY_NAMES_SHORT } from '../utils/calendarConfig';
 import { 
-  Calendar as CalendarIcon, User, Flame, Clock, Award, Map, CheckCircle2, Minus, Plus, Edit, ArrowLeft, Users, ChevronLeft, ChevronRight 
+  Calendar as CalendarIcon, User, Flame, Clock, Award, Map, CheckCircle2, Minus, Plus, Edit, Users, ChevronLeft, ChevronRight 
 } from 'lucide-react';
+import { BackButton } from './ui/BackButton';
 
 export const WorkshopDetailSection: React.FC = () => {
   const { 
@@ -287,13 +288,9 @@ export const WorkshopDetailSection: React.FC = () => {
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-8 pb-44 lg:pb-8 animate-in fade-in duration-300 text-start">
       
       {/* Back button */}
-      <button 
-        onClick={() => setCustomerTab('workshops')}
-        className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-terracotta bg-brand-cream border border-brand-clay hover:bg-brand-sand px-3 py-1.5 rounded-xl cursor-pointer mb-6"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        <span>Back to Workshops</span>
-      </button>
+      <BackButton onClick={() => setCustomerTab('workshops')} className="mb-6">
+        Back to Workshops
+      </BackButton>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 pb-16">
         

@@ -5,12 +5,13 @@
 
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { CreditCard, Smartphone, ShieldCheck, ArrowLeft, Check, Lock } from 'lucide-react';
+import { CreditCard, Smartphone, ShieldCheck, Check, Lock } from 'lucide-react';
 import { PhoneInput } from './PhoneInput';
 import { PrePaymentPopup } from './PrePaymentPopup';
 import { migratePrePaymentPopup } from '../types';
 import { validateBookingForm, validateBirthdayBookingForm } from '../utils/validation';
 import { CheckoutStepper } from './ui/CheckoutStepper';
+import { BackButton } from './ui/BackButton';
 
 export const CheckoutPaymentSection: React.FC = () => {
   const { 
@@ -153,13 +154,9 @@ export const CheckoutPaymentSection: React.FC = () => {
       )}
       
       {/* Back button */}
-      <button
-        onClick={() => setCustomerTab('checkout-info')}
-        className="inline-flex items-center gap-2 text-xs font-semibold text-brand-terracotta bg-brand-cream border border-brand-clay hover:bg-brand-sand px-3.5 py-2 rounded-xl cursor-pointer mb-6"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        <span>Back to Contact Information</span>
-      </button>
+      <BackButton onClick={() => setCustomerTab('checkout-info')} className="mb-6">
+        Back to Contact Information
+      </BackButton>
 
       {/* Title then stepper — the same header the birthday reservation uses. */}
       <div className="mb-8">

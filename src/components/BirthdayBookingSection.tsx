@@ -18,6 +18,7 @@ import {
 import { DateInput } from './DateInput';
 import { validatePhoneRule, canonicalPhone } from '../utils/validation';
 import { minBirthdayNoticeDays, isBirthdayDateFull, isBirthdaySlotFull } from '../utils/queueUtils';
+import { BackButton } from './ui/BackButton';
 
 const FALLBACK_TIMES = ['10:00 AM', '01:00 PM', '04:00 PM', '07:00 PM'];
 
@@ -952,13 +953,9 @@ export const BirthdayBookingSection: React.FC = () => {
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 pb-32 text-start lg:pb-8">
 
-      <button
-        onClick={() => setCustomerTab('home')}
-        className="mb-6 inline-flex cursor-pointer items-center gap-2 rounded-full border border-brand-clay bg-brand-cream px-4 py-2 text-xs font-semibold text-brand-terracotta hover:bg-brand-sand"
-      >
-        <ArrowLeft className="h-4 w-4 flip-rtl" />
-        <span>Back to Home</span>
-      </button>
+      <BackButton onClick={() => setCustomerTab('home')} className="mb-6">
+        Back to Home
+      </BackButton>
 
       <div className="mb-8">
         <span className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-sage">

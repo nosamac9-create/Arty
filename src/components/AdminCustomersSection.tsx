@@ -7,7 +7,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { CustomerAccount, Booking, QueueItem, PotteryPiece } from '../types';
 import { 
-  Users, UserPlus, Search, Filter, Phone, Mail, Calendar, Clock, ArrowLeft, 
+  Users, UserPlus, Search, Filter, Phone, Mail, Calendar, Clock, 
   Edit, CheckCircle2, AlertCircle, ShoppingBag, CreditCard, Flame, ChevronRight, 
   Tag, Shield, History, Sparkles, X, Plus, AlertTriangle, UserCheck, Cake, ListOrdered, Palette
 , Info } from 'lucide-react';
@@ -19,6 +19,7 @@ import {
 } from '../utils/activityUtils';
 import { hasWebsiteAccount, matchesAccountType, getAccountType } from '../utils/accountUtils';
 import { matchesQuery, useDebouncedValue } from '../utils/search';
+import { BackButton } from './ui/BackButton';
 
 /** Badge colour per activity category. */
 const categoryBadgeClass = (category: ActivityCategory) => {
@@ -557,13 +558,9 @@ export const AdminCustomersSection: React.FC = () => {
           
           {/* Top Bar with Back & Edit Buttons */}
           <div className="flex flex-wrap justify-between items-center gap-4 bg-white border border-brand-clay/70 p-4 rounded-2xl shadow-2xs">
-            <button
-              onClick={() => setSelectedCustomerId(null)}
-              className="inline-flex items-center gap-2 text-xs font-bold text-brand-charcoal/70 hover:text-brand-terracotta transition-colors cursor-pointer"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              <span>Back to Customers Directory</span>
-            </button>
+            <BackButton onClick={() => setSelectedCustomerId(null)}>
+              Back to Customers Directory
+            </BackButton>
 
             <div className="flex items-center gap-3">
               <button

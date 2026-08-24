@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { PasswordField } from './PasswordField';
 import { useApp } from '../context/AppContext';
-import { User, Mail, Phone, ArrowLeft, ArrowRight, ShieldCheck, LogIn, CheckCircle2, Lock , Check } from 'lucide-react';
+import { User, Mail, Phone, ArrowRight, ShieldCheck, LogIn, CheckCircle2, Lock , Check } from 'lucide-react';
 import { validateSaudiPhone, normaliseSaudiPhone } from '../utils/phoneUtils';
 import { PhoneInput } from './PhoneInput';
 import {
@@ -14,6 +14,7 @@ import {
 } from '../utils/validation';
 import { CheckoutStepper } from './ui/CheckoutStepper';
 import { AppImage } from './ui/AppImage';
+import { BackButton } from './ui/BackButton';
 
 export const CheckoutInfoSection: React.FC = () => {
   const {
@@ -183,13 +184,9 @@ export const CheckoutInfoSection: React.FC = () => {
       
       {/* Back button — a birthday draft returns to its own Review & Deposit
           step, never to a workshop's details page. */}
-      <button
-        onClick={() => setCustomerTab(birthday ? 'birthday-booking' : 'detail')}
-        className="inline-flex items-center gap-2 text-xs font-semibold text-brand-terracotta bg-brand-cream border border-brand-clay hover:bg-brand-sand px-3.5 py-2 rounded-xl cursor-pointer mb-6"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        <span>{birthday ? 'Back to Review & Deposit' : 'Back to Workshop Details'}</span>
-      </button>
+      <BackButton onClick={() => setCustomerTab(birthday ? 'birthday-booking' : 'detail')} className="mb-6">
+        {birthday ? 'Back to Review & Deposit' : 'Back to Workshop Details'}
+      </BackButton>
 
       {/* Title then stepper — the same header the birthday reservation uses. */}
       <div className="mb-8">
