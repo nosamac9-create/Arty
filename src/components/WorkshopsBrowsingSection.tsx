@@ -126,17 +126,18 @@ export const WorkshopsBrowsingSection: React.FC = () => {
       <div className={isBirthdayView ? '' : 'pb-8'}>
         {/* Way out of the birthday view, now that the category chips are gone.
             Clearing the category is the same switch those chips made, so this
-            is the existing navigation rather than a new route. Deliberately
-            quiet — a text link with a hover colour shift, not a button — so it
-            reads as secondary to the heading it sits above. */}
+            is the existing navigation rather than a new route.
+            Classes are the site's back-button style verbatim — the same string
+            the workshop detail page, checkout and the birthday booking header
+            use — so the control reads identically wherever it appears. */}
         {isBirthdayView && (
           <Reveal index={0}>
             <button
               type="button"
               onClick={() => setSelectedCategory('All')}
-              className="group -ms-1 mb-5 inline-flex cursor-pointer items-center gap-1.5 rounded-full px-1 py-1 text-[13px] font-medium text-brand-muted transition-colors hover:text-brand-charcoal"
+              className="mb-6 inline-flex cursor-pointer items-center gap-2 rounded-full border border-brand-clay bg-brand-cream px-4 py-2 text-xs font-semibold text-brand-terracotta hover:bg-brand-sand"
             >
-              <ArrowLeft className="h-4 w-4 transition-transform duration-200 group-hover:-translate-x-0.5 flip-rtl" />
+              <ArrowLeft className="h-4 w-4 flip-rtl" />
               <span>Back to Workshops</span>
             </button>
           </Reveal>
