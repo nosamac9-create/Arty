@@ -17,6 +17,7 @@ import {
 } from '../types';
 import { DateInput } from './DateInput';
 import { validatePhoneRule, canonicalPhone } from '../utils/validation';
+import { minBirthdayNoticeDays, isBirthdayDateFull, isBirthdaySlotFull } from '../utils/queueUtils';
 
 const FALLBACK_TIMES = ['10:00 AM', '01:00 PM', '04:00 PM', '07:00 PM'];
 
@@ -62,22 +63,22 @@ export const BirthdayBookingSection: React.FC = () => {
     selectedBirthdayPackage,
     setSelectedBirthdayPackage,
     setPendingBooking,
+    pendingBooking,
     currentUser,
     appSettings,
     publishedBirthdayPackages,
-    birthdayFormFields
+    birthdayFormFields,
+    bookings
   } = useApp();
 
   const prefersReducedMotion = useReducedMotion();
   const ease = [0.22, 1, 0.36, 1] as const;
 
   const eventsSettings = appSettings?.find(s => s.id === 'eventsSettings')?.value;
-  const minNoticeDays = Number(eventsSettings?.minBirthdayNoticeDays) || 4;
-  const minBookingDate = getMinBirthdayBookingDateStr(minNoticeDays);
 
   // Terms come from Settings → Events & Birthday, never hardcoded here.
   const terms: BirthdayTermsConfig = eventsSettings?.birthdayTerms || DEFAULT_BIRTHDAY_TERMS;
-  const cancellationDays = Number(eventsSettings?.cancellationNoticeDays) || minNoticeDays;
+  const cancellationDays = Number(eventsSettings?.cancellationNoticeDays) || 4;
 
   const [termsAccepted, setTermsAccepted] = useState(false);
 
@@ -115,6 +116,20 @@ export const BirthdayBookingSection: React.FC = () => {
   // the visitor never actually chose.
   const [numberOfPeople, setNumberOfPeople] = useState<number | ''>('');
 
+  /**
+   * Advance notice depends on the total headcount (which already includes
+   * the birthday person — it is never subtracted here). Until a headcount is
+   * chosen, the stricter 4-day notice is assumed so the date field is never
+   * more permissive than the rule actually allows.
+   */
+  const minNoticeDays = minBirthdayNoticeDays(Number(numberOfPeople) || 5);
+  const minBookingDate = getMinBirthdayBookingDateStr(minNoticeDays);
+
+  // Clearing a date that a lowered headcount doesn't retroactively save is
+  // deliberately NOT automatic here: collectErrors() re-checks it, so the
+  // visitor sees exactly why before moving on rather than losing a valid pick
+  // to a stricter default assumption.
+
   // The selected package is held by id and resolved from the shared record.
   const [selectedPkgId, setSelectedPkgId] = useState<string>('');
   useEffect(() => {
@@ -147,6 +162,17 @@ export const BirthdayBookingSection: React.FC = () => {
     }
   }, [timeOptions, bookingTime]);
 
+  useEffect(() => {
+    // Changing the date can land the previously chosen time on a slot that is
+    // now full (or a date that is full outright) for the new date.
+    if (
+      bookingDate && bookingTime &&
+      (isBirthdayDateFull(bookings, bookingDate) || isBirthdaySlotFull(bookings, bookingDate, bookingTime))
+    ) {
+      setBookingTime('');
+    }
+  }, [bookingDate, bookings]);
+
   const [balloonColorCustom, setBalloonColorCustom] = useState<string>('');
   const [birthdayPersonName, setBirthdayPersonName] = useState<string>('');
   const [cakePhotoUrl, setCakePhotoUrl] = useState<string | null>(null);
@@ -162,6 +188,46 @@ export const BirthdayBookingSection: React.FC = () => {
   // Step state. `furthest` keeps completed steps clickable in the stepper.
   const [step, setStep] = useState(1);
   const [furthest, setFurthest] = useState(1);
+
+  /**
+   * Resuming from the shared payment flow's Back button: this component
+   * remounts from scratch, so without this the customer would land back on
+   * Step 1 with everything they typed gone. If there is a birthday draft
+   * already sitting in `pendingBooking`, restore it and jump straight back
+   * to Review & Deposit — once, so it does not fight further edits.
+   */
+  const hydratedFromDraft = React.useRef(false);
+  useEffect(() => {
+    if (hydratedFromDraft.current) return;
+    if (!pendingBooking || pendingBooking.workshopId !== 'birthday-party-event') return;
+    const d = pendingBooking.birthdayDetails as any;
+    if (!d) return;
+    hydratedFromDraft.current = true;
+
+    if (pendingBooking.customerName) setBookingName(pendingBooking.customerName);
+    if (pendingBooking.customerPhone) setPhone(pendingBooking.customerPhone);
+    if (d.packageId) setSelectedPkgId(d.packageId);
+    if (typeof pendingBooking.participants === 'number') setNumberOfPeople(pendingBooking.participants);
+    if (pendingBooking.date) setBookingDate(pendingBooking.date);
+    if (pendingBooking.time) setBookingTime(pendingBooking.time);
+    if (d.birthdayPersonName) setBirthdayPersonName(d.birthdayPersonName);
+    if (d.cakePhotoUrl) setCakePhotoUrl(d.cakePhotoUrl);
+
+    const restoredValues: Record<string, string> = {};
+    for (const f of (d.fieldValues || [])) {
+      if (f.key === 'balloonColor' && typeof f.value === 'string' && f.value.includes(' — ')) {
+        const [base, custom] = f.value.split(' — ');
+        restoredValues[f.key] = base;
+        setBalloonColorCustom(custom || '');
+      } else if (typeof f.value === 'string') {
+        restoredValues[f.key] = f.value;
+      }
+    }
+    setFieldValues(prev => ({ ...prev, ...restoredValues }));
+    setTermsAccepted(!!d.termsAccepted);
+    setStep(4);
+    setFurthest(4);
+  }, [pendingBooking]);
 
   const handleCakePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -216,15 +282,26 @@ export const BirthdayBookingSection: React.FC = () => {
     }
 
     if (isActive('bookingDate')) {
-      const currentMinDate = getMinBirthdayBookingDateStr(minNoticeDays);
+      // Recomputed from the actual headcount typed, not the placeholder
+      // assumption the date field's `min` used before a headcount was picked.
+      const noticeForCount = minBirthdayNoticeDays(Number(numberOfPeople) || 0);
+      const currentMinDate = getMinBirthdayBookingDateStr(noticeForCount);
       if (!bookingDate) {
         errs.bookingDate = 'Please select a date';
-      } else if (bookingDate < currentMinDate) {
-        errs.bookingDate = `Please choose a date at least ${minNoticeDays} days from today.`;
+      } else if (numberOfPeople && bookingDate < currentMinDate) {
+        errs.bookingDate = `Birthday bookings for ${numberOfPeople} guests need at least ${noticeForCount} day${noticeForCount === 1 ? '' : 's'} notice.`;
+      } else if (bookingDate && isBirthdayDateFull(bookings, bookingDate)) {
+        errs.bookingDate = 'This date is fully booked for birthday celebrations. Please choose another date.';
       }
     }
 
-    if (isActive('bookingTime') && !bookingTime) errs.bookingTime = 'Please select a time slot';
+    if (isActive('bookingTime')) {
+      if (!bookingTime) {
+        errs.bookingTime = 'Please select a time slot';
+      } else if (bookingDate && !errs.bookingDate && isBirthdaySlotFull(bookings, bookingDate, bookingTime)) {
+        errs.bookingTime = 'This time slot is fully booked for birthday celebrations. Please choose another time.';
+      }
+    }
 
     if (isActive('birthdayPersonName') && isRequired('birthdayPersonName') && !birthdayPersonName.trim()) {
       errs.birthdayPersonName = `${labelFor('birthdayPersonName', 'Name of the birthday person')} is required`;
@@ -410,10 +487,12 @@ export const BirthdayBookingSection: React.FC = () => {
     onSelect: (v: string) => void;
     withSwatches?: boolean;
     priceFor?: (option: string) => number | undefined;
-  }> = ({ options, value, onSelect, withSwatches, priceFor }) => (
+    disabledOptions?: string[];
+  }> = ({ options, value, onSelect, withSwatches, priceFor, disabledOptions }) => (
     <div className="flex flex-wrap gap-2.5">
       {options.map(option => {
         const isOn = value === option;
+        const isDisabled = !!disabledOptions?.includes(option);
         const swatch = withSwatches ? swatchFor(option) : null;
         const price = priceFor?.(option);
         return (
@@ -421,11 +500,15 @@ export const BirthdayBookingSection: React.FC = () => {
             key={option}
             type="button"
             aria-pressed={isOn}
-            onClick={() => onSelect(option)}
-            className={`group flex items-center gap-2.5 rounded-2xl border px-4 py-3 text-sm font-semibold transition-colors cursor-pointer ${
-              isOn
-                ? 'border-brand-terracotta bg-brand-terracotta/8 text-brand-charcoal'
-                : 'border-brand-clay bg-white text-brand-ink hover:border-brand-muted'
+            aria-disabled={isDisabled}
+            disabled={isDisabled}
+            onClick={() => !isDisabled && onSelect(option)}
+            className={`group flex items-center gap-2.5 rounded-2xl border px-4 py-3 text-sm font-semibold transition-colors ${
+              isDisabled
+                ? 'cursor-not-allowed border-brand-clay bg-brand-sand/40 text-brand-muted opacity-60'
+                : `cursor-pointer ${isOn
+                    ? 'border-brand-terracotta bg-brand-terracotta/8 text-brand-charcoal'
+                    : 'border-brand-clay bg-white text-brand-ink hover:border-brand-muted'}`
             }`}
           >
             {swatch && (
@@ -437,11 +520,13 @@ export const BirthdayBookingSection: React.FC = () => {
             )}
             <span className="text-start">
               {option}
-              {price !== undefined && (
+              {isDisabled ? (
+                <span className="block text-[11px] font-medium text-brand-muted">Full</span>
+              ) : price !== undefined && (
                 <span className="block text-[11px] font-medium text-brand-muted ltr-numerals">{price} SAR</span>
               )}
             </span>
-            {isOn && <Check className="h-4 w-4 shrink-0 text-brand-terracotta" />}
+            {isOn && !isDisabled && <Check className="h-4 w-4 shrink-0 text-brand-terracotta" />}
           </button>
         );
       })}
@@ -528,8 +613,11 @@ export const BirthdayBookingSection: React.FC = () => {
                 +
               </button>
             </div>
+            <p className="mt-1.5 text-[11px] font-semibold text-brand-muted">
+              Include the birthday person in the total.
+            </p>
             {selectedPackage && (
-              <p className="mt-1.5 text-[11px] font-semibold text-brand-muted">
+              <p className="mt-1 text-[11px] font-semibold text-brand-muted">
                 This package hosts {selectedPackage.minGuests}–{selectedPackage.maxGuests} guests.
               </p>
             )}
@@ -554,7 +642,9 @@ export const BirthdayBookingSection: React.FC = () => {
             />
             <p className="mt-1.5 text-[11px] font-semibold text-brand-terracotta">
               <Info className="inline h-3.5 w-3.5 me-1 align-[-2px]" />
-              Birthday packages must be booked at least {minNoticeDays} days in advance.
+              {numberOfPeople
+                ? `For ${numberOfPeople} guests, book at least ${minBirthdayNoticeDays(Number(numberOfPeople))} day${minBirthdayNoticeDays(Number(numberOfPeople)) === 1 ? '' : 's'} in advance.`
+                : 'Parties of 3–4 need 1 day notice; 5 or more need 4 days notice.'}
             </p>
             {selectedPackage?.availableDays?.length ? (
               <p className="mt-0.5 text-[11px] font-semibold text-brand-muted">
@@ -565,14 +655,32 @@ export const BirthdayBookingSection: React.FC = () => {
           </div>
         );
 
-      case 'bookingTime':
+      case 'bookingTime': {
+        // A slot at BIRTHDAY_SAME_SLOT_MAX is disabled here — the same rule
+        // collectErrors() and the submit-time re-check both enforce — even
+        // when the day overall still has room.
+        const fullTimes = bookingDate
+          ? timeOptions.filter(t => isBirthdaySlotFull(bookings, bookingDate, t))
+          : [];
+        const dateFull = bookingDate ? isBirthdayDateFull(bookings, bookingDate) : false;
         return (
           <div key={field.id} className="sm:col-span-2">
             {label}
-            <OptionTiles options={timeOptions} value={bookingTime} onSelect={setBookingTime} />
+            <OptionTiles
+              options={timeOptions}
+              value={bookingTime}
+              onSelect={setBookingTime}
+              disabledOptions={dateFull ? timeOptions : fullTimes}
+            />
+            {dateFull && (
+              <p className="mt-1.5 text-[11px] font-semibold text-red-500">
+                This date is fully booked for birthday celebrations. Please choose another date.
+              </p>
+            )}
             {fieldError('bookingTime')}
           </div>
         );
+      }
 
       case 'birthdayPersonName':
         return (

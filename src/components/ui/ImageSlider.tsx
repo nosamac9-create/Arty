@@ -55,8 +55,21 @@ export function ImageSlider({
   );
 
   const [broken, setBroken] = useState<string[]>([]);
+  // A transient load failure (a network blip, a request racing the browser's
+  // cache) must not permanently drop a real photo out of the rotation for
+  // the rest of the visit — that is exactly what made this "fixed by
+  // refreshing the page" for customers. Each source gets a few retries
+  // (tracked by a cache-busting suffix) before it is treated as broken.
+  const [retryTokens, setRetryTokens] = useState<Record<string, number>>({});
   const usable = sources.filter(src => !broken.includes(src));
   const slides = usable.length > 0 ? usable : sources.slice(0, 1);
+  const MAX_SLIDE_RETRIES = 3;
+
+  const resolveSrc = (src: string) => {
+    const token = retryTokens[src];
+    if (!token || src.startsWith('data:')) return src;
+    return `${src}${src.includes('?') ? '&' : '?'}retry=${token}`;
+  };
 
   const [currentIndex, setCurrentIndex] = useState(0);
 
@@ -116,6 +129,19 @@ export function ImageSlider({
   const markBroken = (src: string) =>
     setBroken(prev => (prev.includes(src) ? prev : [...prev, src]));
 
+  /** Retries a failed source a few times before giving up on it for good. */
+  const handleError = (src: string) => {
+    if (src.startsWith('data:')) return markBroken(src);
+    const attempt = retryTokens[src] || 0;
+    if (attempt >= MAX_SLIDE_RETRIES) {
+      markBroken(src);
+      return;
+    }
+    window.setTimeout(() => {
+      setRetryTokens(prev => ({ ...prev, [src]: attempt + 1 }));
+    }, 700 * (attempt + 1));
+  };
+
   return (
     <div className="space-y-4">
       <div className={`relative overflow-hidden bg-brand-sand ${className}`}>
@@ -124,11 +150,11 @@ export function ImageSlider({
           /* One image, or someone who asked for less movement: the centre
              frame plainly, no stack and no 3D. */
           <img
-            src={centreSrc}
+            src={resolveSrc(centreSrc)}
             alt={alt}
             className="h-full w-full object-cover"
             referrerPolicy="no-referrer"
-            onError={() => markBroken(centreSrc)}
+            onError={() => handleError(centreSrc)}
           />
         ) : (
           /* The fanned stack. Cards are sized against the container rather
@@ -162,11 +188,11 @@ export function ImageSlider({
                   aria-hidden={!isCenter}
                 >
                   <img
-                    src={slide}
+                    src={resolveSrc(slide)}
                     alt={isCenter ? alt : ''}
                     className="h-full w-full rounded-2xl border border-brand-clay object-cover shadow-card"
                     referrerPolicy="no-referrer"
-                    onError={() => markBroken(slide)}
+                    onError={() => handleError(slide)}
                   />
                 </div>
               );
@@ -216,11 +242,12 @@ export function ImageSlider({
                 }`}
               >
                 <img
-                  src={slide}
+                  src={resolveSrc(slide)}
                   alt=""
                   className="h-full w-full object-cover"
                   referrerPolicy="no-referrer"
                   loading="lazy"
+                  onError={() => handleError(slide)}
                 />
               </button>
             );

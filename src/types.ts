@@ -259,17 +259,30 @@ export interface QueueItem {
   /** Set on the completed entry that was extended; its session record stays intact. */
   extendedByQueueId?: string;
 
+  /**
+   * Café table(s) (Studio Resource ids of type 'Table Station') this
+   * Without Instructor entry has been given. Staff choose these explicitly —
+   * nothing auto-assigns a table. Empty/undefined means unassigned: normal
+   * while Waiting or Called, and required before the entry can move to
+   * In Progress. See `utils/tableSeatingUtils.ts` for how this drives
+   * reserved vs occupied capacity.
+   */
+  tableIds?: string[];
+
   history: { status: 'Waiting' | 'Called' | 'In Progress' | 'Completed' | 'Cancelled'; timestamp: string }[];
 }
 
 /**
- * The four making-stages, then the two end-states.
+ * The three customer-facing making-stages, then the two end-states.
  *
- * Collected and Broken are lifecycle outcomes rather than Kanban columns: a
- * piece leaves the board through them, it does not queue in them.
+ * Collected and Broken are lifecycle outcomes rather than Kanban columns or
+ * progress-bar steps: a piece leaves the board through them, it does not
+ * queue in them, and "Picked Up" is never a fourth step in the customer's
+ * 3-stage tracker — see DEFAULT_PIPELINE_STAGES, where 'Collected' is not
+ * customer-visible for exactly that reason.
  */
 export const PIECE_MAKING_STAGES = [
-  'Greenware', 'Bisque Firing', 'Glazing', 'Ready for Collection'
+  'Created', 'First Burn and Colored', 'Ready for Pickup'
 ] as const;
 
 export const PIECE_END_STATES = ['Collected', 'Broken'] as const;
@@ -282,25 +295,29 @@ export type PieceStatus = PieceMakingStage | typeof PIECE_END_STATES[number];
  *
  * Kept as a lookup rather than folded into the SQL migration alone, because
  * older records — and any client that has not reloaded — can still hand us a
- * legacy name.
+ * legacy name. Bisque Firing and Glazing both collapse into the one merged
+ * middle stage.
  */
 const LEGACY_STAGE_MAP: Record<string, PieceStatus> = {
-  'Created': 'Greenware',
-  'Drying': 'Greenware',
-  'In Processing': 'Bisque Firing',
-  'Firing': 'Bisque Firing',
-  'Glazing': 'Glazing',
-  'Ready for Collection': 'Ready for Collection',
+  'Greenware': 'Created',
+  'Drying': 'Created',
+  'Created': 'Created',
+  'In Processing': 'First Burn and Colored',
+  'Firing': 'First Burn and Colored',
+  'Bisque Firing': 'First Burn and Colored',
+  'Glazing': 'First Burn and Colored',
+  'Ready for Collection': 'Ready for Pickup',
+  'Ready for Pickup': 'Ready for Pickup',
   'Collected': 'Collected',
   'Broken': 'Broken'
 };
 
 /** Normalises any stage name — current or retired — onto a valid status. */
 export function migrateLegacyPieceStatus(status: string | undefined | null): PieceStatus {
-  if (!status) return 'Greenware';
+  if (!status) return 'Created';
   const all: string[] = [...PIECE_MAKING_STAGES, ...PIECE_END_STATES];
   if (all.includes(status)) return status as PieceStatus;
-  return LEGACY_STAGE_MAP[status] || 'Greenware';
+  return LEGACY_STAGE_MAP[status] || 'Created';
 }
 
 export interface PotteryPiece {
@@ -329,7 +346,7 @@ export interface PotteryPiece {
   additionalDescriptionGlazingNotes?: string;
   expectedCompletion?: string;
   expectedReadyDate?: string;
-  /** Set when the piece actually reached Ready for Collection. */
+  /** Set when the piece actually reached Ready for Pickup. */
   actualReadyDate?: string;
   /** Legacy alias kept on older records. */
   readyDate?: string;
@@ -671,7 +688,7 @@ export const INITIAL_PIECES: PotteryPiece[] = [
     customerPhone: '+966 50 112 3344',
     dateCreated: '2026-07-05',
     image: 'https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?auto=format&fit=crop&w=200&q=80',
-    status: 'Ready for Collection',
+    status: 'Ready for Pickup',
     daysElapsed: 14,
     assignedStaff: 'Ali Khalid',
     storageLocation: 'Shelf C-12',
@@ -685,7 +702,7 @@ export const INITIAL_PIECES: PotteryPiece[] = [
     customerPhone: '+966 54 888 7777',
     dateCreated: '2026-07-12',
     image: 'https://images.unsplash.com/photo-1578749556568-bc2c40e68b61?auto=format&fit=crop&w=200&q=80',
-    status: 'Bisque Firing',
+    status: 'First Burn and Colored',
     daysElapsed: 7,
     assignedStaff: 'Aisha Al-Jahdali',
     storageLocation: 'Kiln Room 2',
@@ -699,7 +716,7 @@ export const INITIAL_PIECES: PotteryPiece[] = [
     customerPhone: '+966 50 123 4567',
     dateCreated: '2026-07-18',
     image: 'https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=200&q=80',
-    status: 'Greenware',
+    status: 'Created',
     daysElapsed: 1,
     assignedStaff: 'Sara Al-Malki',
     storageLocation: 'Drying Rack B',
@@ -713,7 +730,7 @@ export const INITIAL_PIECES: PotteryPiece[] = [
     customerPhone: '+966 55 999 1111',
     dateCreated: '2026-07-02',
     image: 'https://images.unsplash.com/photo-1565192647048-f997ded87958?auto=format&fit=crop&w=200&q=80',
-    status: 'Ready for Collection',
+    status: 'Ready for Pickup',
     daysElapsed: 17,
     assignedStaff: 'Ali Khalid',
     storageLocation: 'Shelf C-03',
@@ -758,22 +775,30 @@ export interface PipelineStage {
 }
 
 /**
- * The pottery workflow: four making-stages, then the two end-states.
+ * The pottery workflow: three customer-facing making-stages, then the two
+ * end-states.
  *
- * These ids are the canonical set — `0006_piece_pipeline_v2.sql` deletes
- * everything else in `pipeline_stages`, which is what clears the duplicated and
- * retired rows the board was drawing twice. Staff can rename, recolour and
- * reorder them in Settings; the ids are what stays fixed.
+ * These ids are the canonical set — `0007_piece_lifecycle_v3.sql` deletes
+ * everything else in `pipeline_stages` (the old, now-merged 'stage-glazing'
+ * row included), which is what clears duplicated and retired rows the board
+ * was drawing twice. Staff can rename, recolour and reorder them in Settings;
+ * the ids are what stays fixed.
+ *
+ * 'Collected' stays `visibleToCustomer: false`: it is a real, final status a
+ * piece can hold and it still drives its own notification and history entry,
+ * but "Picked Up" is a recorded outcome, not a fourth step in the customer's
+ * 3-stage progress tracker (see the `customerStages` filter wherever the
+ * tracker is rendered).
  */
 export const DEFAULT_PIPELINE_STAGES: PipelineStage[] = [
-  { id: 'stage-greenware', name: 'Greenware', color: '#E07A5F', order: 0, visibleToCustomer: true, enabled: true, notifyCustomer: true },
-  { id: 'stage-bisque', name: 'Bisque Firing', color: '#F2CC8F', order: 1, visibleToCustomer: true, enabled: true, notifyCustomer: true },
-  { id: 'stage-glazing', name: 'Glazing', color: '#81B29A', order: 2, visibleToCustomer: true, enabled: true, notifyCustomer: true },
-  { id: 'stage-ready', name: 'Ready for Collection', color: '#335C67', order: 3, visibleToCustomer: true, enabled: true, notifyCustomer: true },
-  // End-states. On the board these are outcomes, not columns.
-  { id: 'stage-collected', name: 'Collected', color: '#111111', order: 4, visibleToCustomer: true, enabled: true, notifyCustomer: true },
+  { id: 'stage-greenware', name: 'Created', color: '#E07A5F', order: 0, visibleToCustomer: true, enabled: true, notifyCustomer: true },
+  { id: 'stage-bisque', name: 'First Burn and Colored', color: '#F2CC8F', order: 1, visibleToCustomer: true, enabled: true, notifyCustomer: true },
+  { id: 'stage-ready', name: 'Ready for Pickup', color: '#335C67', order: 2, visibleToCustomer: true, enabled: true, notifyCustomer: true },
+  // End-states. On the board these are outcomes, not columns, and neither is
+  // a step in the customer's 3-stage tracker.
+  { id: 'stage-collected', name: 'Collected', color: '#111111', order: 3, visibleToCustomer: false, enabled: true, notifyCustomer: true },
   // The customer is told to contact the café, never shown the damage details.
-  { id: 'stage-broken', name: 'Broken', color: '#B91C1C', order: 5, visibleToCustomer: false, enabled: true, notifyCustomer: true }
+  { id: 'stage-broken', name: 'Broken', color: '#B91C1C', order: 4, visibleToCustomer: false, enabled: true, notifyCustomer: true }
 ];
 
 /** A stage is selectable for a new update unless it has been disabled. */

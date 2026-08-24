@@ -13,6 +13,7 @@ import { ScrollReveal } from './ui/ScrollReveal';
 import Reveal from './ui/Reveal';
 import { AnimatedMap } from './ui/AnimatedMap';
 import { BirthdayBalloons } from './ui/BirthdayBalloons';
+import { AppImage } from './ui/AppImage';
 import {
   ContainerStagger,
   ContainerAnimated,
@@ -20,6 +21,7 @@ import {
   GalleryGridCell
 } from './ui/CtaSectionWithGallery';
 import { formatDate } from '../utils/calendarConfig';
+import { isWorkshopFullyBooked } from '../utils/queueUtils';
 import { Calendar, Sparkles, ChevronRight, Paintbrush, MousePointerClick, CalendarRange, Gift, Coffee, ChevronDown, ChevronUp, Phone, Mail, UserCheck, Star } from 'lucide-react';
 
 /**
@@ -59,7 +61,8 @@ const HERO_ALTS = [
 export const HomeSection: React.FC = () => {
   const {
     workshops, setCustomerTab, setSelectedWorkshopId, events,
-    setSelectedBirthdayPackage, publishedBirthdayPackages, setWorkshopsInitialCategory
+    setSelectedBirthdayPackage, publishedBirthdayPackages, setWorkshopsInitialCategory,
+    workshopSessions, bookings, queue, todayDateStr
   } = useApp();
   const [showOwnerContact, setShowOwnerContact] = useState(false);
 
@@ -232,26 +235,21 @@ export const HomeSection: React.FC = () => {
                   height (not aspect-video) so every card's image locks to the
                   same box regardless of the source photo's own dimensions. */}
               <div className="relative h-48 sm:h-52 shrink-0 bg-brand-sand">
-                <img
+                <AppImage
                   src={ws.image}
                   alt={ws.title}
                   className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                   referrerPolicy="no-referrer"
                 />
                 
-                {/* Spots Pill */}
-                {/* Both chips ride the top of the image: availability on the
-                    leading edge, category on the trailing one. */}
+                {/* Availability chip — silent unless every upcoming date is
+                    full; category chip always shows. */}
                 <div className="absolute inset-x-3 top-3 flex items-start justify-between gap-2">
-                  {ws.spotsLeft === 0 ? (
+                  {isWorkshopFullyBooked(ws.id, { workshopSessions, workshops, bookings, queue }, todayDateStr) ? (
                     <span className="inline-flex items-center rounded-full bg-brand-charcoal/85 px-3 py-1.5 text-[11px] font-semibold text-brand-cream backdrop-blur-sm">
                       Fully booked
                     </span>
-                  ) : (
-                    <span className="inline-flex items-center rounded-full bg-brand-charcoal/85 px-3 py-1.5 text-[11px] font-semibold text-brand-cream backdrop-blur-sm">
-                      {ws.spotsLeft} spots left
-                    </span>
-                  )}
+                  ) : <span />}
                   <span className="inline-flex items-center rounded-full bg-brand-cream/90 px-3 py-1.5 text-[11px] font-semibold text-brand-charcoal backdrop-blur-sm">
                     {ws.category}
                   </span>

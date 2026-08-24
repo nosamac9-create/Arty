@@ -41,7 +41,7 @@ import { usePagination, TablePager } from './ui/TablePager';
  * it — two controls for one transition is how a piece ends up marked collected
  * by someone who meant to advance it a stage.
  */
-const DEDICATED_BUTTON_STATUSES: string[] = ['Ready for Collection', ...PIECE_END_STATES];
+const DEDICATED_BUTTON_STATUSES: string[] = ['Ready for Pickup', ...PIECE_END_STATES];
 
 export const AdminPiecesTrackingSection: React.FC = () => {
   const {
@@ -95,7 +95,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
   const [selectedPresetPhoto, setSelectedPresetPhoto] = useState('Mug');
   const [dateCreatedInput, setDateCreatedInput] = useState(() => new Date().toISOString().split('T')[0]);
   const [assignedStaffInput, setAssignedStaffInput] = useState('');
-  const [initialStatus, setInitialStatus] = useState<PotteryPiece['status']>('Greenware');
+  const [initialStatus, setInitialStatus] = useState<PotteryPiece['status']>('Created');
   const [storageLocationInput, setStorageLocationInput] = useState('Shelf A-1');
   const [expectedCompletionInput, setExpectedCompletionInput] = useState(() => {
     const d = new Date();
@@ -304,9 +304,9 @@ export const AdminPiecesTrackingSection: React.FC = () => {
 
     await updatePieceStatus(pieceId, status, user, reason);
 
-    const isReady = status === 'Ready for Collection';
+    const isReady = status === 'Ready for Pickup';
     triggerToast(
-      isReady ? 'Ready for Collection pickup!' : 'Status Shipped Successfully',
+      isReady ? 'Ready for Pickup!' : 'Status Shipped Successfully',
       `Piece ${piece.pieceCode || pieceId} (${piece.customerName}) has been updated to "${status}" by ${user}.${reason ? ` Reason: ${reason}` : ''}`,
       isReady
     );
@@ -352,10 +352,9 @@ export const AdminPiecesTrackingSection: React.FC = () => {
 
   const getColumnColorClass = (col: PotteryPiece['status']) => {
     switch (col) {
-      case 'Greenware': return 'text-blue-600 border-blue-500 bg-blue-50';
-      case 'Bisque Firing': return 'text-orange-600 border-orange-500 bg-orange-50';
-      case 'Glazing': return 'text-purple-600 border-purple-500 bg-purple-50';
-      case 'Ready for Collection': return 'text-emerald-700 border-emerald-500 bg-emerald-50';
+      case 'Created': return 'text-blue-600 border-blue-500 bg-blue-50';
+      case 'First Burn and Colored': return 'text-orange-600 border-orange-500 bg-orange-50';
+      case 'Ready for Pickup': return 'text-emerald-700 border-emerald-500 bg-emerald-50';
       case 'Collected': return 'text-gray-600 border-gray-400 bg-gray-50';
       case 'Broken': return 'text-red-700 border-red-500 bg-red-50';
       default: return 'text-brand-charcoal border-brand-clay bg-brand-sand';
@@ -367,7 +366,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
       case 'dateCreated': return p.dateCreated;
       case 'expectedCompletion': return p.expectedCompletion || '';
       case 'readyDate':
-        return p.history?.find(h => h.status === 'Ready for Collection')?.timestamp.split('T')[0] || '';
+        return p.history?.find(h => h.status === 'Ready for Pickup')?.timestamp.split('T')[0] || '';
       case 'collectionDate':
         return p.history?.find(h => h.status === 'Collected')?.timestamp.split('T')[0] || '';
       default: return p.dateCreated;
@@ -440,7 +439,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
     }
 
     if (awaitingCollectionOnly) {
-      result = result.filter(p => p.status === 'Ready for Collection');
+      result = result.filter(p => p.status === 'Ready for Pickup');
     }
 
     if (startDate || endDate) {
@@ -1008,7 +1007,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
             <div className="pt-4 border-t border-brand-clay/60 grid grid-cols-2 gap-3">
               <button
                 onClick={() => {
-                  onAttemptStatusChange(selectedPiece.id, 'Ready for Collection');
+                  onAttemptStatusChange(selectedPiece.id, 'Ready for Pickup');
                   setSelectedPieceId(null);
                 }}
                 className="cursor-pointer bg-green-600 hover:bg-green-700 text-brand-cream font-bold text-xs py-3 rounded-xl transition-all shadow-sm flex items-center justify-center gap-1.5"

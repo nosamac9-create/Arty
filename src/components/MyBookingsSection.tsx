@@ -11,6 +11,7 @@ import { resolveBookingInstructor } from '../utils/queueUtils';
 import { normalizeCustomerPhone } from '../utils/customerIdentity';
 import Reveal from './ui/Reveal';
 import { ScrollReveal } from './ui/ScrollReveal';
+import { AppImage } from './ui/AppImage';
 
 export const MyBookingsSection: React.FC = () => {
   const { bookings, cancelBooking, setCustomerTab, workshops, currentUser, setAuthScreen, staff, workshopSessions } = useApp();
@@ -232,7 +233,7 @@ export const MyBookingsSection: React.FC = () => {
                 {/* Left block: thumbnail & title info */}
                 <div className="flex items-center gap-4">
                   <div className="h-16 w-16 shrink-0 rounded-xl overflow-hidden bg-brand-sand border border-brand-clay">
-                    <img src={imageUrl} alt={b.workshopTitle} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                    <AppImage src={imageUrl} alt={b.workshopTitle} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
                   </div>
                   <div className="space-y-1">
                     {/* Pending is not an alert — it is a state, so it is set

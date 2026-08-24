@@ -10,6 +10,7 @@ import { PotteryPiece, stageCustomerLabel, migrateLegacyPieceStatus } from '../t
 import { formatDateTime } from '../utils/calendarConfig';
 import Reveal from './ui/Reveal';
 import { ScrollReveal } from './ui/ScrollReveal';
+import { AppImage } from './ui/AppImage';
 
 export const MyPiecesSection: React.FC = () => {
   const {
@@ -54,18 +55,23 @@ export const MyPiecesSection: React.FC = () => {
 
   const STAGES = customerStages.length > 0
     ? customerStages.map(stageCustomerLabel)
-    : ['Greenware', 'Bisque Firing', 'Glazing', 'Ready for Collection', 'Collected'];
+    : ['Created', 'First Burn and Colored', 'Ready for Pickup'];
 
   /**
    * The tracker reads its position from the configured stages rather than a
    * hardcoded list — renaming or reordering a stage in Settings moves the
    * customer's tracker with it. A retired name on an older piece is mapped onto
    * the stage that replaced it.
+   *
+   * 'Collected' (and any other stage marked not customer-visible) has no dot
+   * of its own — Picked Up is a final status, not a fourth progress step — so
+   * it is read as "past the last visible stage" rather than "not found".
    */
   const getStageIndex = (status: PotteryPiece['status'] | string): number => {
     const current = migrateLegacyPieceStatus(status);
     const index = customerStages.findIndex(stage => stage.name === current);
-    return index >= 0 ? index : 0;
+    if (index >= 0) return index;
+    return current === 'Collected' ? customerStages.length : 0;
   };
 
   /**
@@ -114,7 +120,7 @@ export const MyPiecesSection: React.FC = () => {
         </Reveal>
         <Reveal index={1}>
           <p className="text-sm text-brand-ink mt-1">
-            Track your handcrafted clay pieces as they move from wet clay crafting to our kiln firing and glazing stages.
+            Track your handcrafted clay pieces from creation through their first burn and coloring, to pickup.
           </p>
         </Reveal>
       </div>
@@ -220,7 +226,7 @@ export const MyPiecesSection: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {userPieces.map((p, cardIndex) => {
             const currentStageIdx = getCustomerStageIndex(p);
-            const isReady = p.status === 'Ready for Collection';
+            const isReady = p.status === 'Ready for Pickup';
 
             const isBroken = p.status === 'Broken';
 
@@ -246,7 +252,7 @@ export const MyPiecesSection: React.FC = () => {
                 {isReady && !isBroken && (
                   <div className="absolute top-0 left-0 right-0 flex items-center justify-center gap-1.5 bg-brand-terracotta text-brand-cream text-center text-xs font-semibold py-2 rounded-t-[30px] tracking-wider">
                     <CheckCircle2 className="h-3.5 w-3.5" />
-                    <span>Ready! Ready for collection at Arty Café shelf.</span>
+                    <span>Ready! Ready for pickup at the Arty Café shelf.</span>
                   </div>
                 )}
 
@@ -260,11 +266,11 @@ export const MyPiecesSection: React.FC = () => {
                 {/* Piece Image and Info */}
                 <div className={`space-y-4 ${isReady || isBroken ? 'pt-6' : ''}`}>
                   <div className="aspect-video w-full rounded-2xl overflow-hidden bg-brand-sand border border-brand-clay">
-                    <img 
-                      src={customerImageFor(p)} 
-                      alt={p.name} 
-                      className="h-full w-full object-cover" 
-                      referrerPolicy="no-referrer" 
+                    <AppImage
+                      src={customerImageFor(p)}
+                      alt={p.name}
+                      className="h-full w-full object-cover"
+                      referrerPolicy="no-referrer"
                     />
                   </div>
                   
@@ -313,9 +319,14 @@ export const MyPiecesSection: React.FC = () => {
                 <div className="mt-6 pt-5 border-t border-brand-clay space-y-4">
                   <div className="relative flex items-center justify-between">
                     <div className="absolute left-2.5 right-2.5 top-1/2 -translate-y-1/2 h-1 bg-brand-sand rounded-full"></div>
-                    <div 
+                    <div
                       className="absolute left-2.5 top-1/2 -translate-y-1/2 h-1 bg-brand-terracotta rounded-full transition-all duration-500"
-                      style={{ width: `${(currentStageIdx / (STAGES.length - 1)) * 95}%` }}
+                      style={{
+                        // A picked-up piece reports an index past the last dot
+                        // (see getStageIndex) — the fill still stops at the
+                        // last dot rather than overshooting it.
+                        width: `${(Math.min(currentStageIdx, STAGES.length - 1) / (STAGES.length - 1)) * 95}%`
+                      }}
                     ></div>
 
                     {STAGES.map((stage, idx) => {

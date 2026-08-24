@@ -13,6 +13,7 @@ import {
   validateCustomerForm, canonicalPhone, canonicalEmail, passwordChecklist
 } from '../utils/validation';
 import { CheckoutStepper } from './ui/CheckoutStepper';
+import { AppImage } from './ui/AppImage';
 
 export const CheckoutInfoSection: React.FC = () => {
   const {
@@ -180,13 +181,14 @@ export const CheckoutInfoSection: React.FC = () => {
   return (
     <div className="mx-auto max-w-4xl px-4 py-10 animate-in fade-in duration-300 text-start">
       
-      {/* Back to detail button */}
+      {/* Back button — a birthday draft returns to its own Review & Deposit
+          step, never to a workshop's details page. */}
       <button
-        onClick={() => setCustomerTab('detail')}
+        onClick={() => setCustomerTab(birthday ? 'birthday-booking' : 'detail')}
         className="inline-flex items-center gap-2 text-xs font-semibold text-brand-terracotta bg-brand-cream border border-brand-clay hover:bg-brand-sand px-3.5 py-2 rounded-xl cursor-pointer mb-6"
       >
         <ArrowLeft className="h-4 w-4" />
-        <span>Back to Workshop Details</span>
+        <span>{birthday ? 'Back to Review & Deposit' : 'Back to Workshop Details'}</span>
       </button>
 
       {/* Title then stepper — the same header the birthday reservation uses. */}
@@ -362,7 +364,7 @@ export const CheckoutInfoSection: React.FC = () => {
             </h3>
 
             <div className="flex gap-4">
-              <img
+              <AppImage
                 src={birthday ? (birthdayPackage?.image || workshop.image) : workshop.image}
                 alt={birthday ? (birthdayPackage?.name || 'Birthday package') : workshop.title}
                 className="w-20 h-20 rounded-2xl object-cover shrink-0 bg-brand-sand border border-brand-clay"

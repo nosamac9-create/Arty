@@ -137,6 +137,17 @@ export function resolveBookingInstructor(
 /** Booking states that no longer hold a seat. */
 const NON_RESERVING_BOOKING_STATUSES = ['cancelled', 'auto-cancelled', 'draft', 'no show', 'no-show'];
 const NON_RESERVING_PAYMENT_STATUSES = ['failed', 'payment failed', 'declined', 'draft'];
+
+/**
+ * Whether a booking still holds its place — the same status/payment rule
+ * `getSessionSeatUsage` uses for workshop seats, exported so birthday
+ * capacity (which has no session row to check against) can agree with it.
+ */
+export function isActiveBookingRecord(b: Booking): boolean {
+  const status = String(b.status || '').trim().toLowerCase();
+  const payment = String(b.paymentStatus || '').trim().toLowerCase();
+  return !NON_RESERVING_BOOKING_STATUSES.includes(status) && !NON_RESERVING_PAYMENT_STATUSES.includes(payment);
+}
 /**
  * Queue states that no longer hold a seat. A completed visit has finished, so per
  * the session lifecycle it stops reserving capacity.
@@ -186,10 +197,7 @@ export function getSessionSeatUsage(
   let bookedSeats = 0;
 
   bookings.forEach(b => {
-    const status = String(b.status || '').trim().toLowerCase();
-    const payment = String(b.paymentStatus || '').trim().toLowerCase();
-    if (NON_RESERVING_BOOKING_STATUSES.includes(status)) return;
-    if (NON_RESERVING_PAYMENT_STATUSES.includes(payment)) return;
+    if (!isActiveBookingRecord(b)) return;
     if (!belongsToSession(b.sessionId, b.workshopId, b.date, b.time)) return;
 
     countedBookingIds.add(String(b.id));
@@ -382,4 +390,100 @@ export function validateHoursAndGuests(hours: unknown, guests: unknown): Record<
   }
 
   return errors;
+}
+
+/**
+ * Whether a workshop card should read "Fully Booked" on the public site.
+ *
+ * A workshop is never judged by a single date: it is only shown as full once
+ * every one of its published, still-upcoming sessions has no seats left. A
+ * workshop with no published future sessions yet is not "full" — there is
+ * simply nothing to book, which is not the same claim.
+ */
+export function isWorkshopFullyBooked(
+  workshopId: string,
+  sources: { workshopSessions: WorkshopSessionRecord[]; workshops: Workshop[]; bookings: Booking[]; queue?: QueueItem[] },
+  todayDateStr: string
+): boolean {
+  const { workshopSessions, workshops, bookings, queue = [] } = sources;
+  const today = normalizeDateString(todayDateStr);
+
+  const futureSessions = workshopSessions.filter(
+    s => String(s.workshopId) === String(workshopId) && s.status === 'Published' && normalizeDateString(s.date) >= today
+  );
+  if (futureSessions.length === 0) return false;
+
+  return futureSessions.every(
+    s => getSessionSeatUsage(s, { workshops, bookings, queue }).remainingCapacity <= 0
+  );
+}
+
+// ==========================================================
+// BIRTHDAY PACKAGE CAPACITY
+//
+// A birthday reservation has no workshop session to check capacity
+// against — every package shares one calendar, so the rules below count
+// across all birthday package types together, keyed only by date/time.
+// ==========================================================
+
+/** The shared placeholder workshop id every birthday booking is saved under. */
+export const BIRTHDAY_WORKSHOP_ID = 'birthday-party-event';
+
+/** Combined across every birthday package: no more than this many parties a day. */
+export const BIRTHDAY_DAILY_MAX = 5;
+
+/** No more than this many parties may share one date + time slot. */
+export const BIRTHDAY_SAME_SLOT_MAX = 2;
+
+export function isBirthdayBookingRecord(b: Booking): boolean {
+  return b.workshopId === BIRTHDAY_WORKSHOP_ID || String(b.workshopTitle || '').toLowerCase().includes('birthday');
+}
+
+/**
+ * How many days' notice a birthday booking needs, given the total headcount
+ * (which already includes the birthday person — never subtract them again).
+ *
+ *   3-4 total people -> 1 day notice
+ *   5+ total people  -> 4 days notice
+ */
+export function minBirthdayNoticeDays(totalPeople: number): number {
+  return totalPeople >= 5 ? 4 : 1;
+}
+
+/** Active (non-cancelled) birthday bookings, across every package, for one date. */
+export function activeBirthdayBookingsOnDate(
+  bookings: Booking[],
+  date: string,
+  excludeBookingId?: string
+): Booking[] {
+  const target = normalizeDateString(date);
+  return bookings.filter(b =>
+    isBirthdayBookingRecord(b) &&
+    isActiveBookingRecord(b) &&
+    normalizeDateString(b.date) === target &&
+    String(b.id) !== String(excludeBookingId || '')
+  );
+}
+
+/** Active birthday bookings for one exact date + time slot. */
+export function activeBirthdayBookingsAtSlot(
+  bookings: Booking[],
+  date: string,
+  time: string,
+  excludeBookingId?: string
+): Booking[] {
+  return activeBirthdayBookingsOnDate(bookings, date, excludeBookingId).filter(b => b.time === time);
+}
+
+export function isBirthdayDateFull(bookings: Booking[], date: string, excludeBookingId?: string): boolean {
+  return activeBirthdayBookingsOnDate(bookings, date, excludeBookingId).length >= BIRTHDAY_DAILY_MAX;
+}
+
+export function isBirthdaySlotFull(
+  bookings: Booking[],
+  date: string,
+  time: string,
+  excludeBookingId?: string
+): boolean {
+  return activeBirthdayBookingsAtSlot(bookings, date, time, excludeBookingId).length >= BIRTHDAY_SAME_SLOT_MAX;
 }

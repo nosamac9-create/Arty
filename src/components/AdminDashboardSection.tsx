@@ -100,7 +100,7 @@ export const AdminDashboardSection: React.FC = () => {
   const overduePickupPieces = useMemo(() => {
     return pieces
       .filter(p => {
-        if (p.status !== 'Ready for Collection') return false;
+        if (p.status !== 'Ready for Pickup') return false;
         
         // Calculate days waiting since ready date or daysElapsed
         const readyDate = p.expectedReadyDate || p.actualReadyDate || p.readyDate || p.dateCreated || todayDateStr;
@@ -620,7 +620,7 @@ export const AdminDashboardSection: React.FC = () => {
             <div>
               <h2 className="font-display font-bold text-lg text-brand-charcoal">Pottery Awaiting Pickup for 7+ Days</h2>
               <p className="text-xs text-brand-charcoal/60">
-                Pieces in "Ready for Collection" status that have been waiting on storage shelves for 7 days or longer.
+                Pieces in "Ready for Pickup" status that have been waiting on storage shelves for 7 days or longer.
               </p>
             </div>
           </div>

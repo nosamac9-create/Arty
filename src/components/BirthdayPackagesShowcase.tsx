@@ -10,6 +10,7 @@ import {
   Paintbrush, Sparkles, Users, ArrowLeft, ScrollText
 } from 'lucide-react';
 import { BirthdayPackage } from '../types';
+import { AppImage } from './ui/AppImage';
 
 interface Props {
   packages: BirthdayPackage[];
@@ -148,7 +149,7 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                 className="relative h-56 w-full overflow-hidden bg-brand-sand sm:h-64"
               >
                 {pkg.image && (
-                  <img
+                  <AppImage
                     src={pkg.image}
                     alt=""
                     className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
@@ -229,7 +230,7 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                 className="relative h-72 w-full overflow-hidden rounded-[32px] bg-brand-sand sm:h-96"
               >
                 {focused.image && (
-                  <img
+                  <AppImage
                     src={focused.image}
                     alt=""
                     className="h-full w-full object-cover"

@@ -6,11 +6,10 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { CreditCard, Smartphone, ShieldCheck, ArrowLeft, Check, Lock } from 'lucide-react';
-import { getMinBirthdayBookingDateStr } from '../utils/dateUtils';
 import { PhoneInput } from './PhoneInput';
 import { PrePaymentPopup } from './PrePaymentPopup';
 import { migratePrePaymentPopup } from '../types';
-import { validateBookingForm } from '../utils/validation';
+import { validateBookingForm, validateBirthdayBookingForm } from '../utils/validation';
 import { CheckoutStepper } from './ui/CheckoutStepper';
 
 export const CheckoutPaymentSection: React.FC = () => {
@@ -74,15 +73,18 @@ export const CheckoutPaymentSection: React.FC = () => {
     }
     setBookingError(null);
 
-    // Enforce 4-day advance rule for birthday packages before payment completion
-    if (
-      pendingBooking.workshopId === 'birthday-party-event' ||
-      pendingBooking.workshopTitle.toLowerCase().includes('birthday')
-    ) {
-      const minBirthdayDate = getMinBirthdayBookingDateStr();
-      if (pendingBooking.date < minBirthdayDate) {
-        alert('Birthday packages must be booked at least 4 days in advance. Please select a valid date.');
-        setIsProcessing(false);
+    // Advance notice, daily maximum and same-slot maximum are all re-checked
+    // here against a fresh read, exactly like workshop capacity above — the
+    // page's own numbers can go stale while the customer is on this screen.
+    if (isBirthday) {
+      const birthdayErrors = await validateBirthdayBookingForm({
+        date: pendingBooking.date,
+        time: pendingBooking.time,
+        totalPeople: pendingBooking.participants
+      });
+      const birthdayError = Object.values(birthdayErrors)[0];
+      if (birthdayError) {
+        setBookingError(birthdayError);
         return;
       }
     }

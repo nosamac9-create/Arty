@@ -7,9 +7,11 @@ import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import Reveal from './ui/Reveal';
 import { ScrollReveal } from './ui/ScrollReveal';
+import { AppImage } from './ui/AppImage';
 import { Search, SlidersHorizontal, RefreshCw, ChevronDown } from 'lucide-react';
 import { Workshop } from '../types';
 import { BirthdayPackagesShowcase } from './BirthdayPackagesShowcase';
+import { isWorkshopFullyBooked } from '../utils/queueUtils';
 
 /** Pseudo-category: not a real DB category, it swaps the whole grid to birthday packages. */
 const BIRTHDAY_CATEGORY = 'Birthday Packages';
@@ -18,7 +20,7 @@ export const WorkshopsBrowsingSection: React.FC = () => {
   const {
     workshops, setCustomerTab, setSelectedWorkshopId, categories: dbCategories,
     publishedBirthdayPackages, selectedBirthdayPackage, setSelectedBirthdayPackage,
-    workshopsInitialCategory
+    workshopsInitialCategory, workshopSessions, bookings, queue, todayDateStr
   } = useApp();
 
   // Search & Filter state
@@ -280,7 +282,10 @@ export const WorkshopsBrowsingSection: React.FC = () => {
         {!isBirthdayView && filteredWorkshops.length > 0 && (
           <div className="grid grid-cols-1 gap-4 sm:gap-8 md:grid-cols-3">
             {filteredWorkshops.map((ws, cardIndex) => {
-              const isFull = ws.spotsLeft === 0;
+              // Fully booked considers every published, upcoming session for
+              // this workshop — not just the one date most recently looked at
+              // — so a workshop with other open dates is never shown as full.
+              const isFull = isWorkshopFullyBooked(ws.id, { workshopSessions, workshops, bookings, queue }, todayDateStr);
               return (
                 <ScrollReveal
                   key={ws.id}
@@ -307,25 +312,23 @@ export const WorkshopsBrowsingSection: React.FC = () => {
                       child is unreliable and was letting square photos render
                       taller than widescreen ones. */}
                   <div className="relative m-3 h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-brand-sand sm:m-0 sm:h-52 sm:w-auto sm:rounded-none">
-                    <img
+                    <AppImage
                       src={ws.image}
                       alt={ws.title}
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                       referrerPolicy="no-referrer"
                     />
 
-                    {/* Muted or highlight Spots Pill */}
-                    <div className="absolute top-3 left-3 hidden sm:block">
-                      {isFull ? (
+                    {/* Availability pill — silent unless every upcoming date
+                        is full, since exposing live seat counts here just
+                        confuses a workshop that runs on multiple dates. */}
+                    {isFull && (
+                      <div className="absolute top-3 left-3 hidden sm:block">
                         <span className="inline-flex items-center rounded-lg bg-brand-charcoal/85 text-brand-cream px-2.5 py-1 text-xs font-semibold tracking-wide shadow-card-sm">
                           FULLY BOOKED
                         </span>
-                      ) : (
-                        <span className="inline-flex items-center rounded-lg bg-brand-terracotta text-brand-cream px-2.5 py-1 text-xs font-semibold tracking-wide shadow-card-sm">
-                          {ws.spotsLeft} SPOTS LEFT
-                        </span>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Core details */}
@@ -344,11 +347,11 @@ export const WorkshopsBrowsingSection: React.FC = () => {
                       </p>
                     </div>
 
-                    {/* Phone: spots left and price on one line. */}
+                    {/* Phone: availability (only when fully booked) and price on one line. */}
                     <div className="mt-2 flex items-end justify-between gap-3 sm:hidden">
-                      <span className={`text-[11px] font-semibold ${isFull ? 'text-brand-muted' : 'text-brand-terracotta'}`}>
-                        {isFull ? 'Fully booked' : `${ws.spotsLeft} spots left`}
-                      </span>
+                      {isFull ? (
+                        <span className="text-[11px] font-semibold text-brand-muted">Fully booked</span>
+                      ) : <span />}
                       <span className="font-display text-base font-semibold text-brand-charcoal ltr-numerals">
                         {ws.price} <span className="text-[10px] font-medium text-brand-muted">SAR</span>
                       </span>

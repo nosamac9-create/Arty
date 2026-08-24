@@ -96,7 +96,7 @@ export const TABLE_COLUMNS: Record<string, string[]> = {
     'source', 'type', 'hours', 'workshop_type', 'date', 'seated_time', 'workshop_id',
     'session_id', 'session_start_time', 'session_end_time', 'session_duration',
     'session_capacity', 'returned_from_queue_id', 'extended_by_queue_id', 'history',
-    'created_at', 'updated_at'
+    'table_ids', 'created_at', 'updated_at'
   ],
   pieces: [
     'id', 'piece_code', 'customer_id', 'booking_id', 'workshop_id', 'name', 'workshop_name', 'customer_name',

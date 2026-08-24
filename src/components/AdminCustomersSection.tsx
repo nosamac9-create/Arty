@@ -319,7 +319,7 @@ export const AdminCustomersSection: React.FC = () => {
 
       const totalSpent = Math.max(0, totalPaid - totalRefunded);
 
-      const piecesReadyCount = cPieces.filter(p => p.status === 'Ready for Collection').length;
+      const piecesReadyCount = cPieces.filter(p => p.status === 'Ready for Pickup').length;
 
       map.set(c.id, {
         totalVisits: visitsList.length,
@@ -1005,7 +1005,7 @@ export const AdminCustomersSection: React.FC = () => {
                         <div className="flex justify-between items-start">
                           <span className="font-mono font-bold text-xs text-brand-terracotta">{p.pieceCode || p.id}</span>
                           <span className={`px-2 py-0.5 rounded text-[9px] font-bold border ${
-                            p.status === 'Ready for Collection' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
+                            p.status === 'Ready for Pickup' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
                             p.status === 'Collected' ? 'bg-gray-100 text-gray-700 border-gray-300' :
                             'bg-amber-50 text-amber-800 border-amber-200'
                           }`}>
