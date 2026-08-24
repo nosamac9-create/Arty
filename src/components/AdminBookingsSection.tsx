@@ -8,10 +8,12 @@ import { useApp, getRiyadhNow, parseBookingDateTimeToRiyadhDate, getRiyadhDateSt
 import { 
   Search, Filter, RefreshCw, X, Download, User, Calendar, 
   MapPin, Clock, Edit2, ShieldAlert, Receipt, CheckCircle, ChevronRight, Bell, AlertTriangle
-} from 'lucide-react';
+, Phone, Mail } from 'lucide-react';
 import { Booking, Workshop } from '../types';
 import { resolveBookingInstructor } from '../utils/queueUtils';
 import { DateInput } from './DateInput';
+import { matchesQuery } from '../utils/search';
+import { normalizeDateString } from '../utils/timeUtils';
 
 export const AdminBookingsSection: React.FC = () => {
   const { 
@@ -175,12 +177,11 @@ export const AdminBookingsSection: React.FC = () => {
 
     // Search query matches customer name, ID, or workshop title
     if (search.trim()) {
-      const q = search.toLowerCase();
-      result = result.filter(b => 
-        (b.customerName || '').toLowerCase().includes(q) || 
-        (b.id || '').toLowerCase().includes(q) || 
-        (b.workshopTitle || '').toLowerCase().includes(q) ||
-        (b.customerPhone || '').includes(q)
+      result = result.filter(b =>
+        matchesQuery(
+          [b.customerName, b.id, b.workshopTitle, b.customerPhone, b.customerEmail, b.status],
+          search
+        )
       );
     }
 
@@ -199,15 +200,17 @@ export const AdminBookingsSection: React.FC = () => {
       result = result.filter(b => b.paymentStatus === paymentFilter);
     }
 
-    // Date History Filters
+    // Date History Filters. Booking dates are normalised before comparing:
+    // the picker always emits a padded "2026-08-04", while an older record can
+    // hold "2026-8-4", and a raw string compare would miss it.
     if (dateFilterMode === 'Today') {
-      result = result.filter(b => b.date === todayStr);
+      result = result.filter(b => normalizeDateString(b.date) === normalizeDateString(todayStr));
     } else if (dateFilterMode === 'Yesterday') {
-      result = result.filter(b => b.date === yesterdayStr);
+      result = result.filter(b => normalizeDateString(b.date) === normalizeDateString(yesterdayStr));
     } else if (dateFilterMode === 'This Week') {
       result = result.filter(b => isDateInCurrentWeek(b.date));
     } else if (dateFilterMode === 'Custom' && customDate) {
-      result = result.filter(b => b.date === customDate);
+      result = result.filter(b => normalizeDateString(b.date) === normalizeDateString(customDate));
     }
 
     // Sort order
@@ -824,8 +827,14 @@ export const AdminBookingsSection: React.FC = () => {
                 <h4 className="text-xs font-bold text-brand-charcoal uppercase tracking-widest text-brand-sage">Customer Info</h4>
                 <div className="p-3 bg-brand-sand/30 rounded-xl border border-brand-clay/40 space-y-2">
                   <p className="text-sm font-bold text-brand-charcoal">{activeBookingDetail.customerName}</p>
-                  <p className="text-xs font-medium text-brand-charcoal/70">📞 {activeBookingDetail.customerPhone}</p>
-                  <p className="text-xs font-medium text-brand-charcoal/70">✉ {activeBookingDetail.customerEmail}</p>
+                  <p className="flex items-center gap-1.5 text-xs font-medium text-brand-charcoal/70">
+                    <Phone className="h-3.5 w-3.5 text-brand-charcoal/45" />
+                    <span>{activeBookingDetail.customerPhone}</span>
+                  </p>
+                  <p className="flex items-center gap-1.5 text-xs font-medium text-brand-charcoal/70">
+                    <Mail className="h-3.5 w-3.5 text-brand-charcoal/45" />
+                    <span>{activeBookingDetail.customerEmail}</span>
+                  </p>
                 </div>
               </div>
 

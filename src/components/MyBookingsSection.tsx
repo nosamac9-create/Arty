@@ -5,12 +5,13 @@
 
 import React, { useState, useMemo } from 'react';
 import { useApp, getRiyadhNow } from '../context/AppContext';
-import { Calendar, Users, Hash, AlertCircle, Trash2, CalendarX, Compass, HelpCircle } from 'lucide-react';
+import { Calendar, Users, Clock, GraduationCap, AlertCircle, Trash2, CalendarX, Compass, HelpCircle } from 'lucide-react';
 import { Booking } from '../types';
 import { resolveBookingInstructor } from '../utils/queueUtils';
 import { normalizeCustomerPhone } from '../utils/customerIdentity';
 import Reveal from './ui/Reveal';
 import { ScrollReveal } from './ui/ScrollReveal';
+import { AppImage } from './ui/AppImage';
 
 export const MyBookingsSection: React.FC = () => {
   const { bookings, cancelBooking, setCustomerTab, workshops, currentUser, setAuthScreen, staff, workshopSessions } = useApp();
@@ -83,6 +84,12 @@ export const MyBookingsSection: React.FC = () => {
       default:
         return 'bg-yellow-100 text-yellow-800 border-yellow-200';
     }
+  };
+
+  /** The booked workshop's duration, e.g. "2.5 Hours". Blank if unknown. */
+  const getWorkshopDuration = (workshopId: string) => {
+    const ws = workshops.find(w => w.id === workshopId);
+    return ws?.duration || '';
   };
 
   const getWorkshopImage = (workshopId: string) => {
@@ -208,6 +215,7 @@ export const MyBookingsSection: React.FC = () => {
             const isClosed = isCancellationClosed(b);
             const isCancelled = b.status === 'Cancelled';
             const imageUrl = getWorkshopImage(b.workshopId);
+            const duration = getWorkshopDuration(b.workshopId);
 
             return (
               <ScrollReveal
@@ -225,12 +233,20 @@ export const MyBookingsSection: React.FC = () => {
                 {/* Left block: thumbnail & title info */}
                 <div className="flex items-center gap-4">
                   <div className="h-16 w-16 shrink-0 rounded-xl overflow-hidden bg-brand-sand border border-brand-clay">
-                    <img src={imageUrl} alt={b.workshopTitle} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                    <AppImage src={imageUrl} alt={b.workshopTitle} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
                   </div>
                   <div className="space-y-1">
-                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${getStatusBadgeColor(b.status)}`}>
-                      {b.status}
-                    </span>
+                    {/* Pending is not an alert — it is a state, so it is set
+                        like the "Paid amount" label rather than as a badge. */}
+                    {b.status === 'Pending' ? (
+                      <span className="block text-[10px] font-semibold uppercase tracking-wider text-brand-sage">
+                        {b.status}
+                      </span>
+                    ) : (
+                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${getStatusBadgeColor(b.status)}`}>
+                        {b.status}
+                      </span>
+                    )}
                     <h3 className="font-display text-lg font-semibold text-brand-charcoal leading-tight line-clamp-1">
                       {b.workshopTitle}
                     </h3>
@@ -242,17 +258,19 @@ export const MyBookingsSection: React.FC = () => {
                       </span>
                       <span className="flex items-center gap-1">
                         <Users className="h-3.5 w-3.5 text-brand-sage" />
-                        <span>{b.participants} {b.participants === 1 ? 'artist' : 'artists'}</span>
+                        <span>{b.participants} {b.participants === 1 ? 'guest' : 'guests'}</span>
                       </span>
                       {/* Tutor resolved from the booked session record */}
                       <span className="flex items-center gap-1">
-                        <span className="text-brand-sage">🎓</span>
+                        <GraduationCap className="h-3.5 w-3.5 text-brand-sage" />
                         <span>{resolveBookingInstructor(b, { staff, workshopSessions }).name}</span>
                       </span>
-                      <span className="flex items-center gap-1 font-mono font-semibold text-brand-terracotta">
-                        <Hash className="h-3 w-3" />
-                        <span>{b.id}</span>
-                      </span>
+                      {duration && (
+                        <span className="flex items-center gap-1">
+                          <Clock className="h-3.5 w-3.5 text-brand-sage" />
+                          <span>{duration}</span>
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -296,7 +314,7 @@ export const MyBookingsSection: React.FC = () => {
                         /* Normal Cancel Button */
                         <button
                           onClick={() => {
-                            if (window.confirm(`Are you sure you want to cancel booking ${b.id}? Your payment of ${b.totalPrice} SAR will be refunded.`)) {
+                            if (window.confirm(`Are you sure you want to cancel your booking for ${b.workshopTitle}? Your payment of ${b.totalPrice} SAR will be refunded.`)) {
                               cancelBooking(b.id);
                             }
                           }}

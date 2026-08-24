@@ -607,7 +607,7 @@ export const SYSTEM_TESTS: SystemTestDefinition[] = [
   },
   {
     id: 'PCS-03',
-    name: '"Ready for Collection" notifies the customer',
+    name: '"Ready for Pickup" notifies the customer',
     description: 'Audits live pieces that are ready and confirms each produced a customer notification.',
     category: 'Pieces',
     kind: 'audit',
@@ -617,17 +617,17 @@ export const SYSTEM_TESTS: SystemTestDefinition[] = [
       ]);
 
       // A stage can be configured not to notify; that is not a failure.
-      const readyStage = stages.find(s => s.name === 'Ready for Collection');
+      const readyStage = stages.find(s => s.name === 'Ready for Pickup');
       if (readyStage && readyStage.notifyCustomer === false) {
         return pass(
           'Skipped — the stage is configured not to notify customers',
-          'Notifications are switched off for "Ready for Collection" in Settings'
+          'Notifications are switched off for "Ready for Pickup" in Settings'
         );
       }
 
-      const ready = pieces.filter(p => p.status === 'Ready for Collection');
+      const ready = pieces.filter(p => p.status === 'Ready for Pickup');
       const notNotified = ready.filter(p => !notifications.some(
-        n => n.type === 'customer' && n.pieceId === p.id && n.newStatus === 'Ready for Collection'
+        n => n.type === 'customer' && n.pieceId === p.id && n.newStatus === 'Ready for Pickup'
       ));
 
       return check(
@@ -774,13 +774,13 @@ export const SYSTEM_TESTS: SystemTestDefinition[] = [
     run: async ({ temp }) => {
       await seedTemp(temp);
       const isOverdue = (piece: any) => {
-        if (piece.status !== 'Ready for Collection') return false;
+        if (piece.status !== 'Ready for Pickup') return false;
         return (piece.daysElapsed || 0) >= 7;
       };
       const cases = [
-        { id: 'p6', status: 'Ready for Collection', daysElapsed: 6, want: false },
-        { id: 'p7', status: 'Ready for Collection', daysElapsed: 7, want: true },
-        { id: 'p9', status: 'Ready for Collection', daysElapsed: 9, want: true },
+        { id: 'p6', status: 'Ready for Pickup', daysElapsed: 6, want: false },
+        { id: 'p7', status: 'Ready for Pickup', daysElapsed: 7, want: true },
+        { id: 'p9', status: 'Ready for Pickup', daysElapsed: 9, want: true },
         { id: 'pd', status: 'Drying', daysElapsed: 30, want: false },
         { id: 'pc', status: 'Collected', daysElapsed: 30, want: false }
       ];
@@ -1416,7 +1416,7 @@ export const SYSTEM_TESTS: SystemTestDefinition[] = [
         } as any);
       };
 
-      await move('Glazing', 'Staff');
+      await move('First Burn and Colored', 'Staff');
       await move('Drying', 'Manager', 'Needed more drying time');
 
       const final = await temp.pieces.get('TEST-PC-1');
@@ -1445,7 +1445,7 @@ export const SYSTEM_TESTS: SystemTestDefinition[] = [
       await temp.pieces.bulkPut([
         { id: 'TEST-F1', name: 'A', status: 'Drying', dateCreated: '2026-03-01', customerName: 'X', daysElapsed: 2 },
         { id: 'TEST-F2', name: 'B', status: 'Drying', dateCreated: '2026-03-15', customerName: 'X', daysElapsed: 2 },
-        { id: 'TEST-F3', name: 'C', status: 'Ready for Collection', dateCreated: '2026-03-10', customerName: 'X', daysElapsed: 12 },
+        { id: 'TEST-F3', name: 'C', status: 'Ready for Pickup', dateCreated: '2026-03-10', customerName: 'X', daysElapsed: 12 },
         { id: 'TEST-F4', name: 'D', status: 'Collected', dateCreated: '2026-04-01', customerName: 'X', daysElapsed: 40 }
       ] as any);
 
@@ -1632,7 +1632,7 @@ export const SYSTEM_TESTS: SystemTestDefinition[] = [
         id: 'TEST-PC-S', name: 'Bowl', status: 'Drying', customerName: 'X'
       } as any);
       await temp.pieceHistory.add({
-        pieceId: 'TEST-PC-S', status: 'Glazing',
+        pieceId: 'TEST-PC-S', status: 'First Burn and Colored',
         timestamp: '2026-01-01T00:00:00.000Z', user: 'Staff'
       } as any);
 
@@ -1643,7 +1643,7 @@ export const SYSTEM_TESTS: SystemTestDefinition[] = [
         !history.some((h: any) => h.status === stageName);
 
       const inUse = canDelete('Drying');
-      const inHistory = canDelete('Glazing');
+      const inHistory = canDelete('First Burn and Colored');
       const unused = canDelete('Never Used Stage');
 
       return check(

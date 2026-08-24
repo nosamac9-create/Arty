@@ -10,11 +10,38 @@ import {
   MapPin, User, Calendar, RefreshCw, ClipboardList, Clock, Sparkles,
   Camera, Hash, Upload
 } from 'lucide-react';
-import { PotteryPiece, isStageEnabled } from '../types';
+import { PotteryPiece, isStageEnabled, PIECE_END_STATES } from '../types';
+
+/**
+ * A suggested code that is not already on the board.
+ *
+ * Only a suggestion — staff can type their own, and `addPiece` is the actual
+ * guard. It exists so the field does not open pre-filled with a code that is
+ * already taken, which is how duplicates were being typed in.
+ */
+const suggestPieceCode = (existing: PotteryPiece[]): string => {
+  const taken = new Set(
+    existing.flatMap(p => [p.pieceCode, p.id].filter(Boolean).map(v => String(v).trim().toUpperCase()))
+  );
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const candidate = `AC-${Math.floor(1000 + Math.random() * 9000)}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+  return `AC-${Date.now().toString(36).toUpperCase()}`;
+};
 import { PhoneInput } from './PhoneInput';
 import { DateInput } from './DateInput';
 import { formatDateTime } from '../utils/calendarConfig';
 import { hasWebsiteAccount } from '../utils/accountUtils';
+import { matchesQuery, useDebouncedValue } from '../utils/search';
+import { usePagination, TablePager } from './ui/TablePager';
+
+/**
+ * Reached by their own buttons underneath the dropdown, so they are left out of
+ * it — two controls for one transition is how a piece ends up marked collected
+ * by someone who meant to advance it a stage.
+ */
+const DEDICATED_BUTTON_STATUSES: string[] = ['Ready for Pickup', ...PIECE_END_STATES];
 
 export const AdminPiecesTrackingSection: React.FC = () => {
   const {
@@ -26,6 +53,10 @@ export const AdminPiecesTrackingSection: React.FC = () => {
   // Views and Filters state
   const [viewMode, setViewMode] = useState<'Board' | 'Table'>('Board');
   const [search, setSearch] = useState('');
+  /* The board re-derives every column from the full piece list; debouncing the
+     filter keeps typing responsive once the studio has a few thousand pieces.
+     The input itself is unaffected — only the filtering waits. */
+  const debouncedSearch = useDebouncedValue(search);
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [awaitingCollectionOnly, setAwaitingCollectionOnly] = useState(false);
 
@@ -58,7 +89,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
 
   const [relatedWorkshopId, setRelatedWorkshopId] = useState('');
   const [pieceType, setPieceType] = useState('Mug');
-  const [pieceCodeInput, setPieceCodeInput] = useState(() => `AC-${Math.floor(1000 + Math.random() * 9000)}`);
+  const [pieceCodeInput, setPieceCodeInput] = useState(() => suggestPieceCode(pieces));
   const [pieceNameInput, setPieceNameInput] = useState('Custom Clay Vessel');
   const [customPhotoUrl, setCustomPhotoUrl] = useState('');
   const [selectedPresetPhoto, setSelectedPresetPhoto] = useState('Mug');
@@ -222,8 +253,23 @@ export const AdminPiecesTrackingSection: React.FC = () => {
     [pipelineStages]
   );
 
-  /** Board columns follow the configured order. */
+  /**
+   * Board columns follow the configured order, minus the two end-states.
+   *
+   * Collected and Broken are outcomes, not queues — a piece leaves the board
+   * through them. They stay selectable below (so "mark as collected" and the
+   * broken flow are unchanged) and those pieces remain listed in the Table
+   * view, which is not column-driven.
+   */
   const COLUMNS = useMemo(
+    () => orderedStages
+      .filter(stage => !PIECE_END_STATES.includes(stage.name as any))
+      .map(stage => stage.name as PotteryPiece['status']),
+    [orderedStages]
+  );
+
+  /** Every configured stage name, board column or end-state. */
+  const allStageNames = useMemo(
     () => orderedStages.map(stage => stage.name as PotteryPiece['status']),
     [orderedStages]
   );
@@ -258,9 +304,9 @@ export const AdminPiecesTrackingSection: React.FC = () => {
 
     await updatePieceStatus(pieceId, status, user, reason);
 
-    const isReady = status === 'Ready for Collection';
+    const isReady = status === 'Ready for Pickup';
     triggerToast(
-      isReady ? '🚨 Ready for Collection pickup!' : 'Status Shipped Successfully',
+      isReady ? 'Ready for Pickup!' : 'Status Shipped Successfully',
       `Piece ${piece.pieceCode || pieceId} (${piece.customerName}) has been updated to "${status}" by ${user}.${reason ? ` Reason: ${reason}` : ''}`,
       isReady
     );
@@ -307,11 +353,8 @@ export const AdminPiecesTrackingSection: React.FC = () => {
   const getColumnColorClass = (col: PotteryPiece['status']) => {
     switch (col) {
       case 'Created': return 'text-blue-600 border-blue-500 bg-blue-50';
-      case 'Drying': return 'text-amber-600 border-amber-500 bg-amber-50';
-      case 'In Processing': return 'text-indigo-600 border-indigo-500 bg-indigo-50';
-      case 'Glazing': return 'text-purple-600 border-purple-500 bg-purple-50';
-      case 'Firing': return 'text-orange-600 border-orange-500 bg-orange-50';
-      case 'Ready for Collection': return 'text-emerald-700 border-emerald-500 bg-emerald-50';
+      case 'First Burn and Colored': return 'text-orange-600 border-orange-500 bg-orange-50';
+      case 'Ready for Pickup': return 'text-emerald-700 border-emerald-500 bg-emerald-50';
       case 'Collected': return 'text-gray-600 border-gray-400 bg-gray-50';
       case 'Broken': return 'text-red-700 border-red-500 bg-red-50';
       default: return 'text-brand-charcoal border-brand-clay bg-brand-sand';
@@ -323,7 +366,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
       case 'dateCreated': return p.dateCreated;
       case 'expectedCompletion': return p.expectedCompletion || '';
       case 'readyDate':
-        return p.history?.find(h => h.status === 'Ready for Collection')?.timestamp.split('T')[0] || '';
+        return p.history?.find(h => h.status === 'Ready for Pickup')?.timestamp.split('T')[0] || '';
       case 'collectionDate':
         return p.history?.find(h => h.status === 'Collected')?.timestamp.split('T')[0] || '';
       default: return p.dateCreated;
@@ -362,7 +405,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
 
     // Search the shared piece records: trimmed, case-insensitive, and matching
     // phone numbers regardless of formatting. Runs alongside the other filters.
-    const rawSearch = search.trim();
+    const rawSearch = debouncedSearch.trim();
     if (rawSearch) {
       const q = rawSearch.toLowerCase();
       const phoneSearch = isPhoneQuery(rawSearch);
@@ -396,7 +439,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
     }
 
     if (awaitingCollectionOnly) {
-      result = result.filter(p => p.status === 'Ready for Collection');
+      result = result.filter(p => p.status === 'Ready for Pickup');
     }
 
     if (startDate || endDate) {
@@ -410,7 +453,11 @@ export const AdminPiecesTrackingSection: React.FC = () => {
     }
 
     return result;
-  }, [pieces, search, overdueOnly, awaitingCollectionOnly, startDate, endDate, dateField]);
+  }, [pieces, debouncedSearch, overdueOnly, awaitingCollectionOnly, startDate, endDate, dateField]);
+
+  /* Ten rows a page in the table. The board is unaffected — its columns are
+     already bounded by their own scroll. */
+  const tablePager = usePagination(processedPieces, 10);
 
   const selectedPiece = useMemo(() => {
     return pieces.find(p => p.id === selectedPieceId) || null;
@@ -435,7 +482,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
           {/* Log Piece Manually Button */}
           <button
             onClick={() => {
-              setPieceCodeInput(`AC-${Math.floor(1000 + Math.random() * 9000)}`);
+              setPieceCodeInput(suggestPieceCode(pieces));
               setShowManualLogModal(true);
             }}
             className="cursor-pointer px-4 py-2 bg-brand-terracotta hover:bg-brand-terracotta/95 text-brand-cream rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all duration-200"
@@ -730,7 +777,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-brand-clay/30">
-                {processedPieces.map((p) => {
+                {tablePager.pageItems.map((p) => {
                   const isOverdue = p.daysElapsed >= 10 && p.status !== 'Collected';
                   return (
                     <tr 
@@ -763,13 +810,25 @@ export const AdminPiecesTrackingSection: React.FC = () => {
               </tbody>
             </table>
           </div>
+
+          <div className="px-4 pb-4">
+            <TablePager
+              page={tablePager.page}
+              totalPages={tablePager.totalPages}
+              from={tablePager.from}
+              to={tablePager.to}
+              total={tablePager.total}
+              onPage={tablePager.setPage}
+              noun="pieces"
+            />
+          </div>
         </div>
       )}
 
       {/* PIECE DETAIL DIALOG MODAL */}
       {selectedPiece && (
         <div className="fixed inset-0 bg-brand-charcoal/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-brand-cream border border-brand-clay rounded-3xl p-6 shadow-2xl max-w-lg w-full text-left space-y-6 animate-in zoom-in-95 duration-200">
+          <div className="bg-brand-cream border border-brand-clay rounded-3xl p-6 shadow-2xl max-w-3xl w-full max-h-[calc(100vh-3rem)] overflow-y-auto always-scrollbar text-left space-y-5 animate-in zoom-in-95 duration-200">
             
             {/* Modal Header */}
             <div className="flex justify-between items-center border-b border-brand-clay/60 pb-3">
@@ -796,13 +855,30 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                   <img src={selectedPiece.image} alt={selectedPiece.name} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
                 </div>
                 
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   <span className="text-[9px] font-bold text-brand-sage uppercase tracking-wider block">Assigned Pottery Staff</span>
                   <div className="flex items-center gap-2">
-                    <div className="h-6 w-6 rounded-full bg-brand-terracotta text-brand-cream flex items-center justify-center font-bold text-[10px]">
+                    <div className="h-6 w-6 shrink-0 rounded-full bg-brand-terracotta text-brand-cream flex items-center justify-center font-bold text-[10px]">
                       {selectedPiece.assignedStaff?.charAt(0) || '?'}
                     </div>
-                    <span className="text-xs font-bold text-brand-charcoal">{selectedPiece.assignedStaff || 'Unassigned'}</span>
+                    {/* Reassigning is done here rather than in a separate step. */}
+                    <select
+                      value={selectedPiece.assignedStaff || ''}
+                      onChange={async e => {
+                        await updatePiece(selectedPiece.id, { assignedStaff: e.target.value });
+                        triggerToast('Piece Reassigned', `Now assigned to ${e.target.value || 'nobody'}.`, false);
+                      }}
+                      className="min-w-0 flex-1 bg-white border border-brand-clay/80 rounded-xl p-1.5 text-xs font-bold text-brand-charcoal cursor-pointer"
+                    >
+                      <option value="">Unassigned</option>
+                      {selectedPiece.assignedStaff &&
+                        !assignableStaff.some(st => st.name === selectedPiece.assignedStaff) && (
+                        <option value={selectedPiece.assignedStaff}>{selectedPiece.assignedStaff}</option>
+                      )}
+                      {assignableStaff.map(st => (
+                        <option key={st.id} value={st.name}>{st.name}</option>
+                      ))}
+                    </select>
                   </div>
                   {/* Historical assignment kept even if that staff member is no longer active */}
                   {selectedPiece.assignedStaff && !assignableStaff.some(s => s.name === selectedPiece.assignedStaff) && (
@@ -899,30 +975,6 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                   </button>
                 </div>
 
-                {/* Status history — staff member and Riyadh date/time per change */}
-                <div className="space-y-1.5 pt-1">
-                  <span className="font-bold text-brand-charcoal/50 block">Status History</span>
-                  <div className="max-h-32 overflow-y-auto space-y-1.5 bg-brand-cream/40 border border-brand-clay/50 rounded-xl p-2.5">
-                    {(selectedPiece.history || []).length === 0 ? (
-                      <p className="text-[10px] font-semibold text-brand-charcoal/40 italic">No history recorded yet.</p>
-                    ) : (
-                      [...(selectedPiece.history || [])].reverse().map((h, idx) => (
-                        <div key={`${h.timestamp}-${idx}`} className="text-[10px] font-semibold text-brand-charcoal/80 border-b border-brand-clay/25 last:border-b-0 pb-1 last:pb-0">
-                          <div className="flex justify-between gap-2">
-                            <span className={`font-bold ${h.status === 'Broken' ? 'text-red-700' : 'text-brand-charcoal'}`}>{h.status}</span>
-                            <span className="font-mono text-brand-charcoal/50">
-                              {h.riyadhTime || formatDateTime(h.timestamp)}
-                            </span>
-                          </div>
-                          <p className="text-brand-charcoal/60">
-                            by {h.user}{h.reason ? ` — ${h.reason}` : ''}
-                          </p>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-
                 {/* Status selector directly within the detail dialog */}
                 <div className="space-y-1.5 pt-1">
                   <label className="font-bold text-brand-charcoal/50 block">Advance Lifecycle State</label>
@@ -931,9 +983,14 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                     onChange={e => onAttemptStatusChange(selectedPiece.id, e.target.value as any)}
                     className="w-full bg-brand-cream border border-brand-clay rounded-xl p-2 font-bold text-brand-charcoal cursor-pointer"
                   >
-                    {/* Disabled stages are not selectable, but the piece's own
-                        current stage stays listed so its status is never lost. */}
-                    {COLUMNS.filter(col => selectableStatuses.includes(col) || col === selectedPiece.status)
+                    {/* Making stages only. Ready for Pickup, Collected and
+                        Broken have dedicated buttons below, and offering them
+                        here as well gave two routes to the same transition.
+                        The piece's own stage stays listed even when it is an
+                        end-state, so its status is never lost. */}
+                    {allStageNames
+                      .filter(col => !DEDICATED_BUTTON_STATUSES.includes(col) || col === selectedPiece.status)
+                      .filter(col => selectableStatuses.includes(col) || col === selectedPiece.status)
                       .map(col => (
                         <option key={col} value={col}>
                           {col}{!selectableStatuses.includes(col) ? ' (disabled)' : ''}
@@ -950,7 +1007,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
             <div className="pt-4 border-t border-brand-clay/60 grid grid-cols-2 gap-3">
               <button
                 onClick={() => {
-                  onAttemptStatusChange(selectedPiece.id, 'Ready for Collection');
+                  onAttemptStatusChange(selectedPiece.id, 'Ready for Pickup');
                   setSelectedPieceId(null);
                 }}
                 className="cursor-pointer bg-green-600 hover:bg-green-700 text-brand-cream font-bold text-xs py-3 rounded-xl transition-all shadow-sm flex items-center justify-center gap-1.5"
@@ -1204,7 +1261,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
 
                   {/* Customer matches drop-down list */}
                   {!selectedCust && custSearch.trim() && (
-                    <div className="absolute left-0 right-0 mt-1 bg-white border border-brand-clay rounded-xl shadow-lg z-50 max-h-40 overflow-y-auto divide-y divide-brand-clay/20">
+                    <div className="absolute left-0 right-0 mt-1 bg-white border border-brand-clay rounded-xl shadow-lg z-50 max-h-40 overflow-y-auto always-scrollbar divide-y divide-brand-clay/20">
                       {filteredCustResults.map(c => (
                         <button
                           key={`${c.id}-${c.phone}`}
@@ -1493,6 +1550,9 @@ export const AdminPiecesTrackingSection: React.FC = () => {
 
                   const newPieceData = {
                     customerId: linkedCustomer.id,
+                    // The customer's My Pieces page shows this workshop's cover
+                    // photo instead of the shot uploaded below.
+                    workshopId: selectedWorkshop?.id,
                     pieceCode: pieceCodeInput.trim(),
                     name: pieceNameInput.trim() || `${pieceType} Piece`,
                     workshopName: selectedWorkshop ? selectedWorkshop.title : 'Freestyle Handbuilding',
@@ -1509,10 +1569,15 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                     expectedReadyDate: expectedReadyDateInput
                   };
 
-                  await addPiece(newPieceData);
+                  try {
+                    await addPiece(newPieceData);
+                  } catch (err) {
+                    alert(err instanceof Error ? err.message : 'Could not log the piece. Please try again.');
+                    return;
+                  }
 
                   triggerToast(
-                    '🎨 Ceramic Piece Added Successfully',
+                    'Ceramic Piece Added Successfully',
                     `Logged piece "${pieceCodeInput}" under customer "${manualName}".`,
                     false
                   );
@@ -1559,9 +1624,10 @@ export const AdminPiecesTrackingSection: React.FC = () => {
             </div>
             <button
               onClick={() => setToasts(prev => prev.filter(item => item.id !== t.id))}
-              className="text-xs font-bold hover:scale-110 cursor-pointer shrink-0 opacity-60 hover:opacity-100"
+              className="cursor-pointer shrink-0 opacity-60 hover:opacity-100"
+              aria-label="Dismiss"
             >
-              ✕
+              <X className="h-3.5 w-3.5" />
             </button>
           </div>
         ))}

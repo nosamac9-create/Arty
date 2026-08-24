@@ -9,8 +9,9 @@ import {
   Users, Clock, Play, CheckCircle, PhoneCall, MoreVertical, 
   Plus, CalendarCheck, X, Edit2, Trash2, AlertTriangle, Check, Sparkles,
   ChevronDown, ChevronUp
-} from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+, GraduationCap
+, Hourglass, LayoutGrid, ArrowLeftRight } from 'lucide-react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { QueueItem } from '../types';
 import { validateSaudiPhone, normaliseSaudiPhone } from '../utils/phoneUtils';
 import { PhoneInput } from './PhoneInput';
@@ -29,6 +30,11 @@ import {
 } from '../utils/customerIdentity';
 import { hasWebsiteAccount } from '../utils/accountUtils';
 import { CustomerAccount } from '../types';
+import {
+  getConfiguredTables, computeTableStates, summarizeTableCapacity, validateTableSelection,
+  tableNamesFor, TableSeatState
+} from '../utils/tableSeatingUtils';
+import { TableSelector, TableMultiPicker } from './ui/TableSelector';
 
 // ==========================================
 // ======== MODULAR QUEUE CARD COMPONENTS ===
@@ -38,11 +44,13 @@ const WaitingCard: React.FC<{
   item: QueueItem;
   isExpanded: boolean;
   instructorName: string;
+  tableLabel?: string;
   onToggle: () => void;
   onEdit: (item: QueueItem) => void;
   onCancel: (item: QueueItem) => void;
   updateQueueStatus: (id: string, status: any) => void;
-}> = ({ item, isExpanded, instructorName, onToggle, onEdit, onCancel, updateQueueStatus }) => {
+  onSeat: (item: QueueItem) => void;
+}> = ({ item, isExpanded, instructorName, tableLabel, onToggle, onEdit, onCancel, updateQueueStatus, onSeat }) => {
   const handleCardClick = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('button')) return;
     onToggle();
@@ -130,15 +138,23 @@ const WaitingCard: React.FC<{
               {/* Badges metadata: guest count, instructor, self-guided */}
               <div className="flex flex-wrap gap-2 pt-1 text-[11px] text-brand-charcoal/60">
                 <span className="font-bold flex items-center gap-1 bg-brand-sand/50 px-2 py-0.5 rounded">
-                  👥 {item.participants} Guests
+                  <Users className="h-3 w-3" />
+                  <span>{item.participants} Guests</span>
                 </span>
                 {!isSelfGuided(item) ? (
                   <span className="font-bold flex items-center gap-1 bg-brand-sage/20 text-brand-sage-hover px-2 py-0.5 rounded">
-                    🎓 {instructorName}
+                    <GraduationCap className="h-3 w-3" />
+                    <span>{instructorName}</span>
                   </span>
                 ) : (
                   <span className="font-bold flex items-center gap-1 bg-purple-50 text-purple-700 px-2 py-0.5 rounded">
                     Self-Guided
+                  </span>
+                )}
+                {tableLabel && (
+                  <span className="font-bold flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-0.5 rounded">
+                    <LayoutGrid className="h-3 w-3" />
+                    <span>Reserved: {tableLabel}</span>
                   </span>
                 )}
               </div>
@@ -152,7 +168,7 @@ const WaitingCard: React.FC<{
               {/* Check-in time and elapsed wait time */}
               <div className="bg-brand-sand/10 p-2 rounded-xl border border-brand-clay/20 text-[11px] space-y-1 text-brand-charcoal/70">
                 <div className="flex justify-between font-bold">
-                  <span>🕒 Check-In Time:</span>
+                  <span className="flex items-center gap-1"><Clock className="h-3 w-3" />Check-In Time:</span>
                   <span className="font-mono">{item.checkInTime}</span>
                 </div>
                 <div className="flex justify-between font-bold">
@@ -175,7 +191,7 @@ const WaitingCard: React.FC<{
           <span>Call</span>
         </button>
         <button
-          onClick={() => updateQueueStatus(item.id, 'In Progress')}
+          onClick={() => onSeat(item)}
           className="cursor-pointer py-2 px-3 bg-brand-sage hover:bg-brand-sage-hover text-brand-cream text-xs font-bold rounded-xl flex items-center justify-center gap-1 shadow-2xs"
         >
           <Play className="h-3 w-3" />
@@ -190,10 +206,12 @@ const CalledCard: React.FC<{
   item: QueueItem;
   isExpanded: boolean;
   instructorName: string;
+  tableLabel?: string;
   onToggle: () => void;
   onCancel: (item: QueueItem) => void;
   updateQueueStatus: (id: string, status: any) => void;
-}> = ({ item, isExpanded, instructorName, onToggle, onCancel, updateQueueStatus }) => {
+  onSeat: (item: QueueItem) => void;
+}> = ({ item, isExpanded, instructorName, tableLabel, onToggle, onCancel, updateQueueStatus, onSeat }) => {
   const handleCardClick = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('button')) return;
     onToggle();
@@ -272,11 +290,19 @@ const CalledCard: React.FC<{
               {/* Badges metadata: guest count, instructor */}
               <div className="flex flex-wrap gap-2 pt-1 text-[11px] text-brand-charcoal/60">
                 <span className="font-bold flex items-center gap-1 bg-brand-sand/50 px-2 py-0.5 rounded">
-                  👥 {item.participants} Guests
+                  <Users className="h-3 w-3" />
+                  <span>{item.participants} Guests</span>
                 </span>
                 {!isSelfGuided(item) && (
                   <span className="font-bold flex items-center gap-1 bg-brand-sage/20 text-brand-sage-hover px-2 py-0.5 rounded">
-                    🎓 {instructorName}
+                    <GraduationCap className="h-3 w-3" />
+                    <span>{instructorName}</span>
+                  </span>
+                )}
+                {tableLabel && (
+                  <span className="font-bold flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-0.5 rounded">
+                    <LayoutGrid className="h-3 w-3" />
+                    <span>Reserved: {tableLabel}</span>
                   </span>
                 )}
               </div>
@@ -284,7 +310,7 @@ const CalledCard: React.FC<{
               {/* Check-in time and elapsed wait time */}
               <div className="bg-brand-sand/10 p-2 rounded-xl border border-brand-clay/20 text-[11px] space-y-1 text-brand-charcoal/70">
                 <div className="flex justify-between font-bold">
-                  <span>🕒 Check-In Time:</span>
+                  <span className="flex items-center gap-1"><Clock className="h-3 w-3" />Check-In Time:</span>
                   <span className="font-mono">{item.checkInTime}</span>
                 </div>
                 <div className="flex justify-between font-bold">
@@ -307,7 +333,7 @@ const CalledCard: React.FC<{
           <span>Cancel</span>
         </button>
         <button
-          onClick={() => updateQueueStatus(item.id, 'In Progress')}
+          onClick={() => onSeat(item)}
           className="cursor-pointer py-2 px-3 bg-brand-sage hover:bg-brand-sage-hover text-brand-cream text-xs font-bold rounded-xl flex items-center justify-center gap-1 shadow-2xs"
         >
           <Play className="h-3 w-3" />
@@ -372,11 +398,13 @@ const InProgressCard: React.FC<{
   item: QueueItem;
   isExpanded: boolean;
   instructorName: string;
+  tableLabel?: string;
   onToggle: () => void;
   updateQueueStatus: (id: string, status: any) => void;
+  onChangeTable: (item: QueueItem) => void;
   now: Date;
   todayDateStr: string;
-}> = ({ item, isExpanded, instructorName, onToggle, updateQueueStatus, now, todayDateStr }) => {
+}> = ({ item, isExpanded, instructorName, tableLabel, onToggle, updateQueueStatus, onChangeTable, now, todayDateStr }) => {
   const handleCardClick = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('button')) return;
     onToggle();
@@ -433,36 +461,54 @@ const InProgressCard: React.FC<{
         }}
         className="focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-terracotta rounded-xl cursor-pointer flex flex-col gap-2 select-none text-left"
       >
-        <div className="flex justify-between items-start">
-          <div className="flex items-center gap-2">
-            <div className="bg-brand-charcoal text-brand-cream text-xs font-extrabold px-2.5 py-1.5 rounded-lg font-mono">
-              No. {item.id.replace('Q-', '')}
-            </div>
-            <span className={`text-[10px] font-bold px-2 py-1 rounded-md border ${
-              item.source === 'Website' 
-                ? 'bg-blue-50 border-blue-200 text-blue-700' 
-                : 'bg-amber-50 border-amber-200 text-amber-700'
-            }`}>
-              {item.source}
-            </span>
-          </div>
+        {/* One flow with a single gap, so the timing badge reads as its own
+            piece of information instead of butting against the source label
+            whichever source it is. */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex h-6 items-center rounded-lg bg-brand-charcoal px-2.5 font-mono text-xs font-extrabold text-brand-cream">
+            No. {item.id.replace('Q-', '')}
+          </span>
+          <span className={`inline-flex h-6 items-center rounded-md border px-2 text-[10px] font-bold ${
+            item.source === 'Website'
+              ? 'bg-blue-50 border-blue-200 text-blue-700'
+              : 'bg-amber-50 border-amber-200 text-amber-700'
+          }`}>
+            {item.source}
+          </span>
 
-          <div className="flex items-center gap-1">
-            {(isExceeded || isEndingSoon) && (
-              <div className="bg-red-100 border border-red-300 rounded-lg p-1 text-red-700 flex items-center gap-0.5 text-[9px] font-extrabold animate-bounce">
-                <AlertTriangle className="h-3 w-3" />
-                <span>{isExceeded ? 'OVERTIME' : '5 MIN LEFT'}</span>
-              </div>
-            )}
-            <div className="text-brand-charcoal/40 p-1">
-              <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${isExpanded ? 'rotate-180 text-brand-terracotta' : ''}`} />
-            </div>
-          </div>
+          {(isExceeded || isEndingSoon) && (
+            <span className={`inline-flex h-6 items-center gap-1 rounded-md border px-2 text-[10px] font-bold ${
+              isExceeded
+                ? 'border-red-200 bg-red-50 text-red-700'
+                : 'border-amber-300 bg-amber-50 text-amber-800'
+            }`}>
+              <AlertTriangle className="h-3 w-3" />
+              <span>{isExceeded ? 'Overtime' : '5 min left'}</span>
+            </span>
+          )}
+
+          <ChevronDown className={`ms-auto h-4 w-4 shrink-0 text-brand-charcoal/40 transition-transform duration-200 ${isExpanded ? 'rotate-180 text-brand-terracotta' : ''}`} />
         </div>
 
         <div className="space-y-0.5 text-left">
           <h3 className="font-display text-sm font-bold text-brand-charcoal">{item.name}</h3>
-          <p className="text-[11px] font-mono text-brand-charcoal/50 font-bold">{item.phone}</p>
+          {/* The same `timerStr` the expanded box used to show — one timer,
+              read in a second place, so there is nothing extra to keep in
+              step. Quiet by default, and it takes the warning accent when the
+              session is nearly up or already over. */}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+            <p className="font-mono text-[11px] font-bold text-brand-charcoal/50">{item.phone}</p>
+            <span className={`inline-flex items-center gap-1 font-mono text-[11px] font-bold ${
+              isExceeded
+                ? 'text-red-700'
+                : isEndingSoon
+                  ? 'text-amber-700'
+                  : 'text-brand-charcoal/45'
+            }`}>
+              <Clock className="h-3.5 w-3.5" />
+              <span>{timerStr}</span>
+            </span>
+          </div>
         </div>
       </div>
 
@@ -485,29 +531,28 @@ const InProgressCard: React.FC<{
                 </p>
               </div>
 
-              {/* Running timer */}
-              <div className="flex items-center justify-between text-xs font-bold text-brand-charcoal bg-brand-sand/20 p-2 rounded-xl border border-brand-clay/20">
-                <span className="flex items-center gap-1 text-brand-charcoal/60">
-                  <Clock className="h-3.5 w-3.5 text-brand-terracotta" />
-                  <span>Session Time:</span>
-                </span>
-                <span className="font-mono text-brand-terracotta bg-brand-sand/40 px-2 py-1 rounded">
-                  {timerStr}
-                </span>
-              </div>
+              {/* The Session Time box was removed: the timer now sits beside
+                  the phone number, where it is readable without expanding. */}
 
               {/* Instructor and Workshop where applicable */}
+              {/* No Self-Guided chip: the activity line above already reads
+                  "Walk-in (No Instructor…)", so the tag repeated it. The row
+                  wraps on its own gap, so nothing is left behind. */}
               <div className="flex flex-wrap gap-2 pt-1 text-[11px] text-brand-charcoal/60">
                 <span className="font-bold flex items-center gap-1 bg-brand-sand/50 px-2 py-0.5 rounded">
-                  👥 {item.participants} Guests
+                  <Users className="h-3 w-3" />
+                  <span>{item.participants} Guests</span>
                 </span>
-                {!isSelfGuided(item) ? (
+                {!isSelfGuided(item) && (
                   <span className="font-bold flex items-center gap-1 bg-brand-sage/20 text-brand-sage-hover px-2 py-0.5 rounded">
-                    🎓 {instructorName}
+                    <GraduationCap className="h-3 w-3" />
+                    <span>{instructorName}</span>
                   </span>
-                ) : (
-                  <span className="font-bold flex items-center gap-1 bg-purple-50 text-purple-700 px-2 py-0.5 rounded">
-                    Self-Guided
+                )}
+                {tableLabel && (
+                  <span className="font-bold flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-0.5 rounded">
+                    <LayoutGrid className="h-3 w-3" />
+                    <span>Seated: {tableLabel}</span>
                   </span>
                 )}
               </div>
@@ -541,11 +586,11 @@ const InProgressCard: React.FC<{
               {/* Check-in time & Seated time */}
               <div className="bg-brand-sand/10 p-2 rounded-xl border border-brand-clay/20 text-[11px] space-y-1 text-brand-charcoal/70 font-bold">
                 <div className="flex justify-between">
-                  <span>🕒 Check-In Time:</span>
+                  <span className="flex items-center gap-1"><Clock className="h-3 w-3" />Check-In Time:</span>
                   <span className="font-mono">{item.checkInTime}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>🕒 Seated At:</span>
+                  <span className="flex items-center gap-1"><Clock className="h-3 w-3" />Seated At:</span>
                   <span className="font-mono">{item.seatedTime ? new Date(item.seatedTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : ''}</span>
                 </div>
               </div>
@@ -555,10 +600,19 @@ const InProgressCard: React.FC<{
       </AnimatePresence>
 
       {/* Primary Action Buttons (Always visible) */}
-      <div className="pt-2 border-t border-brand-clay/30">
+      <div className={`pt-2 border-t border-brand-clay/30 grid gap-2 ${isWithoutInstructor ? 'grid-cols-2' : 'grid-cols-1'}`}>
+        {isWithoutInstructor && (
+          <button
+            onClick={() => onChangeTable(item)}
+            className="cursor-pointer py-2.5 border border-brand-clay hover:bg-brand-sand text-brand-charcoal text-xs font-bold rounded-xl flex items-center justify-center gap-1.5"
+          >
+            <ArrowLeftRight className="h-3.5 w-3.5" />
+            <span>Change Table</span>
+          </button>
+        )}
         <button
           onClick={() => updateQueueStatus(item.id, 'Completed')}
-          className="cursor-pointer w-full py-2.5 bg-brand-sage hover:bg-brand-sage-hover text-brand-cream text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-xs"
+          className="cursor-pointer py-2.5 bg-brand-sage hover:bg-brand-sage-hover text-brand-cream text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-xs"
         >
           <CheckCircle className="h-4 w-4" />
           <span>Complete Session</span>
@@ -608,22 +662,22 @@ const CompletedCard: React.FC<{
         }}
         className="focus:outline-hidden focus-visible:ring-2 focus-visible:ring-brand-terracotta rounded-xl cursor-pointer flex flex-col gap-2 select-none text-left"
       >
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <div className="bg-brand-clay text-brand-charcoal/70 text-[11px] font-extrabold px-2 py-1 rounded-md font-mono">
-              No. {item.id.replace('Q-', '')}
-            </div>
-            <span className="bg-blue-50 border border-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded">
-              {item.source}
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="text-brand-sage flex items-center gap-1 text-xs font-bold">
-              <CheckCircle className="h-4 w-4" />
-              <span>Completed</span>
-            </div>
-            <ChevronDown className={`h-4 w-4 text-brand-charcoal/40 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
-          </div>
+        {/* One row, one gap rhythm: the pieces used to sit in two clusters
+            pushed to opposite edges, which left the status stranded away from
+            everything else. Each chip now has the same height and the same
+            2-unit gap, with only the chevron pinned to the end. */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex h-6 items-center rounded-md bg-brand-clay px-2 font-mono text-[11px] font-extrabold text-brand-charcoal/70">
+            No. {item.id.replace('Q-', '')}
+          </span>
+          <span className="inline-flex h-6 items-center rounded-md border border-blue-100 bg-blue-50 px-2 text-[10px] font-bold text-blue-700">
+            {item.source}
+          </span>
+          <span className="inline-flex h-6 items-center gap-1 rounded-md border border-brand-sage-line bg-brand-sage-soft px-2 text-[10px] font-bold text-brand-sage-hover">
+            <CheckCircle className="h-3.5 w-3.5" />
+            <span>Completed</span>
+          </span>
+          <ChevronDown className={`ms-auto h-4 w-4 shrink-0 text-brand-charcoal/40 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
         </div>
 
         <div className="space-y-0.5 text-left">
@@ -652,27 +706,38 @@ const CompletedCard: React.FC<{
 
               {/* Stats footer */}
               <div className="flex items-center justify-between text-[11px] font-bold text-brand-charcoal/60 pt-2 border-t border-brand-clay/30">
-                <span>👥 {item.participants} Guests</span>
+                <span className="flex items-center gap-1">
+                  <Users className="h-3 w-3" />
+                  <span>{item.participants} Guests</span>
+                </span>
                 <span className="flex items-center gap-1 font-mono text-brand-sage-hover">
-                  🕒 {timeSpentStr} spent
+                  <Clock className="h-3 w-3" />
+                  <span>{timeSpentStr} spent</span>
                 </span>
               </div>
 
-              <div className="flex items-center justify-between text-[11px] font-bold text-brand-charcoal/60">
-                <span>{isSelfGuided(item) ? 'Self-Guided' : `🎓 ${instructorName}`}</span>
-                {item.hours !== undefined && <span>{item.hours} hrs booked</span>}
-              </div>
+              {/* The instructor line only when there is one — a self-guided
+                  session says so in its activity text. `ms-auto` keeps the
+                  hours on the trailing edge when they are the only item, so no
+                  empty slot is left where the tag used to be. */}
+              {(!isSelfGuided(item) || item.hours !== undefined) && (
+                <div className="flex items-center justify-between gap-2 text-[11px] font-bold text-brand-charcoal/60">
+                  {!isSelfGuided(item) && (
+                    <span className="flex items-center gap-1">
+                      <GraduationCap className="h-3 w-3" />
+                      <span>{instructorName}</span>
+                    </span>
+                  )}
+                  {item.hours !== undefined && (
+                    <span className={isSelfGuided(item) ? 'ms-auto' : ''}>{item.hours} hrs booked</span>
+                  )}
+                </div>
+              )}
 
-              {item.extendedByQueueId && (
-                <p className="text-[10px] font-bold text-brand-terracotta">
-                  Extended into queue entry No. {item.extendedByQueueId.replace('Q-', '')} — this completed session is kept as history.
-                </p>
-              )}
-              {item.returnedFromQueueId && (
-                <p className="text-[10px] font-bold text-brand-charcoal/50">
-                  Continuation of completed entry No. {item.returnedFromQueueId.replace('Q-', '')}.
-                </p>
-              )}
+              {/* `extendedByQueueId` and `returnedFromQueueId` still link a
+                  completed session to the entry that continued it — the
+                  relationship is untouched on the record, it just is not
+                  spelled out on the card. */}
             </div>
           </motion.div>
         )}
@@ -682,12 +747,15 @@ const CompletedCard: React.FC<{
           stay completed and are never restarted. */}
       {isSelfGuided(item) && (
         <div className="pt-2 border-t border-brand-clay/30">
+          {/* `whitespace-nowrap` on the label stops it breaking at the slash
+              into a ragged two lines; the fixed height keeps the icon and text
+              on one baseline whatever the column width. */}
           <button
             onClick={() => onReturnToWaiting(item)}
-            className="cursor-pointer w-full py-2 border border-brand-terracotta/50 text-brand-terracotta hover:bg-brand-terracotta/5 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5"
+            className="flex h-9 w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-brand-terracotta/50 px-3 text-[11px] font-bold text-brand-terracotta transition-colors hover:bg-brand-terracotta/5"
           >
-            <Plus className="h-3.5 w-3.5" />
-            <span>Add More Time / Return to Waiting</span>
+            <Plus className="h-3.5 w-3.5 shrink-0" />
+            <span className="whitespace-nowrap">Add Time</span>
           </button>
         </div>
       )}
@@ -695,9 +763,176 @@ const CompletedCard: React.FC<{
   );
 };
 
+/**
+ * Table Inventory, made useful: every configured café table, who (if anyone)
+ * is reserved or seated at it, and the few actions staff actually need —
+ * seat a waiting guest, move an active one, or release a reservation. No
+ * floor-plan editor; this is a list, same as the rest of the console.
+ */
+const SeatingManagerModal: React.FC<{
+  tables: TableSeatState[];
+  queue: QueueItem[];
+  onClose: () => void;
+  onSeatWaiting: (item: QueueItem) => void;
+  onChangeTable: (item: QueueItem) => void;
+  onRelease: (item: QueueItem) => void;
+  onAssign: (item: QueueItem, tableId: string) => void;
+}> = ({ tables, queue, onClose, onSeatWaiting, onChangeTable, onRelease, onAssign }) => {
+  const [assigningTableId, setAssigningTableId] = useState<string | null>(null);
+  const [assignSelection, setAssignSelection] = useState<Record<string, string>>({});
+
+  // Waiting/Called guests with no table yet — the only candidates a table can
+  // pull from here, so this never contests a reservation another table holds.
+  const unassignedCandidates = useMemo(
+    () => queue.filter(q =>
+      (q.status === 'Waiting' || q.status === 'Called') && (!q.tableIds || q.tableIds.length === 0)
+    ),
+    [queue]
+  );
+
+  const queueById = useMemo(() => new Map(queue.map(q => [q.id, q])), [queue]);
+
+  return (
+    <div className="fixed inset-0 bg-brand-charcoal/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+      <div className="bg-brand-cream border border-brand-clay rounded-3xl p-6 shadow-2xl max-w-lg w-full text-left space-y-4 animate-in zoom-in-95 duration-200 max-h-[85vh] overflow-y-auto always-scrollbar">
+
+        <div className="flex justify-between items-center border-b border-brand-clay/60 pb-3 sticky -top-6 bg-brand-cream pt-1">
+          <div>
+            <h3 className="font-display text-base font-bold text-brand-charcoal">Seating Manager</h3>
+            <p className="text-[11px] font-bold text-brand-charcoal/50">Every configured café table, live.</p>
+          </div>
+          <button onClick={onClose} className="text-brand-charcoal hover:bg-brand-sand p-1.5 rounded-lg cursor-pointer">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {tables.length === 0 ? (
+          <p className="text-xs font-semibold text-brand-charcoal/50 bg-white border border-brand-clay/40 rounded-xl p-4 text-center">
+            No café tables are configured yet. Add them in Settings → Capacity → Table Inventory.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {tables.map(table => {
+              const reserved = table.occupants.filter(o => o.status !== 'In Progress');
+              const occupied = table.occupants.filter(o => o.status === 'In Progress');
+              const eligible = unassignedCandidates.filter(c => c.participants <= table.freeSeats);
+
+              return (
+                <div key={table.id} className="border border-brand-clay rounded-2xl bg-white p-4 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-display text-sm font-bold text-brand-charcoal">{table.name}</h4>
+                    <span className={`text-[10px] font-bold px-2 py-1 rounded-md border ${
+                      table.status !== 'Active'
+                        ? 'bg-gray-100 border-gray-200 text-gray-600'
+                        : table.freeSeats === 0
+                          ? 'bg-red-50 border-red-200 text-red-700'
+                          : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                    }`}>
+                      {table.status !== 'Active' ? table.status : table.freeSeats === 0 ? 'Full' : 'Available'}
+                    </span>
+                  </div>
+
+                  <p className="text-[11px] font-bold text-brand-charcoal/60 font-mono">
+                    {table.seats} seats · {table.occupiedSeats} occupied · {table.reservedSeats} reserved · {table.freeSeats} free
+                  </p>
+
+                  {occupied.map(o => (
+                    <div key={o.queueId} className="flex items-center justify-between bg-brand-sage/10 border border-brand-sage/30 rounded-xl px-3 py-2">
+                      <span className="text-[11px] font-bold text-brand-charcoal">
+                        Customer: {o.name} / {o.participants} guests
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => { const q = queueById.get(o.queueId); if (q) onChangeTable(q); }}
+                        className="text-[10px] font-bold text-brand-terracotta hover:underline cursor-pointer shrink-0"
+                      >
+                        Move
+                      </button>
+                    </div>
+                  ))}
+
+                  {reserved.map(o => (
+                    <div key={o.queueId} className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-xl px-3 py-2">
+                      <span className="text-[11px] font-bold text-brand-charcoal">
+                        Reserved for: {o.name} / {o.participants} guests
+                      </span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => { const q = queueById.get(o.queueId); if (q) onSeatWaiting(q); }}
+                          className="text-[10px] font-bold text-brand-terracotta hover:underline cursor-pointer"
+                        >
+                          Seat
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { const q = queueById.get(o.queueId); if (q) onRelease(q); }}
+                          className="text-[10px] font-bold text-red-500 hover:underline cursor-pointer"
+                        >
+                          Release
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {table.occupants.length === 0 && table.status === 'Active' && (
+                    <p className="text-[11px] font-semibold text-brand-charcoal/40">Available</p>
+                  )}
+
+                  {/* Pull an unassigned Waiting/Called guest straight onto this table. */}
+                  {table.status === 'Active' && table.freeSeats > 0 && eligible.length > 0 && (
+                    assigningTableId === table.id ? (
+                      <div className="flex items-center gap-2 pt-1">
+                        <select
+                          value={assignSelection[table.id] || ''}
+                          onChange={e => setAssignSelection(prev => ({ ...prev, [table.id]: e.target.value }))}
+                          className="flex-1 bg-white border border-brand-clay rounded-lg py-1.5 px-2 text-[11px] font-bold text-brand-charcoal"
+                        >
+                          <option value="">Choose a waiting guest…</option>
+                          {eligible.map(c => (
+                            <option key={c.id} value={c.id}>{c.name} — {c.participants} guests</option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          disabled={!assignSelection[table.id]}
+                          onClick={() => {
+                            const chosen = queueById.get(assignSelection[table.id]);
+                            if (!chosen) return;
+                            onAssign(chosen, table.id);
+                            setAssigningTableId(null);
+                            setAssignSelection(prev => ({ ...prev, [table.id]: '' }));
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-brand-terracotta text-brand-cream text-[11px] font-bold disabled:opacity-50 cursor-pointer"
+                        >
+                          Assign
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setAssigningTableId(table.id)}
+                        className="text-[11px] font-bold text-brand-terracotta hover:underline cursor-pointer pt-1"
+                      >
+                        + Assign a waiting guest
+                      </button>
+                    )
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+};
+
 export const LiveQueueSection: React.FC = () => {
   const {
     queue, updateQueueStatus, updateQueueItem, addQueueItem, returnQueueItemToWaiting,
+    assignQueueTables, seatQueueItem, changeQueueItemTables,
     todayDateStr, formattedTodayDate, appSettings,
     staff, workshops, workshopSessions, bookings, events,
     customers, pieces, resolveCustomer, updateCustomer, addStaffNotification,
@@ -719,7 +954,6 @@ export const LiveQueueSection: React.FC = () => {
 
   const capacityConfig = appSettings?.find(s => s.id === 'capacitySettings')?.value;
   const totalSeats = Number(capacityConfig?.totalSeats) || 32;
-  const totalTables = Number(capacityConfig?.totalTables) || (capacityConfig?.tables?.length || 8);
 
   // Compute live occupied seats (In Progress status)
   const inProgressQueue = useMemo(() => {
@@ -732,11 +966,22 @@ export const LiveQueueSection: React.FC = () => {
 
   const availableSeats = Math.max(0, totalSeats - occupiedSeats);
   const capacityPct = Math.min(100, Math.round((occupiedSeats / totalSeats) * 100));
-
-  // Estimate tables occupied (assume avg 4 seats per table)
   const defaultSeatsPerTable = Number(capacityConfig?.defaultSeatsPerTable) || 4;
-  const occupiedTables = Math.min(totalTables, Math.ceil(occupiedSeats / defaultSeatsPerTable));
-  const availableTables = Math.max(0, totalTables - occupiedTables);
+
+  /**
+   * Real per-table occupancy — every numbered café table configured in
+   * Settings → Capacity, and exactly who (Waiting/Called reserved, In
+   * Progress occupied) is holding its seats right now. This is the single
+   * source every table-related control on this page reads: the header
+   * metric, the seat/change-table pickers and the Seating Manager.
+   */
+  const configuredTables = useMemo(() => getConfiguredTables(appSettings), [appSettings]);
+  const tableStates = useMemo(
+    () => computeTableStates(configuredTables, queue, { todayDateStr }),
+    [configuredTables, queue, todayDateStr]
+  );
+  const tableCapacitySummary = useMemo(() => summarizeTableCapacity(tableStates), [tableStates]);
+  const { totalTables, occupiedTables, availableTables } = tableCapacitySummary;
 
   // Collapsed / Expanded state for cards
   const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
@@ -749,6 +994,7 @@ export const LiveQueueSection: React.FC = () => {
   };
 
   // Force re-render every second for live timers
+  const prefersReducedMotion = useReducedMotion();
   const [now, setNow] = useState<Date>(new Date());
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 1000);
@@ -814,6 +1060,14 @@ export const LiveQueueSection: React.FC = () => {
 
   // Walk-In check-in modal states
   const [addModalOpen, setAddModalOpen] = useState(false);
+  // The background page must stay put while this modal is open — only its
+  // own content area scrolls (see the modal markup below).
+  useEffect(() => {
+    if (!addModalOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prevOverflow; };
+  }, [addModalOpen]);
   const [walkInType, setWalkInType] = useState<'Without Instructor' | 'With Instructor'>('Without Instructor');
   const [newName, setNewName] = useState('');
   const [newPhone, setNewPhone] = useState('+966 5');
@@ -840,14 +1094,39 @@ export const LiveQueueSection: React.FC = () => {
 
   // Return-to-waiting modal (completed self-guided guests)
   const [returnModalOpen, setReturnModalOpen] = useState(false);
+  // Same background-scroll lock as the Add Walk-In modal.
+  useEffect(() => {
+    if (!returnModalOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prevOverflow; };
+  }, [returnModalOpen]);
   const [returningItem, setReturningItem] = useState<QueueItem | null>(null);
   const [returnHours, setReturnHours] = useState(1);
   const [returnGuests, setReturnGuests] = useState(1);
+  const [returnTableIds, setReturnTableIds] = useState<string[]>([]);
   const [returnErrors, setReturnErrors] = useState<Record<string, string>>({});
 
   // Cancel confirmation dialog states
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [cancellingItem, setCancellingItem] = useState<QueueItem | null>(null);
+
+  // Table assignment at check-in — optional, only for Without Instructor.
+  const [newTableIds, setNewTableIds] = useState<string[]>([]);
+
+  /**
+   * One modal handles both "Seat" (Waiting/Called -> In Progress, table
+   * required) and "Change Table" (already In Progress, table required) —
+   * the only difference is whether confirming also flips the status.
+   */
+  const [seatModalOpen, setSeatModalOpen] = useState(false);
+  const [seatModalItem, setSeatModalItem] = useState<QueueItem | null>(null);
+  const [seatModalMode, setSeatModalMode] = useState<'seat' | 'change'>('seat');
+  const [seatModalTableIds, setSeatModalTableIds] = useState<string[]>([]);
+  const [seatModalError, setSeatModalError] = useState<string | null>(null);
+
+  // Table Inventory -> Seating Manager
+  const [seatingManagerOpen, setSeatingManagerOpen] = useState(false);
 
   // Stats
   const activeQueueCount = todayQueue.filter(q => q.status !== 'Completed' && q.status !== 'Cancelled').length;
@@ -928,6 +1207,13 @@ export const LiveQueueSection: React.FC = () => {
       else if (bookingErrors.participants) newErrors.session = bookingErrors.participants;
     } else {
       Object.assign(newErrors, validateHoursAndGuests(newHours, newGuests));
+      // Table selection at check-in is optional, but a chosen table must
+      // genuinely fit. This is the eager check for instant feedback; addQueueItem
+      // re-validates against a fresh read regardless (never trust only this one).
+      if (newTableIds.length > 0) {
+        const tableCheck = validateTableSelection(newTableIds, newGuests, tableStates);
+        if (!tableCheck.valid) newErrors.tables = tableCheck.error!;
+      }
     }
 
     setErrors(newErrors);
@@ -978,7 +1264,7 @@ export const LiveQueueSection: React.FC = () => {
       await updateCustomer(customer.id, { name: nameToUse });
     }
 
-    await addQueueItem({
+    const result = await addQueueItem({
       customerId: customer.id,
       name: nameToUse,
       phone: normPhone,
@@ -991,6 +1277,9 @@ export const LiveQueueSection: React.FC = () => {
       source: 'Walk-in',
       type: walkInType,
       hours: isWithInstructor ? undefined : newHours,
+      // Table assignment at check-in is optional — only ever set for
+      // Without Instructor, and only when staff actually picked one.
+      tableIds: !isWithInstructor && newTableIds.length > 0 ? newTableIds : undefined,
       // Real workshop/session links saved with the entry.
       workshopId: isWithInstructor ? selectedSession?.workshopId : undefined,
       sessionId: isWithInstructor ? selectedSession?.sessionId : undefined,
@@ -1000,7 +1289,13 @@ export const LiveQueueSection: React.FC = () => {
       sessionCapacity: isWithInstructor ? selectedSession?.capacity : undefined
     });
 
+    if (!result.success) {
+      setErrors({ tables: result.error || 'Could not check in this guest.' });
+      return;
+    }
+
     // Reset Form
+    setNewTableIds([]);
     setNewName('');
     setNewPhone('+966 5');
     setNewGuests(1);
@@ -1154,9 +1449,22 @@ export const LiveQueueSection: React.FC = () => {
     setReturningItem(item);
     setReturnHours(1);
     setReturnGuests(item.participants || 1);
+    // Defaults to the table(s) this guest already had — "keep the current
+    // table" is one tap away, but staff can still pick something else.
+    setReturnTableIds(item.tableIds || []);
     setReturnErrors({});
     setReturnModalOpen(true);
   };
+
+  /** Table occupancy for the Add Time modal — the guest's own former table(s)
+      are excluded from their own reservation math, same as the Seat modal. */
+  const returnTableStates = useMemo(
+    () => computeTableStates(configuredTables, queue, {
+      excludeQueueId: returningItem?.id,
+      todayDateStr
+    }),
+    [configuredTables, queue, returningItem, todayDateStr]
+  );
 
   const handleConfirmReturn = async () => {
     if (!returningItem) return;
@@ -1167,19 +1475,81 @@ export const LiveQueueSection: React.FC = () => {
       return;
     }
 
+    const tableCheck = validateTableSelection(returnTableIds, Number(returnGuests), returnTableStates);
+    if (!tableCheck.valid) {
+      setReturnErrors({ form: tableCheck.error! });
+      return;
+    }
+
     const result = await returnQueueItemToWaiting(returningItem.id, {
       hours: Number(returnHours),
-      participants: Number(returnGuests)
+      participants: Number(returnGuests),
+      tableIds: returnTableIds
     });
 
     if (!result.success) {
-      setReturnErrors({ form: result.message || 'Could not return this guest to Waiting.' });
+      setReturnErrors({ form: result.message || 'Could not continue this session.' });
       return;
     }
 
     setReturnModalOpen(false);
     setReturningItem(null);
-    setActiveFilterTab('Waiting');
+    setActiveFilterTab('In Progress');
+  };
+
+  /**
+   * Opens the shared Seat / Change Table modal. "Seat" is only required for a
+   * Without Instructor entry — an instructor-led seat moves straight to
+   * In Progress exactly as before, since it books a workshop session/room,
+   * not a café table.
+   */
+  const handleOpenSeatModal = (item: QueueItem, mode: 'seat' | 'change') => {
+    setSeatModalItem(item);
+    setSeatModalMode(mode);
+    setSeatModalTableIds(item.tableIds || []);
+    setSeatModalError(null);
+    setSeatModalOpen(true);
+  };
+
+  const handleSeatOrCall = (item: QueueItem) => {
+    if (item.type === 'Without Instructor') {
+      handleOpenSeatModal(item, 'seat');
+    } else {
+      updateQueueStatus(item.id, 'In Progress');
+    }
+  };
+
+  /** Table occupancy for the Seat/Change modal, excluding the item's own current hold. */
+  const seatModalTableStates = useMemo(
+    () => computeTableStates(configuredTables, queue, {
+      excludeQueueId: seatModalItem?.id,
+      todayDateStr
+    }),
+    [configuredTables, queue, seatModalItem, todayDateStr]
+  );
+
+  const handleConfirmSeatModal = async () => {
+    if (!seatModalItem) return;
+
+    const check = validateTableSelection(seatModalTableIds, seatModalItem.participants, seatModalTableStates);
+    if (!check.valid) {
+      setSeatModalError(check.error!);
+      return;
+    }
+
+    const result = seatModalMode === 'seat'
+      ? await seatQueueItem(seatModalItem.id, seatModalTableIds)
+      : await changeQueueItemTables(seatModalItem.id, seatModalTableIds);
+
+    if (!result.success) {
+      setSeatModalError(result.error || 'Could not update the table assignment.');
+      return;
+    }
+
+    setSeatModalOpen(false);
+    setSeatModalItem(null);
+    setSeatModalTableIds([]);
+    if (seatModalMode === 'seat') setActiveFilterTab('In Progress');
   };
 
   // Handle Cancellation flow
@@ -1198,7 +1568,62 @@ export const LiveQueueSection: React.FC = () => {
   // Categories of filtered queue lists for today
   const waitingItems = useMemo(() => todayQueue.filter(q => q.status === 'Waiting'), [todayQueue]);
   const calledItems = useMemo(() => todayQueue.filter(q => q.status === 'Called'), [todayQueue]);
-  const inProgressItems = useMemo(() => todayQueue.filter(q => q.status === 'In Progress'), [todayQueue]);
+  /**
+   * In Progress, with anyone in their last five minutes lifted to the top.
+   *
+   * The ordering is derived from the same `getVisitTiming` the card itself
+   * uses, so the list and the card can never disagree about who is urgent.
+   * Within each group the original queue order is kept, so two urgent guests
+   * stay in the order they were seated rather than swapping places on a tick.
+   */
+  const inProgressItems = useMemo(() => {
+    const active = todayQueue.filter(q => q.status === 'In Progress');
+    return active
+      .map((item, index) => ({
+        item,
+        index,
+        timing: getVisitTiming(item, todayDateStr, now)
+      }))
+      .sort((a, b) => {
+        // Overtime counts as urgent too — it is past the warning, not before it.
+        const aUrgent = a.timing.isEndingSoon || a.timing.isExceeded;
+        const bUrgent = b.timing.isEndingSoon || b.timing.isExceeded;
+        if (aUrgent !== bUrgent) return aUrgent ? -1 : 1;
+        if (aUrgent && bUrgent) {
+          // Least time left first.
+          return (a.timing.remainingMs ?? 0) - (b.timing.remainingMs ?? 0);
+        }
+        return a.index - b.index;
+      })
+      .map(entry => entry.item);
+  }, [todayQueue, todayDateStr, now]);
+
+  /**
+   * Whose five-minute warning is currently live.
+   *
+   * Keyed on the visit's end time as well as the entry id, so a guest who is
+   * seated again later warns again — while a warning that has been dismissed
+   * stays dismissed for that session, however many times this re-renders.
+   */
+  const endingSoonWarnings = useMemo(
+    () =>
+      todayQueue
+        .filter(q => q.status === 'In Progress')
+        .map(item => {
+          const timing = getVisitTiming(item, todayDateStr, now);
+          return { item, timing };
+        })
+        .filter(entry => entry.timing.isEndingSoon && entry.timing.endTime)
+        .map(entry => ({
+          key: `${entry.item.id}:${entry.timing.endTime!.getTime()}`,
+          item: entry.item,
+          minutesLeft: Math.max(1, Math.ceil((entry.timing.remainingMs ?? 0) / 60000))
+        })),
+    [todayQueue, todayDateStr, now]
+  );
+
+  const [dismissedWarnings, setDismissedWarnings] = useState<string[]>([]);
+  const visibleWarnings = endingSoonWarnings.filter(w => !dismissedWarnings.includes(w.key));
   const completedItems = useMemo(() => todayQueue.filter(q => q.status === 'Completed'), [todayQueue]);
 
   return (
@@ -1263,16 +1688,21 @@ export const LiveQueueSection: React.FC = () => {
           </p>
         </div>
 
-        {/* Tables Inventory Metric */}
-        <div className="p-3 bg-brand-cream/40 border border-brand-clay/40 rounded-2xl flex items-center justify-between">
+        {/* Tables Inventory Metric — opens the Seating Manager */}
+        <button
+          type="button"
+          onClick={() => setSeatingManagerOpen(true)}
+          className="p-3 bg-brand-cream/40 border border-brand-clay/40 rounded-2xl flex items-center justify-between cursor-pointer text-left hover:border-brand-terracotta/50 hover:bg-brand-cream/60 transition-colors"
+        >
           <div>
             <span className="text-[10px] font-bold uppercase tracking-wider text-brand-charcoal/60 block">Table Inventory</span>
             <span className="text-sm font-extrabold text-brand-charcoal font-mono">{availableTables} / {totalTables} Tables Free</span>
+            <span className="text-[10px] font-bold text-brand-terracotta block mt-0.5">Open Seating Manager →</span>
           </div>
-          <div className="flex items-center justify-center h-10 w-10 bg-brand-sand/60 text-brand-terracotta rounded-xl font-bold text-xs">
+          <div className="flex items-center justify-center h-10 w-10 bg-brand-sand/60 text-brand-terracotta rounded-xl font-bold text-xs shrink-0">
             {occupiedTables}/{totalTables}
           </div>
-        </div>
+        </button>
 
         {/* Dynamic Queue Wait-Time Throughput */}
         <div className="p-3 bg-brand-cream/40 border border-brand-clay/40 rounded-2xl flex items-center justify-between">
@@ -1282,8 +1712,8 @@ export const LiveQueueSection: React.FC = () => {
               ~{waitingItems.length > 0 ? Math.max(10, Math.round((waitingItems.length * 15) / Math.max(1, availableTables))) : 0} min wait
             </span>
           </div>
-          <div className="flex items-center justify-center h-10 w-10 bg-brand-sage/30 text-brand-sage-hover rounded-xl font-bold text-xs">
-            ⏳
+          <div className="flex items-center justify-center h-10 w-10 bg-brand-sage/30 text-brand-sage-hover rounded-xl">
+            <Hourglass className="h-4 w-4" />
           </div>
         </div>
       </div>
@@ -1317,6 +1747,53 @@ export const LiveQueueSection: React.FC = () => {
         })}
       </div>
 
+      {/* FIVE-MINUTE WARNINGS — a staff alert, not a celebration: console
+          cream and clay with one amber accent, a short fade-and-rise, and no
+          animation once it has arrived. Stacked, one per guest, each dismissed
+          on its own. Dismissal is keyed on the visit's end time, so closing one
+          does not silence the next guest and does not come back on the next
+          tick. */}
+      {visibleWarnings.length > 0 && (
+        <div className="space-y-2">
+          {visibleWarnings.map(warning => (
+            <motion.div
+              key={warning.key}
+              initial={prefersReducedMotion ? false : { opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25, ease: 'easeOut' }}
+              role="status"
+              className="flex items-start gap-3 rounded-2xl border border-brand-clay bg-brand-cream p-3.5 shadow-2xs"
+            >
+              <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-amber-200 bg-amber-50 text-amber-700">
+                <Clock className="h-3.5 w-3.5" />
+              </span>
+
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold text-brand-charcoal">
+                  {warning.item.name} · {warning.minutesLeft} minute{warning.minutesLeft === 1 ? '' : 's'} remaining
+                </p>
+                <p className="mt-0.5 text-[11px] font-semibold text-brand-charcoal/55">
+                  {[
+                    warning.item.activity,
+                    warning.item.staffName ? `with ${warning.item.staffName}` : null,
+                    `No. ${warning.item.id.replace('Q-', '')}`
+                  ].filter(Boolean).join(' · ')}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setDismissedWarnings(prev => [...prev, warning.key])}
+                aria-label={`Dismiss the warning for ${warning.item.name}`}
+                className="shrink-0 rounded-lg p-1 text-brand-charcoal/40 transition-colors hover:bg-brand-sand hover:text-brand-charcoal cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </motion.div>
+          ))}
+        </div>
+      )}
+
       {/* KANBAN BOARD WRAPPER: All columns side-by-side on lg screen, tab-filtered on mobile */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
         
@@ -1330,7 +1807,11 @@ export const LiveQueueSection: React.FC = () => {
             <span className="bg-brand-sand px-2 py-0.5 rounded-full text-xs font-bold text-brand-charcoal/60">{waitingItems.length}</span>
           </div>
 
-          <div className="space-y-4">
+          {/* Three cards tall, then the list scrolls inside itself — one busy
+              column must not stretch the page and push the others out of
+              reach. `always-scrollbar` keeps the bar visible so it is obvious
+              there is more below. */}
+          <div className="max-h-[27rem] space-y-4 overflow-y-auto always-scrollbar pe-1">
             {waitingItems.length === 0 ? (
               <div className="py-12 text-center text-xs text-brand-charcoal/40 bg-white/40 rounded-2xl border border-dashed border-brand-clay/50">
                 No guests waiting.
@@ -1342,10 +1823,12 @@ export const LiveQueueSection: React.FC = () => {
                   item={item}
                   isExpanded={!!expandedCards[item.id]}
                   instructorName={instructorFor(item)}
+                  tableLabel={tableNamesFor(item.tableIds, configuredTables)}
                   onToggle={() => toggleExpand(item.id)}
                   onEdit={handleOpenEdit}
                   onCancel={handleRequestCancel}
                   updateQueueStatus={updateQueueStatus}
+                  onSeat={handleSeatOrCall}
                 />
               ))
             )}
@@ -1362,7 +1845,7 @@ export const LiveQueueSection: React.FC = () => {
             <span className="bg-brand-sand px-2 py-0.5 rounded-full text-xs font-bold text-brand-charcoal/60">{calledItems.length}</span>
           </div>
 
-          <div className="space-y-4">
+          <div className="max-h-[27rem] space-y-4 overflow-y-auto always-scrollbar pe-1">
             {calledItems.length === 0 ? (
               <div className="py-12 text-center text-xs text-brand-charcoal/40 bg-white/40 rounded-2xl border border-dashed border-brand-clay/50">
                 No called entries.
@@ -1374,9 +1857,11 @@ export const LiveQueueSection: React.FC = () => {
                   item={item}
                   isExpanded={!!expandedCards[item.id]}
                   instructorName={instructorFor(item)}
+                  tableLabel={tableNamesFor(item.tableIds, configuredTables)}
                   onToggle={() => toggleExpand(item.id)}
                   onCancel={handleRequestCancel}
                   updateQueueStatus={updateQueueStatus}
+                  onSeat={handleSeatOrCall}
                 />
               ))
             )}
@@ -1393,7 +1878,7 @@ export const LiveQueueSection: React.FC = () => {
             <span className="bg-brand-sand px-2 py-0.5 rounded-full text-xs font-bold text-brand-charcoal/60">{inProgressItems.length}</span>
           </div>
 
-          <div className="space-y-4">
+          <div className="max-h-[27rem] space-y-4 overflow-y-auto always-scrollbar pe-1">
             {inProgressItems.length === 0 ? (
               <div className="py-12 text-center text-xs text-brand-charcoal/40 bg-white/40 rounded-2xl border border-dashed border-brand-clay/50">
                 No active studio sessions.
@@ -1405,8 +1890,10 @@ export const LiveQueueSection: React.FC = () => {
                   item={item}
                   isExpanded={!!expandedCards[item.id]}
                   instructorName={instructorFor(item)}
+                  tableLabel={tableNamesFor(item.tableIds, configuredTables)}
                   onToggle={() => toggleExpand(item.id)}
                   updateQueueStatus={updateQueueStatus}
+                  onChangeTable={item2 => handleOpenSeatModal(item2, 'change')}
                   now={now}
                   todayDateStr={todayDateStr}
                 />
@@ -1425,7 +1912,7 @@ export const LiveQueueSection: React.FC = () => {
             <span className="bg-brand-sand px-2 py-0.5 rounded-full text-xs font-bold text-brand-charcoal/60">{completedItems.length}</span>
           </div>
 
-          <div className="space-y-4">
+          <div className="max-h-[27rem] space-y-4 overflow-y-auto always-scrollbar pe-1">
             {completedItems.length === 0 ? (
               <div className="py-12 text-center text-xs text-brand-charcoal/40 bg-white/40 rounded-2xl border border-dashed border-brand-clay/50">
                 No sessions completed yet today.
@@ -1506,21 +1993,34 @@ export const LiveQueueSection: React.FC = () => {
 
       {addModalOpen && (
         <div className="fixed inset-0 bg-brand-charcoal/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-brand-cream border border-brand-clay rounded-3xl p-6 shadow-2xl max-w-md w-full text-left space-y-5 animate-in zoom-in-95 duration-200">
-            
-            {/* Header */}
-            <div className="flex justify-between items-center border-b border-brand-clay/60 pb-3">
+          {/* `max-h-[90vh]` + `flex flex-col` is what keeps this modal inside
+              the viewport at any window height: the header and footer are
+              shrink-0 siblings of the scroll area, not part of it, so they
+              can never be scrolled out of reach — this used to be one long
+              unbounded column, which is how the close button ended up above
+              the top of the screen on shorter windows. */}
+          <div className="bg-brand-cream border border-brand-clay rounded-3xl shadow-2xl max-w-md w-full max-h-[90vh] flex flex-col overflow-hidden text-left animate-in zoom-in-95 duration-200">
+
+            {/* Header — always visible, never part of the scrolling content. */}
+            <div className="shrink-0 flex justify-between items-center border-b border-brand-clay/60 px-6 py-4">
               <h3 className="font-display text-lg font-bold text-brand-charcoal flex items-center gap-2">
                 <Sparkles className="h-5 w-5 text-brand-terracotta" />
                 <span>Add Walk-In to Queue</span>
               </h3>
-              <button 
+              <button
                 onClick={() => setAddModalOpen(false)}
                 className="p-1.5 rounded-lg text-brand-charcoal hover:bg-brand-sand border border-transparent hover:border-brand-clay/40 cursor-pointer focus:outline-none"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
+
+            {/* `min-h-0` lets this flex child actually shrink below its content
+                height — without it, flexbox refuses to give the scroll area
+                below any less than its natural (huge) size, and the footer
+                gets pushed off-screen regardless of `overflow-y-auto`. */}
+            <form onSubmit={handleAddWalkIn} className="flex flex-col flex-1 min-h-0">
+            <div className="flex-1 overflow-y-auto always-scrollbar px-6 py-4 space-y-4">
 
             {/* TWO OPTIONS AT THE TOP presented as large clearly-selectable buttons or tabs */}
             <div className="grid grid-cols-2 gap-2 bg-brand-sand/30 p-1.5 rounded-xl border border-brand-clay">
@@ -1549,8 +2049,8 @@ export const LiveQueueSection: React.FC = () => {
             </div>
 
             {/* FORM FIELDS */}
-            <form onSubmit={handleAddWalkIn} className="space-y-4">
-              
+            <div className="space-y-4">
+
               {/* Name Field */}
               <div className="space-y-1">
                 <label className="text-xs font-bold text-brand-charcoal/80 flex justify-between">
@@ -1620,10 +2120,15 @@ export const LiveQueueSection: React.FC = () => {
                   </button>
                 </div>
               ) : customerMatches.length > 0 && (
-                <div className="bg-brand-sand/25 border border-brand-clay/50 rounded-xl p-2 space-y-1">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-brand-charcoal/50 px-1">
+                <div className="bg-brand-sand/25 border border-brand-clay/50 rounded-xl p-2">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-brand-charcoal/50 px-1 pb-1">
                     Matching customers
                   </p>
+                  {/* Fixed height with the rest reached by scrolling — the same
+                      shape the piece logging console's customer search uses.
+                      Stacking every match grew the card off the screen whenever
+                      several customers shared a name. */}
+                  <div className="max-h-40 overflow-y-auto always-scrollbar space-y-1 pe-1">
                   {customerMatches.map(({ customer }) => {
                     const summary = summarizeCustomerActivity(customer, { bookings, queue, pieces });
                     return (
@@ -1644,58 +2149,102 @@ export const LiveQueueSection: React.FC = () => {
                       </button>
                     );
                   })}
+                  </div>
                 </div>
               )}
 
               {/* Guest Count Numeric Stepper (Tablet friendly) */}
-              <div className="flex items-center justify-between border border-brand-clay bg-white rounded-xl p-3">
-                <div className="text-left">
-                  <p className="text-xs font-bold text-brand-charcoal/80">Number of Guests</p>
-                  <p className="text-[10px] text-brand-charcoal/40 font-bold">Minimum 1 guest</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setNewGuests(prev => Math.max(1, prev - 1))}
-                    className="h-10 w-10 rounded-lg bg-brand-sand hover:bg-brand-clay flex items-center justify-center font-bold text-brand-charcoal text-base cursor-pointer focus:outline-none"
-                  >
-                    -
-                  </button>
-                  <span className="text-sm font-bold text-brand-charcoal w-6 text-center">{newGuests}</span>
-                  <button
-                    type="button"
-                    onClick={() => setNewGuests(prev => prev + 1)}
-                    className="h-10 w-10 rounded-lg bg-brand-sand hover:bg-brand-clay flex items-center justify-center font-bold text-brand-charcoal text-base cursor-pointer focus:outline-none"
-                  >
-                    +
-                  </button>
-                </div>
-              </div>
-
-              {/* OPTION A: WITHOUT INSTRUCTOR SPECIFIC FIELDS */}
-              {walkInType === 'Without Instructor' && (
-                <div className="flex items-center justify-between border border-brand-clay bg-white rounded-xl p-3 animate-in fade-in duration-200">
+              <div className="space-y-1">
+                <div className="flex items-center justify-between border border-brand-clay bg-white rounded-xl p-3">
                   <div className="text-left">
-                    <p className="text-xs font-bold text-brand-charcoal/80">Number of Hours</p>
-                    <p className="text-[10px] text-brand-charcoal/40 font-bold">Time limit for clay play</p>
+                    <p className="text-xs font-bold text-brand-charcoal/80">Number of Guests</p>
+                    <p className="text-[10px] text-brand-charcoal/40 font-bold">Minimum 1 guest</p>
                   </div>
                   <div className="flex items-center gap-3">
                     <button
                       type="button"
-                      onClick={() => setNewHours(prev => Math.max(1, prev - 1))}
+                      onClick={() => setNewGuests(prev => Math.max(1, prev - 1))}
                       className="h-10 w-10 rounded-lg bg-brand-sand hover:bg-brand-clay flex items-center justify-center font-bold text-brand-charcoal text-base cursor-pointer focus:outline-none"
                     >
                       -
                     </button>
-                    <span className="text-sm font-bold text-brand-charcoal w-6 text-center">{newHours}</span>
+                    <span className="text-sm font-bold text-brand-charcoal w-6 text-center">{newGuests}</span>
                     <button
                       type="button"
-                      onClick={() => setNewHours(prev => prev + 1)}
+                      onClick={() => setNewGuests(prev => prev + 1)}
                       className="h-10 w-10 rounded-lg bg-brand-sand hover:bg-brand-clay flex items-center justify-center font-bold text-brand-charcoal text-base cursor-pointer focus:outline-none"
                     >
                       +
                     </button>
                   </div>
+                </div>
+                {walkInType === 'Without Instructor' && errors.guests && (
+                  <p className="text-[11px] text-red-500 font-bold">{errors.guests}</p>
+                )}
+              </div>
+
+              {/* OPTION A: WITHOUT INSTRUCTOR SPECIFIC FIELDS */}
+              {walkInType === 'Without Instructor' && (
+                <div className="space-y-1 animate-in fade-in duration-200">
+                  <div className="flex items-center justify-between border border-brand-clay bg-white rounded-xl p-3">
+                    <div className="text-left">
+                      <p className="text-xs font-bold text-brand-charcoal/80">Number of Hours</p>
+                      <p className="text-[10px] text-brand-charcoal/40 font-bold">Time limit for clay play</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setNewHours(prev => Math.max(1, prev - 1))}
+                        className="h-10 w-10 rounded-lg bg-brand-sand hover:bg-brand-clay flex items-center justify-center font-bold text-brand-charcoal text-base cursor-pointer focus:outline-none"
+                      >
+                        -
+                      </button>
+                      <span className="text-sm font-bold text-brand-charcoal w-6 text-center">{newHours}</span>
+                      <button
+                        type="button"
+                        onClick={() => setNewHours(prev => prev + 1)}
+                        className="h-10 w-10 rounded-lg bg-brand-sand hover:bg-brand-clay flex items-center justify-center font-bold text-brand-charcoal text-base cursor-pointer focus:outline-none"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                  {errors.hours && <p className="text-[11px] text-red-500 font-bold">{errors.hours}</p>}
+                </div>
+              )}
+
+              {/* Table assignment at check-in is entirely optional — Waiting
+                  needs no table. Left unassigned, staff pick one later when
+                  they click Seat. Same bordered-card treatment as the Guests
+                  and Hours fields above, so the form reads as one consistent
+                  list of sections rather than a mix of styles. */}
+              {walkInType === 'Without Instructor' && (
+                <div className="space-y-1.5 border border-brand-clay bg-white rounded-xl p-3 animate-in fade-in duration-200">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-brand-charcoal/80">Table Assignment (optional)</p>
+                    {newTableIds.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setNewTableIds([])}
+                        className="text-[11px] font-bold text-brand-terracotta hover:underline cursor-pointer"
+                      >
+                        Leave unassigned
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-brand-charcoal/40 font-bold">
+                    Choose now if you already know where they'll sit, or leave this and pick a table when you seat them.
+                  </p>
+                  <TableMultiPicker
+                    tables={tableStates}
+                    selectedIds={newTableIds}
+                    participants={newGuests}
+                    onChange={ids => {
+                      setNewTableIds(ids);
+                      if (errors.tables) setErrors(prev => ({ ...prev, tables: '' }));
+                    }}
+                  />
+                  {errors.tables && <p className="text-[11px] text-red-500 font-bold">{errors.tables}</p>}
                 </div>
               )}
 
@@ -1747,31 +2296,29 @@ export const LiveQueueSection: React.FC = () => {
               {/* The derived summary (duration, estimated end, seats/tables, wait) is
                   intentionally not shown here. computeQueueSessionPlan still runs for
                   queue timing, capacity, auto-completion, wait estimates and seat and
-                  table allocation — only the box was removed. Validation messages stay. */}
-              {walkInType === 'Without Instructor' && (errors.hours || errors.guests) && (
-                <div className="space-y-1">
-                  {errors.hours && <p className="text-[11px] text-red-500 font-bold">{errors.hours}</p>}
-                  {errors.guests && <p className="text-[11px] text-red-500 font-bold">{errors.guests}</p>}
-                </div>
-              )}
+                  table allocation — only the box was removed. Hours/guests errors now
+                  sit directly under their own field, above. */}
 
-              {/* Primary / Secondary CTA Buttons */}
-              <div className="grid grid-cols-2 gap-3 pt-3">
-                <button
-                  type="button"
-                  onClick={() => setAddModalOpen(false)}
-                  className="cursor-pointer py-3.5 border border-brand-clay hover:bg-brand-sand text-brand-charcoal text-xs font-bold rounded-xl text-center"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="cursor-pointer py-3.5 bg-brand-terracotta hover:bg-brand-terracotta-hover text-brand-cream text-xs font-bold rounded-xl text-center shadow-md"
-                >
-                  Add to Queue
-                </button>
-              </div>
+            </div>
+            </div>
 
+            {/* Footer — a shrink-0 sibling of the scroll area, so Cancel and
+                Add to Queue never need scrolling to reach. */}
+            <div className="shrink-0 grid grid-cols-2 gap-3 border-t border-brand-clay/60 px-6 py-4">
+              <button
+                type="button"
+                onClick={() => setAddModalOpen(false)}
+                className="cursor-pointer py-3.5 border border-brand-clay hover:bg-brand-sand text-brand-charcoal text-xs font-bold rounded-xl text-center"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="cursor-pointer py-3.5 bg-brand-terracotta hover:bg-brand-terracotta-hover text-brand-cream text-xs font-bold rounded-xl text-center shadow-md"
+              >
+                Add to Queue
+              </button>
+            </div>
             </form>
           </div>
         </div>
@@ -1926,87 +2473,124 @@ export const LiveQueueSection: React.FC = () => {
       )}
 
       {/* ========================================================== */}
-      {/* ============ ADD MORE TIME / RETURN TO WAITING =========== */}
+      {/* =========================== ADD TIME ====================== */}
       {/* ========================================================== */}
       {returnModalOpen && returningItem && (
         <div className="fixed inset-0 bg-brand-charcoal/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-brand-cream border border-brand-clay rounded-3xl p-6 shadow-2xl max-w-sm w-full text-left space-y-5 animate-in zoom-in-95 duration-200">
+          {/* Same viewport-safe shape as Add Walk-In: header and footer are
+              shrink-0 siblings of the scroll area, never part of it. */}
+          <div className="bg-brand-cream border border-brand-clay rounded-3xl shadow-2xl max-w-sm w-full max-h-[90vh] flex flex-col overflow-hidden text-left animate-in zoom-in-95 duration-200">
 
-            <div className="flex justify-between items-center border-b border-brand-clay/60 pb-3">
-              <div>
-                <h3 className="font-display text-sm font-bold text-brand-charcoal">Add More Time</h3>
-                <p className="text-[11px] font-bold text-brand-charcoal/50">
+            {/* Header */}
+            <div className="shrink-0 flex justify-between items-center border-b border-brand-clay/60 px-6 py-4">
+              <div className="min-w-0">
+                <h3 className="font-display text-sm font-bold text-brand-charcoal">Add Time</h3>
+                <p className="text-[11px] font-bold text-brand-charcoal/50 truncate">
                   {returningItem.name} · completed entry No. {returningItem.id.replace('Q-', '')}
                 </p>
               </div>
-              <button onClick={() => setReturnModalOpen(false)} className="text-brand-charcoal hover:bg-brand-sand p-1 rounded-lg">
+              <button
+                onClick={() => setReturnModalOpen(false)}
+                className="shrink-0 p-1.5 rounded-lg text-brand-charcoal hover:bg-brand-sand border border-transparent hover:border-brand-clay/40 cursor-pointer focus:outline-none"
+              >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            <p className="text-[11px] font-semibold text-brand-charcoal/60 bg-white border border-brand-clay/50 rounded-xl p-2.5">
-              The completed session stays in Completed Today as history. A new Waiting entry is created for the extra time.
-            </p>
+            {/* Scrollable middle */}
+            <div className="flex-1 overflow-y-auto always-scrollbar px-6 py-4 space-y-4">
 
-            <div className="space-y-4">
-              <div className="flex items-center justify-between border border-brand-clay bg-white rounded-xl p-3">
-                <span className="text-xs font-bold text-brand-charcoal/80">Additional Hours</span>
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => setReturnHours(prev => Math.max(1, prev - 1))}
-                    className="h-8 w-8 rounded-lg bg-brand-sand hover:bg-brand-clay flex items-center justify-center font-bold text-brand-charcoal"
-                  >
-                    -
-                  </button>
-                  <input
-                    type="number"
-                    min={1}
-                    step="0.5"
-                    value={returnHours}
-                    onChange={e => {
-                      setReturnHours(Number(e.target.value));
-                      if (returnErrors.hours) setReturnErrors(prev => ({ ...prev, hours: '' }));
-                    }}
-                    className="text-sm font-bold text-brand-charcoal w-14 text-center bg-brand-cream/50 border border-brand-clay rounded-lg py-1"
-                  />
-                  <button
-                    onClick={() => setReturnHours(prev => prev + 1)}
-                    className="h-8 w-8 rounded-lg bg-brand-sand hover:bg-brand-clay flex items-center justify-center font-bold text-brand-charcoal"
-                  >
-                    +
-                  </button>
-                </div>
-              </div>
-              {returnErrors.hours && <p className="text-[11px] text-red-500 font-bold">{returnErrors.hours}</p>}
+              <p className="text-[11px] font-semibold text-brand-charcoal/60 bg-white border border-brand-clay/50 rounded-xl p-2.5">
+                Goes straight back to In Progress with a fresh timer — this guest does not return to the Waiting List.
+              </p>
 
-              <div className="flex items-center justify-between border border-brand-clay bg-white rounded-xl p-3">
-                <span className="text-xs font-bold text-brand-charcoal/80">Guests</span>
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => setReturnGuests(prev => Math.max(1, prev - 1))}
-                    className="h-8 w-8 rounded-lg bg-brand-sand hover:bg-brand-clay flex items-center justify-center font-bold text-brand-charcoal"
-                  >
-                    -
-                  </button>
-                  <input
-                    type="number"
-                    min={1}
-                    value={returnGuests}
-                    onChange={e => {
-                      setReturnGuests(Number(e.target.value));
-                      if (returnErrors.guests) setReturnErrors(prev => ({ ...prev, guests: '' }));
-                    }}
-                    className="text-sm font-bold text-brand-charcoal w-14 text-center bg-brand-cream/50 border border-brand-clay rounded-lg py-1"
-                  />
-                  <button
-                    onClick={() => setReturnGuests(prev => prev + 1)}
-                    className="h-8 w-8 rounded-lg bg-brand-sand hover:bg-brand-clay flex items-center justify-center font-bold text-brand-charcoal"
-                  >
-                    +
-                  </button>
+              <div className="space-y-1">
+                <div className="flex items-center justify-between border border-brand-clay bg-white rounded-xl p-3">
+                  <span className="text-xs font-bold text-brand-charcoal/80">Additional Hours</span>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setReturnHours(prev => Math.max(1, prev - 1))}
+                      className="h-8 w-8 rounded-lg bg-brand-sand hover:bg-brand-clay flex items-center justify-center font-bold text-brand-charcoal cursor-pointer"
+                    >
+                      -
+                    </button>
+                    <input
+                      type="number"
+                      min={1}
+                      step="0.5"
+                      value={returnHours}
+                      onChange={e => {
+                        setReturnHours(Number(e.target.value));
+                        if (returnErrors.hours) setReturnErrors(prev => ({ ...prev, hours: '' }));
+                      }}
+                      className="text-sm font-bold text-brand-charcoal w-14 text-center bg-brand-cream/50 border border-brand-clay rounded-lg py-1"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setReturnHours(prev => prev + 1)}
+                      className="h-8 w-8 rounded-lg bg-brand-sand hover:bg-brand-clay flex items-center justify-center font-bold text-brand-charcoal cursor-pointer"
+                    >
+                      +
+                    </button>
+                  </div>
                 </div>
+                {returnErrors.hours && <p className="text-[11px] text-red-500 font-bold">{returnErrors.hours}</p>}
               </div>
-              {returnErrors.guests && <p className="text-[11px] text-red-500 font-bold">{returnErrors.guests}</p>}
+
+              <div className="space-y-1">
+                <div className="flex items-center justify-between border border-brand-clay bg-white rounded-xl p-3">
+                  <span className="text-xs font-bold text-brand-charcoal/80">Guests</span>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setReturnGuests(prev => Math.max(1, prev - 1))}
+                      className="h-8 w-8 rounded-lg bg-brand-sand hover:bg-brand-clay flex items-center justify-center font-bold text-brand-charcoal cursor-pointer"
+                    >
+                      -
+                    </button>
+                    <input
+                      type="number"
+                      min={1}
+                      value={returnGuests}
+                      onChange={e => {
+                        setReturnGuests(Number(e.target.value));
+                        if (returnErrors.guests) setReturnErrors(prev => ({ ...prev, guests: '' }));
+                      }}
+                      className="text-sm font-bold text-brand-charcoal w-14 text-center bg-brand-cream/50 border border-brand-clay rounded-lg py-1"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setReturnGuests(prev => prev + 1)}
+                      className="h-8 w-8 rounded-lg bg-brand-sand hover:bg-brand-clay flex items-center justify-center font-bold text-brand-charcoal cursor-pointer"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+                {returnErrors.guests && <p className="text-[11px] text-red-500 font-bold">{returnErrors.guests}</p>}
+              </div>
+
+              {/* Table Assignment — the same compact popover picker as Add
+                  Walk-In, pre-selected with whatever table(s) this guest had. */}
+              <div className="space-y-1.5">
+                <p className="text-xs font-bold text-brand-charcoal/80">Table Assignment</p>
+                <p className="text-[10px] text-brand-charcoal/40 font-bold">
+                  {returningItem.tableIds && returningItem.tableIds.length > 0
+                    ? 'Kept below by default — remove or change if needed.'
+                    : 'No table was assigned before. Choose one or more.'}
+                </p>
+                <TableMultiPicker
+                  tables={returnTableStates}
+                  selectedIds={returnTableIds}
+                  participants={Number(returnGuests) || 0}
+                  placeholder="Choose table(s)"
+                  onChange={ids => {
+                    setReturnTableIds(ids);
+                    if (returnErrors.form) setReturnErrors(prev => ({ ...prev, form: '' }));
+                  }}
+                />
+              </div>
 
               {(() => {
                 const preview = computeQueueSessionPlan({
@@ -2020,7 +2604,10 @@ export const LiveQueueSection: React.FC = () => {
                   <div className="bg-brand-sand/20 border border-brand-clay/40 rounded-xl p-3 text-[11px] font-bold text-brand-charcoal/80 space-y-1">
                     <div className="flex justify-between"><span>New Session Duration:</span><span>{preview.durationLabel}</span></div>
                     <div className="flex justify-between"><span>Est. End Time:</span><span className="font-mono">{preview.estimatedEndTime}</span></div>
-                    <div className="flex justify-between"><span>Seats / Tables Required:</span><span>{preview.seatsRequired} / {preview.tablesRequired}</span></div>
+                    <div className="flex justify-between">
+                      <span>Table(s):</span>
+                      <span>{returnTableIds.length > 0 ? tableNamesFor(returnTableIds, configuredTables) : `${preview.seatsRequired} seats needed`}</span>
+                    </div>
                   </div>
                 );
               })()}
@@ -2030,21 +2617,24 @@ export const LiveQueueSection: React.FC = () => {
                   {returnErrors.form}
                 </p>
               )}
+            </div>
 
-              <div className="grid grid-cols-2 gap-3 pt-2">
-                <button
-                  onClick={() => setReturnModalOpen(false)}
-                  className="cursor-pointer py-3 border border-brand-clay hover:bg-brand-sand text-brand-charcoal text-xs font-bold rounded-xl text-center"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleConfirmReturn}
-                  className="cursor-pointer py-3 bg-brand-terracotta hover:bg-brand-terracotta-hover text-brand-cream text-xs font-bold rounded-xl text-center shadow-md"
-                >
-                  Return to Waiting
-                </button>
-              </div>
+            {/* Footer */}
+            <div className="shrink-0 grid grid-cols-2 gap-3 border-t border-brand-clay/60 px-6 py-4">
+              <button
+                type="button"
+                onClick={() => setReturnModalOpen(false)}
+                className="cursor-pointer py-3 border border-brand-clay hover:bg-brand-sand text-brand-charcoal text-xs font-bold rounded-xl text-center"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmReturn}
+                className="cursor-pointer py-3 bg-brand-terracotta hover:bg-brand-terracotta-hover text-brand-cream text-xs font-bold rounded-xl text-center shadow-md"
+              >
+                Confirm Add Time
+              </button>
             </div>
 
           </div>
@@ -2088,6 +2678,86 @@ export const LiveQueueSection: React.FC = () => {
 
           </div>
         </div>
+      )}
+
+      {/* ========================================================== */}
+      {/* ============= SEAT / CHANGE TABLE (one modal) ============= */}
+      {/* ========================================================== */}
+      {seatModalOpen && seatModalItem && (
+        <div className="fixed inset-0 bg-brand-charcoal/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-brand-cream border border-brand-clay rounded-3xl p-6 shadow-2xl max-w-sm w-full text-left space-y-5 animate-in zoom-in-95 duration-200">
+
+            <div className="flex justify-between items-center border-b border-brand-clay/60 pb-3">
+              <div>
+                <h3 className="font-display text-sm font-bold text-brand-charcoal">
+                  {seatModalMode === 'seat' ? 'Seat Guest — Choose Table(s)' : 'Change Table'}
+                </h3>
+                <p className="text-[11px] font-bold text-brand-charcoal/50">
+                  {seatModalItem.name} · No. {seatModalItem.id.replace('Q-', '')} · {seatModalItem.participants} guests
+                </p>
+              </div>
+              <button
+                onClick={() => setSeatModalOpen(false)}
+                className="text-brand-charcoal hover:bg-brand-sand p-1 rounded-lg cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {seatModalMode === 'seat' && (
+              <p className="text-[11px] font-semibold text-brand-charcoal/60 bg-white border border-brand-clay/50 rounded-xl p-2.5">
+                A table is required before this guest can move to In Progress. A large group may use more than one table.
+              </p>
+            )}
+
+            <TableSelector
+              tables={seatModalTableStates}
+              selectedIds={seatModalTableIds}
+              participants={seatModalItem.participants}
+              onToggle={id => {
+                setSeatModalTableIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+                if (seatModalError) setSeatModalError(null);
+              }}
+            />
+
+            {seatModalError && (
+              <p className="text-[11px] text-red-600 font-bold bg-red-50 border border-red-200 rounded-xl p-2.5">
+                {seatModalError}
+              </p>
+            )}
+
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <button
+                onClick={() => setSeatModalOpen(false)}
+                className="cursor-pointer py-3 border border-brand-clay hover:bg-brand-sand text-brand-charcoal text-xs font-bold rounded-xl text-center"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmSeatModal}
+                className="cursor-pointer py-3 bg-brand-terracotta hover:bg-brand-terracotta-hover text-brand-cream text-xs font-bold rounded-xl text-center shadow-md"
+              >
+                {seatModalMode === 'seat' ? 'Seat Guest' : 'Save Table'}
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================== */}
+      {/* ===================== SEATING MANAGER ====================== */}
+      {/* ========================================================== */}
+      {seatingManagerOpen && (
+        <SeatingManagerModal
+          tables={tableStates}
+          queue={todayQueue}
+          onClose={() => setSeatingManagerOpen(false)}
+          onSeatWaiting={item => { setSeatingManagerOpen(false); handleOpenSeatModal(item, 'seat'); }}
+          onChangeTable={item => { setSeatingManagerOpen(false); handleOpenSeatModal(item, 'change'); }}
+          onRelease={async (item) => { await assignQueueTables(item.id, []); }}
+          onAssign={async (item, tableId) => { await assignQueueTables(item.id, [tableId]); }}
+        />
       )}
 
     </div>

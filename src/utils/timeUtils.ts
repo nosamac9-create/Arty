@@ -95,3 +95,29 @@ export function rangesOverlap(
 ): boolean {
   return proposedStart < existingEnd && proposedEnd > existingStart;
 }
+
+/**
+ * "10:00 AM" -> "10:00", "04:30 PM" -> "16:30".
+ *
+ * `<input type="time">` only speaks 24-hour HH:MM, while schedules are stored
+ * in the 12-hour form the rest of the app parses. These two functions are the
+ * bridge, so the picker can be used without changing what is saved.
+ */
+export function toTimeInputValue(timeStr?: string | null): string {
+  if (!timeStr || !String(timeStr).trim()) return '';
+  const minutes = timeToMinutes(String(timeStr));
+  const hh = String(Math.floor(minutes / 60) % 24).padStart(2, '0');
+  const mm = String(minutes % 60).padStart(2, '0');
+  return `${hh}:${mm}`;
+}
+
+/** "16:30" -> "04:30 PM". Empty in, empty out, so optional times stay unset. */
+export function fromTimeInputValue(value?: string | null): string {
+  if (!value || !String(value).trim()) return '';
+  const [rawH, rawM] = String(value).split(':');
+  const h24 = Math.min(23, Math.max(0, parseInt(rawH, 10) || 0));
+  const minutes = Math.min(59, Math.max(0, parseInt(rawM, 10) || 0));
+  const suffix = h24 >= 12 ? 'PM' : 'AM';
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  return `${String(h12).padStart(2, '0')}:${String(minutes).padStart(2, '0')} ${suffix}`;
+}

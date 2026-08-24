@@ -8,7 +8,7 @@ import { useApp } from '../context/AppContext';
 import { 
   LayoutDashboard, Users, CalendarDays, Palette, ListOrdered, 
   Flame, HelpCircle, ChevronLeft, ChevronRight, ChevronDown, Menu, LogOut, ShieldAlert, Settings, Sparkles, UserCheck
-} from 'lucide-react';
+, Megaphone } from 'lucide-react';
 import { SETTINGS_SECTIONS } from '../utils/adminAccess';
 import { formatTime } from '../utils/calendarConfig';
 
@@ -185,7 +185,7 @@ export const AdminSidebar: React.FC = () => {
 };
 
 export const AdminTopBar: React.FC = () => {
-  const { currentUser, notifications, clearAllNotifications, formattedTodayDate } = useApp();
+  const { currentStaff, notifications, clearAllNotifications, formattedTodayDate } = useApp();
   const [showNotifDropdown, setShowNotifDropdown] = useState(false);
 
   const staffNotifs = useMemo(() => {
@@ -272,7 +272,8 @@ export const AdminTopBar: React.FC = () => {
                       <p className="font-semibold text-brand-charcoal/90">{n.message}</p>
                       {n.highlighted && (
                         <span className="inline-block mt-1 text-[9px] uppercase font-bold text-brand-terracotta bg-brand-terracotta/10 px-1.5 py-0.5 rounded">
-                          📢 Pickup Alert Dispatched
+                          <Megaphone className="inline h-3 w-3 me-1 align-[-2px]" />
+                          Pickup Alert Dispatched
                         </span>
                       )}
                     </div>
@@ -283,19 +284,30 @@ export const AdminTopBar: React.FC = () => {
           )}
         </div>
 
-        {/* Staff User profile block */}
-        <div className="flex items-center gap-2 border-l border-brand-clay pl-4">
-          <img
-            src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&h=100&q=80"
-            alt="Staff Profile"
-            className="h-8 w-8 rounded-full object-cover border border-brand-clay shadow-2xs"
-            referrerPolicy="no-referrer"
-          />
-          <div className="hidden md:block">
-            <p className="text-xs font-bold text-brand-charcoal">Lina Al-Sudais</p>
-            <p className="text-[9px] font-bold text-brand-sage uppercase tracking-wider">Studio Manager</p>
+        {/* Whoever is actually signed in. The name, the role and the initial
+            all come from the session's staff record — the block used to be a
+            stock photograph and a hardcoded name, which read as "Lina" to every
+            member of staff. */}
+        {currentStaff && (
+          <div className="flex items-center gap-2 border-l border-brand-clay pl-4">
+            <span
+              aria-hidden="true"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-terracotta text-xs font-bold text-brand-cream"
+            >
+              {(currentStaff.name || '?').trim().charAt(0).toUpperCase()}
+            </span>
+            <div className="hidden md:block">
+              <p className="text-xs font-bold text-brand-charcoal">{currentStaff.name}</p>
+              {/* Their job title — "Instructor", not the console permission
+                  level, which is what `role` holds. */}
+              {(currentStaff.position || currentStaff.role) && (
+                <p className="text-[9px] font-bold text-brand-sage uppercase tracking-wider">
+                  {currentStaff.position || currentStaff.role}
+                </p>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </header>
   );

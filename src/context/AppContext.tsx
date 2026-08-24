@@ -10,7 +10,7 @@ import {
   WorkshopSessionRecord, StaffScheduleDayEntry, BirthdayPackage, BirthdayFormField,
   DEFAULT_BIRTHDAY_PACKAGES, DEFAULT_BIRTHDAY_FORM_FIELDS, normalizeBirthdayPackage,
   StudioResource, DEFAULT_STUDIO_RESOURCES, CustomerAccount, StaffRole,
-  DEFAULT_PIPELINE_STAGES, isStageEnabled, stageCustomerLabel,
+  DEFAULT_PIPELINE_STAGES, isStageEnabled, stageCustomerLabel, migrateLegacyPieceStatus,
   DEFAULT_WORKSHOP_OPTIONS, isWorkshopOptionEnabled,
   WorkshopFieldConfig, DEFAULT_WORKSHOP_FIELDS,
   DraftBooking, DEFAULT_LOGGING_FIELDS, LoggingConsoleField
@@ -48,6 +48,7 @@ import {
   getRelativeRiyadhDateStr 
 } from '../utils/dateUtils';
 import { validateSaudiPhone, normaliseSaudiPhone, normalisePhone } from '../utils/phoneUtils';
+import { getConfiguredTables, computeTableStates, validateTableSelection } from '../utils/tableSeatingUtils';
 
 export { 
   getRiyadhNow, 
@@ -267,12 +268,22 @@ interface AppContextType {
     message: string,
     meta?: { newStatus?: string; performedBy?: string; highlighted?: boolean }
   ) => Promise<void>;
-  addQueueItem: (item: Omit<QueueItem, 'id' | 'checkInTime' | 'elapsedMinutes' | 'status' | 'date' | 'history'>) => Promise<void>;
+  addQueueItem: (item: Omit<QueueItem, 'id' | 'checkInTime' | 'elapsedMinutes' | 'status' | 'date' | 'history'>) => Promise<{ success: boolean; error?: string }>;
   updateQueueStatus: (id: string, status: QueueItem['status']) => void;
   updateQueueItem: (id: string, updates: Partial<QueueItem>) => Promise<void>;
+  /**
+   * Assigns (or clears) café tables on a Waiting/Called entry without moving
+   * it — the tables become reserved capacity. Pass an empty array to leave it
+   * unassigned again.
+   */
+  assignQueueTables: (id: string, tableIds: string[]) => Promise<{ success: boolean; error?: string }>;
+  /** Moves a Without Instructor entry to In Progress. Table(s) are required. */
+  seatQueueItem: (id: string, tableIds: string[]) => Promise<{ success: boolean; error?: string }>;
+  /** Moves an In Progress entry's seating to a different set of table(s). */
+  changeQueueItemTables: (id: string, tableIds: string[]) => Promise<{ success: boolean; error?: string }>;
   returnQueueItemToWaiting: (
     id: string,
-    opts: { hours: number; participants: number }
+    opts: { hours: number; participants: number; tableIds: string[] }
   ) => Promise<{ success: boolean; message?: string; newId?: string }>;
   reorderQueue: (newQueue: QueueItem[]) => void;
   updatePieceStatus: (id: string, status: PotteryPiece['status'], performerUser?: string, reason?: string) => void;
@@ -837,7 +848,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Email confirmation is on: there is no session yet, so auth.uid() is not
     // this caller and claim_customer_account() correctly will not attach
-    // anything (see 0006_fix_customer_ownership_verification.sql). Ask for
+    // anything (see 0010_fix_customer_ownership_verification.sql). Ask for
     // confirmation now rather than attempting the link and reporting the
     // wrong error; resolveSessions()'s heal step completes the claim
     // automatically once the confirmation link is opened and the session
@@ -1674,26 +1685,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     }
 
-    // Automatically generate a piece in 'Created' state if it is a Pottery workshop!
-    const targetWs = workshops.find(w => w.id === newBookingData.workshopId);
-    if (targetWs && targetWs.category === 'Pottery') {
-      const pieceId = `PC-${Math.floor(300 + Math.random() * 700)}`;
-      const newPiece: PotteryPiece = {
-        id: pieceId,
-        name: `${targetWs.title.split(' ')[0]} Masterpiece`,
-        workshopName: targetWs.title,
-        customerName: newBookingData.customerName,
-        customerPhone: newBookingData.customerPhone,
-        dateCreated: new Date().toISOString().split('T')[0],
-        image: targetWs.image,
-        status: 'Created',
-        daysElapsed: 0,
-        assignedStaff: targetWs.instructor
-      };
-      db.pieces.add(newPiece).catch(err => {
-        console.error("Failed to add piece in addBooking:", err);
-      });
-    }
+    // A booking creates no piece. Pieces exist once a real object exists, which
+    // only the studio can know — so one is logged by hand in the Pottery
+    // Logging Console. Auto-creating one here put pieces on the customer's My
+    // Pieces page for workshops they had not attended yet.
 
     return newBooking;
   };
@@ -1912,11 +1907,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const addQueueItem = async (item: Omit<QueueItem, 'id' | 'checkInTime' | 'elapsedMinutes' | 'status' | 'date' | 'history'>) => {
+  /**
+   * Reads the configured café tables and every active queue entry fresh from
+   * the database, so a table-capacity check is never made against a stale
+   * in-memory snapshot — the same reason `validateBookingForm` re-reads
+   * session capacity at submit time.
+   */
+  const loadTableCapacitySources = async (excludeQueueId?: string) => {
+    const [settings, allQueue] = await Promise.all([db.appSettings.toArray(), db.queue.toArray()]);
+    const tables = getConfiguredTables(settings);
+    const states = computeTableStates(tables, allQueue, {
+      excludeQueueId,
+      todayDateStr: getRiyadhDateString()
+    });
+    return { tables, states };
+  };
+
+  const addQueueItem = async (
+    item: Omit<QueueItem, 'id' | 'checkInTime' | 'elapsedMinutes' | 'status' | 'date' | 'history'>
+  ): Promise<{ success: boolean; error?: string }> => {
+    // Table assignment at check-in is entirely optional (Waiting needs no
+    // table), but a table picked up-front must still be genuinely free.
+    if (item.tableIds && item.tableIds.length > 0) {
+      const { states } = await loadTableCapacitySources();
+      const check = validateTableSelection(item.tableIds, item.participants, states);
+      if (!check.valid) return { success: false, error: check.error };
+    }
+
     const todayRiyadh = getRiyadhDateString();
     const id = await generateNextQueueId();
     const timeStr = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-    
+
     const newItem: QueueItem = {
       ...item,
       id,
@@ -1927,6 +1948,65 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       history: [{ status: 'Waiting', timestamp: new Date().toISOString() }]
     };
     await db.queue.put(newItem);
+    return { success: true };
+  };
+
+  /** Assigns or clears table(s) on a Waiting/Called entry — reserved capacity only. */
+  const assignQueueTables = async (
+    id: string, tableIds: string[]
+  ): Promise<{ success: boolean; error?: string }> => {
+    const item = await db.queue.get(id);
+    if (!item) return { success: false, error: 'Queue entry not found.' };
+
+    if (tableIds.length > 0) {
+      const { states } = await loadTableCapacitySources(id);
+      const check = validateTableSelection(tableIds, item.participants, states);
+      if (!check.valid) return { success: false, error: check.error };
+    }
+
+    await db.queue.update(id, { tableIds });
+    return { success: true };
+  };
+
+  /** Moves a Without Instructor entry to In Progress. A table is required. */
+  const seatQueueItem = async (
+    id: string, tableIds: string[]
+  ): Promise<{ success: boolean; error?: string }> => {
+    const item = await db.queue.get(id);
+    if (!item) return { success: false, error: 'Queue entry not found.' };
+    if (!tableIds || tableIds.length === 0) {
+      return { success: false, error: 'Select at least one table before seating this guest.' };
+    }
+
+    const { states } = await loadTableCapacitySources(id);
+    const check = validateTableSelection(tableIds, item.participants, states);
+    if (!check.valid) return { success: false, error: check.error };
+
+    await db.queue.update(id, {
+      tableIds,
+      status: 'In Progress',
+      seatedTime: new Date().toISOString(),
+      history: [...(item.history || []), { status: 'In Progress', timestamp: new Date().toISOString() }]
+    });
+    return { success: true };
+  };
+
+  /** Moves an In Progress entry's seating to a different set of table(s). */
+  const changeQueueItemTables = async (
+    id: string, tableIds: string[]
+  ): Promise<{ success: boolean; error?: string }> => {
+    const item = await db.queue.get(id);
+    if (!item) return { success: false, error: 'Queue entry not found.' };
+    if (!tableIds || tableIds.length === 0) {
+      return { success: false, error: 'Select at least one table.' };
+    }
+
+    const { states } = await loadTableCapacitySources(id);
+    const check = validateTableSelection(tableIds, item.participants, states);
+    if (!check.valid) return { success: false, error: check.error };
+
+    await db.queue.update(id, { tableIds });
+    return { success: true };
   };
 
   const updateQueueStatus = async (id: string, status: QueueItem['status']) => {
@@ -1940,6 +2020,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
       if (status === 'In Progress') {
         updates.seatedTime = new Date().toISOString();
+      }
+      // Completing or cancelling releases every table this entry held —
+      // reserved or occupied — so it cannot leave a table stuck unavailable.
+      if (status === 'Completed' || status === 'Cancelled') {
+        updates.tableIds = [];
       }
       await db.queue.update(id, updates);
 
@@ -1974,13 +2059,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   /**
-   * Adds a completed self-guided guest back to Waiting for more time.
-   * The completed record is left intact — a new Waiting entry is created and
-   * linked to it, so history is preserved and no duplicate active entry appears.
+   * "Add Time" — continues a completed self-guided guest for more time. The
+   * completed record is left intact — a new entry is created and linked to
+   * it, so history is preserved and no duplicate active entry appears. The
+   * continued session is already seated, so — table(s) chosen — it goes
+   * straight to In Progress rather than back through Waiting.
    */
   const returnQueueItemToWaiting = async (
     id: string,
-    opts: { hours: number; participants: number }
+    opts: { hours: number; participants: number; tableIds: string[] }
   ): Promise<{ success: boolean; message?: string; newId?: string }> => {
     const original = await db.queue.get(id);
     if (!original) return { success: false, message: 'Queue entry not found' };
@@ -2000,6 +2087,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!Number.isFinite(participants) || participants <= 0 || !Number.isInteger(participants)) {
       return { success: false, message: 'Guests must be a whole number of at least 1.' };
     }
+    if (!opts.tableIds || opts.tableIds.length === 0) {
+      return { success: false, message: 'Select at least one table — keep the current one or choose a different one.' };
+    }
 
     const todayRiyadh = getRiyadhDateString();
 
@@ -2018,23 +2108,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     }
 
+    // The original completed entry holds no capacity, so it never needs
+    // excluding here — only its own (already-released) tables could clash.
+    const { states } = await loadTableCapacitySources();
+    const check = validateTableSelection(opts.tableIds, participants, states);
+    if (!check.valid) return { success: false, message: check.error };
+
     const newId = await generateNextQueueId();
     const timeStr = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    const nowIso = new Date().toISOString();
 
     await db.queue.put({
       ...original,
       id: newId,
       participants,
       hours,
+      tableIds: opts.tableIds,
       activity: `Walk-in (No Instructor - ${hours} hrs, extended)`,
       checkInTime: timeStr,
       elapsedMinutes: 0,
-      seatedTime: undefined,
-      status: 'Waiting',
+      seatedTime: nowIso,
+      status: 'In Progress',
       date: todayRiyadh,
       returnedFromQueueId: original.id,
       extendedByQueueId: undefined,
-      history: [{ status: 'Waiting', timestamp: new Date().toISOString() }]
+      history: [
+        { status: 'Waiting', timestamp: nowIso },
+        { status: 'In Progress', timestamp: nowIso }
+      ]
     });
 
     // Additive pointer only — the completed session record itself is untouched.
@@ -2072,18 +2173,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // Generate CUSTOMER notification
       let friendlyMsg = `Your piece "${piece.name}" has been updated to "${status}".`;
-      if (status === 'Ready for Collection') {
-        friendlyMsg = `🎁 Your beautiful pottery piece "${piece.name}" is ready for collection! Please come pick it up at the café shelf.`;
+      if (status === 'Ready for Pickup') {
+        friendlyMsg = `Your beautiful pottery piece "${piece.name}" is ready for pickup! Please come pick it up at the café shelf.`;
       } else if (status === 'Collected') {
         friendlyMsg = `Thank you for picking up your piece "${piece.name}"! We hope you loved crafting it at Arty Café.`;
-      } else if (status === 'Firing') {
-        friendlyMsg = `Your piece "${piece.name}" is now being fired in our high-temperature kiln.`;
-      } else if (status === 'Glazing') {
-        friendlyMsg = `Your piece "${piece.name}" is currently at the glazing station.`;
-      } else if (status === 'In Processing') {
-        friendlyMsg = `Your piece "${piece.name}" is now in processing.`;
-      } else if (status === 'Drying') {
-        friendlyMsg = `Your piece "${piece.name}" is now resting on the drying racks.`;
+      } else if (status === 'First Burn and Colored') {
+        friendlyMsg = `Your piece "${piece.name}" has been through its first burn and is now being coloured.`;
+      } else if (status === 'Created') {
+        friendlyMsg = `Your piece "${piece.name}" has been created and is now resting before its first burn.`;
       } else if (status === 'Broken') {
         // States the outcome plainly, without exposing the internal damage note.
         friendlyMsg = `Unfortunately, your pottery piece ${piece.pieceCode || piece.id} was damaged and has been marked as broken. Please contact Arty Café so our team can assist you.`;
@@ -2115,8 +2212,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         id: `NOTIF-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
         type: 'customer',
         customerPhone: piece.customerPhone,
-        title: status === 'Ready for Collection'
-          ? '🎁 Piece Ready for Pickup!'
+        title: status === 'Ready for Pickup'
+          ? 'Piece Ready for Pickup!'
           : status === 'Broken'
             ? `Piece ${piece.pieceCode || piece.id} marked as broken`
             : `Piece Status Update: ${status}`,
@@ -2126,17 +2223,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         newStatus: status,
         timestamp: new Date().toISOString(),
         isRead: false,
-        highlighted: status === 'Ready for Collection'
+        highlighted: status === 'Ready for Pickup'
       });
 
       // Generate STAFF notification
       await db.notifications.add({
         id: `NOTIF-STAFF-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
         type: 'staff',
-        title: status === 'Ready for Collection'
-          ? '🚨 Piece Ready for Pickup Alert'
+        title: status === 'Ready for Pickup'
+          ? 'Piece Ready for Pickup Alert'
           : status === 'Broken'
-            ? '⚠️ Piece Marked Broken'
+            ? 'Piece Marked Broken'
             : 'Piece Status Shifted',
         message: `Piece ${piece.id} (${piece.customerName}) moved to "${status}" by ${performerUser}.${reason ? ` Reason: ${reason}` : ''}`,
         pieceId: piece.id,
@@ -2145,23 +2242,62 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         performedBy: performerUser,
         timestamp: new Date().toISOString(),
         isRead: false,
-        highlighted: status === 'Ready for Collection'
+        highlighted: status === 'Ready for Pickup'
       });
     }
   };
 
+  /**
+   * Allocates an identifier that no piece is already using.
+   *
+   * The old generator picked a number out of a 700-wide range and hoped — which
+   * is how the board ended up showing AC-1806 twice. This reads the codes in
+   * use first, and falls back to a timestamp suffix if the random space is
+   * somehow exhausted, so it always terminates with something unique.
+   */
+  const allocatePieceIdentifier = async (prefix: string, taken: Set<string>) => {
+    for (let attempt = 0; attempt < 50; attempt++) {
+      const candidate = `${prefix}-${Math.floor(1000 + Math.random() * 9000)}`;
+      if (!taken.has(candidate.toUpperCase())) return candidate;
+    }
+    return `${prefix}-${Date.now().toString(36).toUpperCase()}`;
+  };
+
   const addPiece = async (piece: Omit<PotteryPiece, 'id' | 'daysElapsed' | 'expectedCompletion' | 'notes'> & Partial<Pick<PotteryPiece, 'expectedCompletion' | 'notes'>>) => {
-    const id = `PC-${Math.floor(300 + Math.random() * 700)}`;
+    // Read once, check both the id and the piece code against it: the two share
+    // a namespace on screen, where a piece falls back to its id when it has no
+    // code of its own.
+    const existing = await db.pieces.toArray();
+    const taken = new Set<string>();
+    existing.forEach(p => {
+      if (p.id) taken.add(p.id.trim().toUpperCase());
+      if (p.pieceCode) taken.add(p.pieceCode.trim().toUpperCase());
+    });
+
+    const id = await allocatePieceIdentifier('PC', taken);
+    taken.add(id.toUpperCase());
+
+    const requestedCode = piece.pieceCode?.trim();
+    if (requestedCode && taken.has(requestedCode.toUpperCase())) {
+      // The console checks this before calling, so reaching here means two
+      // people logged the same code at once. Refusing beats silently writing a
+      // duplicate.
+      throw new Error(`Piece code "${requestedCode}" is already in use.`);
+    }
+
     const newPiece: PotteryPiece = {
       name: 'Ceramic Piece',
       workshopName: 'Freestyle Handbuilding',
       customerName: 'Walk-in Customer',
       customerPhone: '+966500000000',
       image: '',
-      status: 'Created',
       dateCreated: new Date().toISOString().split('T')[0],
       assignedStaff: 'Lina',
       ...piece,
+      // Never a legacy or hand-typed stage name — the column's check constraint
+      // only accepts the six current ones.
+      status: migrateLegacyPieceStatus(piece.status),
+      pieceCode: requestedCode || (await allocatePieceIdentifier('AC', taken)),
       id,
       daysElapsed: 0
     };
@@ -2170,7 +2306,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // The opening history entry, in the append-only table.
     await db.pieceHistory.add({
       pieceId: id,
-      status: newPiece.status || 'Created',
+      status: newPiece.status,
       timestamp: new Date().toISOString(),
       riyadhTime: `${getRiyadhDateString()} ${getRiyadhNow().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`,
       user: 'Staff',
@@ -2355,19 +2491,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       if (customerAuthId) {
-        const customerRows = await fetchTable<CustomerAccount>('customers');
+        // Right after sign-up, this fires from the same SIGNED_IN event that
+        // triggers registerCustomer()'s own resolution, and can race ahead of
+        // the resolve_customer_record RPC that links this auth id to a row.
+        // Retrying briefly avoids overwriting a correct sign-in with a
+        // premature null just because the link had not committed yet.
+        let row: CustomerAccount | undefined;
+        for (let attempt = 0; attempt < 4 && !cancelled; attempt++) {
+          const customerRows = await fetchTable<CustomerAccount>('customers');
+          if (cancelled) return;
+          row = customerRows.find(c => c.userId === customerAuthId);
+          if (row) break;
+          if (attempt < 3) await new Promise(r => setTimeout(r, 400));
+        }
         if (cancelled) return;
-        let row = customerRows.find(c => c.userId === customerAuthId);
 
-        // An authenticated session with no customer record behind it yet.
-        // This is the deferred half of registerCustomer()'s walk-in claim:
-        // that call ran before email confirmation existed, when auth.uid()
-        // was not yet this user, so resolve_customer_record() could not
-        // attach ownership (see 0006_fix_customer_ownership_verification.sql
-        // / audit finding C-1). Retry now that the session is real — the RPC
-        // only attaches when auth.uid() matches AND the target record's own
-        // stored email already equals this address, so this cannot attach
-        // somebody else's record, only complete a legitimate one.
+        // Still nothing after the commit-lag retries above: not a race, but
+        // the deferred half of registerCustomer()'s/claimCustomerAccount()'s
+        // walk-in claim. That original call ran before email confirmation
+        // existed, when auth.uid() was not yet this user, so
+        // resolve_customer_record() correctly refused to attach ownership
+        // (see 0010_fix_customer_ownership_verification.sql / audit finding
+        // C-1). Retry now that the session is real — the RPC only attaches
+        // when auth.uid() matches AND the target record's own stored email
+        // already equals this address, so this cannot attach somebody else's
+        // record, only complete a legitimate one.
         if (!row && customerAuthEmail && supabase) {
           const { data: healedId, error: healError } = await supabase.rpc('resolve_customer_record', {
             p_name: null,
@@ -3071,6 +3219,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       addCategoryIfMissing, assignBookingStaff, updateWorkshopSession, appendBookingTimeline,
       getFreshAssignmentSources, getFreshStaff,
       addQueueItem, addStaffNotification, updateQueueStatus, updateQueueItem, reorderQueue, returnQueueItemToWaiting,
+      assignQueueTables, seatQueueItem, changeQueueItemTables,
       updatePieceStatus, addPiece, updatePiece, markNotificationAsRead, clearAllNotifications,
       runAllTests, toggleTestResult,
       isTestRunning, testProgress, testsPassing,

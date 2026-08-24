@@ -16,7 +16,8 @@
  * date-based business rule keeps working exactly as before.
  */
 
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { MONTH_NAMES, MONTH_NAMES_SHORT, WEEKDAY_NAMES_SHORT, CALENDAR_INPUT_PROPS } from '../utils/calendarConfig';
 
@@ -76,6 +77,62 @@ export const DateInput: React.FC<DateInputProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  /**
+   * Where the calendar is drawn.
+   *
+   * It used to be an absolutely positioned child of the field, which meant any
+   * ancestor with `overflow: hidden` clipped it — on the Bookings ledger both
+   * the page and the table card do, so the popup was cut off. It is portalled
+   * to the body and positioned from the field's own rect instead, so nothing
+   * upstream can clip it and it cannot be trapped by a transformed ancestor.
+   */
+  const POPUP_WIDTH = 264;
+  const POPUP_MAX_HEIGHT = 360;
+  const VIEWPORT_MARGIN = 8;
+  const [popupStyle, setPopupStyle] = useState<React.CSSProperties>({ visibility: 'hidden' });
+  const popupRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (!isOpen) return;
+
+    const place = () => {
+      const field = containerRef.current?.getBoundingClientRect();
+      if (!field) return;
+
+      const spaceBelow = window.innerHeight - field.bottom;
+      // Flip above only when below genuinely cannot hold it and above can.
+      const openUpwards = spaceBelow < POPUP_MAX_HEIGHT + VIEWPORT_MARGIN && field.top > spaceBelow;
+
+      // Aligned to the field's leading edge, then pulled back inside the
+      // window if that would push it off the right.
+      const left = Math.min(
+        Math.max(VIEWPORT_MARGIN, field.left),
+        Math.max(VIEWPORT_MARGIN, window.innerWidth - POPUP_WIDTH - VIEWPORT_MARGIN)
+      );
+
+      setPopupStyle({
+        position: 'fixed',
+        left,
+        width: POPUP_WIDTH,
+        maxHeight: openUpwards
+          ? Math.max(160, field.top - VIEWPORT_MARGIN * 2)
+          : Math.max(160, spaceBelow - VIEWPORT_MARGIN * 2),
+        ...(openUpwards
+          ? { bottom: window.innerHeight - field.top + 4 }
+          : { top: field.bottom + 4 })
+      });
+    };
+
+    place();
+    // Anything that moves the field moves the calendar with it.
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
+  }, [isOpen]);
+
   const selected = parseISO(value);
 
   // Month currently shown in the grid.
@@ -95,9 +152,13 @@ export const DateInput: React.FC<DateInputProps> = ({
     if (!isOpen) return;
 
     const handleClick = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
+      const target = event.target as Node;
+      // The calendar is portalled to the body, so it is not inside the field's
+      // container any more — without this second check, clicking a day would
+      // register as a click outside and close the popup before it selected.
+      const insideField = containerRef.current?.contains(target);
+      const insidePopup = popupRef.current?.contains(target);
+      if (!insideField && !insidePopup) setIsOpen(false);
     };
     const handleKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setIsOpen(false);
@@ -176,8 +237,12 @@ export const DateInput: React.FC<DateInputProps> = ({
         autoComplete="off"
       />
 
-      {isOpen && !disabled && (
-        <div className="absolute left-0 top-full mt-1 z-[60] w-[264px] bg-white border border-brand-clay rounded-2xl shadow-xl p-3 text-left animate-in fade-in duration-100">
+      {isOpen && !disabled && createPortal(
+        <div
+          ref={popupRef}
+          style={popupStyle}
+          className="z-[120] overflow-y-auto always-scrollbar rounded-2xl border border-brand-clay bg-white p-3 text-left shadow-xl animate-in fade-in duration-100"
+        >
 
           {/* Month / year navigation */}
           <div className="flex items-center justify-between mb-2">
@@ -286,7 +351,8 @@ export const DateInput: React.FC<DateInputProps> = ({
               </span>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

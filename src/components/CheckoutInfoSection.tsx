@@ -6,12 +6,14 @@
 import React, { useState, useEffect } from 'react';
 import { PasswordField } from './PasswordField';
 import { useApp } from '../context/AppContext';
-import { User, Mail, Phone, ArrowLeft, ArrowRight, ShieldCheck, LogIn, CheckCircle2, Lock } from 'lucide-react';
+import { User, Mail, Phone, ArrowLeft, ArrowRight, ShieldCheck, LogIn, CheckCircle2, Lock , Check } from 'lucide-react';
 import { validateSaudiPhone, normaliseSaudiPhone } from '../utils/phoneUtils';
 import { PhoneInput } from './PhoneInput';
 import {
   validateCustomerForm, canonicalPhone, canonicalEmail, passwordChecklist
 } from '../utils/validation';
+import { CheckoutStepper } from './ui/CheckoutStepper';
+import { AppImage } from './ui/AppImage';
 
 export const CheckoutInfoSection: React.FC = () => {
   const {
@@ -179,33 +181,30 @@ export const CheckoutInfoSection: React.FC = () => {
   return (
     <div className="mx-auto max-w-4xl px-4 py-10 animate-in fade-in duration-300 text-start">
       
-      {/* Back to detail button */}
+      {/* Back button — a birthday draft returns to its own Review & Deposit
+          step, never to a workshop's details page. */}
       <button
-        onClick={() => setCustomerTab('detail')}
+        onClick={() => setCustomerTab(birthday ? 'birthday-booking' : 'detail')}
         className="inline-flex items-center gap-2 text-xs font-semibold text-brand-terracotta bg-brand-cream border border-brand-clay hover:bg-brand-sand px-3.5 py-2 rounded-xl cursor-pointer mb-6"
       >
         <ArrowLeft className="h-4 w-4" />
-        <span>Back to Workshop Details</span>
+        <span>{birthday ? 'Back to Review & Deposit' : 'Back to Workshop Details'}</span>
       </button>
 
-      {/* Progress Step Indicator */}
-      <div className="mb-8 flex items-center justify-between border-b border-brand-clay pb-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-terracotta text-brand-cream text-xs font-semibold shadow-card-sm">
-            1
-          </div>
-          <div>
-            <h1 className="font-display text-xl sm:text-2xl font-semibold text-brand-charcoal">Customer Information</h1>
-            <p className="text-xs text-brand-muted">Step 1 of 2: Enter your contact details for booking confirmation</p>
-          </div>
-        </div>
-
-        <div className="hidden sm:flex items-center gap-2 text-xs font-semibold text-brand-charcoal/40">
-          <span className="text-brand-terracotta">1. Info</span>
-          <span>→</span>
-          <span>2. Payment</span>
-        </div>
+      {/* Title then stepper — the same header the birthday reservation uses. */}
+      <div className="mb-8">
+        <span className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-sage">
+          Workshop Booking
+        </span>
+        <h1 className="mt-3 font-display text-3xl font-semibold text-brand-charcoal sm:text-[42px]">
+          Customer Information
+        </h1>
+        <p className="mt-3 text-sm text-brand-ink">
+          Enter your contact details for booking confirmation.
+        </p>
       </div>
+
+      <CheckoutStepper steps={['Customer Information', 'Payment']} current={1} />
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         
@@ -309,7 +308,11 @@ export const CheckoutInfoSection: React.FC = () => {
                           item.met ? 'text-brand-sage' : 'text-brand-charcoal/45'
                         }`}
                       >
-                        <span>{item.met ? '✓' : '•'}</span>
+                        <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+                            {item.met
+                              ? <Check className="h-3.5 w-3.5" />
+                              : <span className="h-1 w-1 rounded-full bg-current opacity-60" />}
+                          </span>
                         <span>{item.label}</span>
                       </li>
                     ))}
@@ -361,7 +364,7 @@ export const CheckoutInfoSection: React.FC = () => {
             </h3>
 
             <div className="flex gap-4">
-              <img
+              <AppImage
                 src={birthday ? (birthdayPackage?.image || workshop.image) : workshop.image}
                 alt={birthday ? (birthdayPackage?.name || 'Birthday package') : workshop.title}
                 className="w-20 h-20 rounded-2xl object-cover shrink-0 bg-brand-sand border border-brand-clay"
@@ -390,7 +393,7 @@ export const CheckoutInfoSection: React.FC = () => {
               </div>
               <div className="flex justify-between">
                 <span>{birthday ? 'Guests:' : 'Participants:'}</span>
-                <span className="font-semibold text-brand-charcoal">{pendingBooking.participants} {pendingBooking.participants === 1 ? 'person' : 'people'}</span>
+                <span className="font-semibold text-brand-charcoal">{pendingBooking.participants} {pendingBooking.participants === 1 ? 'guest' : 'guests'}</span>
               </div>
               <div className="flex justify-between">
                 <span>{birthday ? (birthdayPackage?.pricingLabel || 'Per child') : 'Price per person'}:</span>

@@ -11,6 +11,8 @@ import {
 } from 'lucide-react';
 import { Booking, PotteryPiece } from '../types';
 import { getActivitiesForDate, categorizeBooking } from '../utils/activityUtils';
+import { searchText } from '../utils/search';
+import { usePagination, TablePager } from './ui/TablePager';
 
 export const AdminDashboardSection: React.FC = () => {
   const { 
@@ -79,10 +81,13 @@ export const AdminDashboardSection: React.FC = () => {
   const monthlyBirthdayBookings = useMemo(() => {
     return bookings
       .filter(b => {
-        const isBirthday = b.workshopId === 'birthday-party-event' || 
-          b.workshopTitle.toLowerCase().includes('birthday') || 
-          b.workshopTitle.toLowerCase().includes('package');
-        return isBirthday && b.status !== 'Cancelled' && b.date.startsWith(currentRiyadhMonth);
+        // A booking with no title is rare but not invalid, and reading it
+        // directly took the whole dashboard down with it.
+        const title = searchText(b.workshopTitle);
+        const isBirthday = b.workshopId === 'birthday-party-event' ||
+          title.includes('birthday') ||
+          title.includes('package');
+        return isBirthday && b.status !== 'Cancelled' && (b.date || '').startsWith(currentRiyadhMonth);
       })
       .sort((a, b) => {
         const dateDiff = a.date.localeCompare(b.date);
@@ -95,7 +100,7 @@ export const AdminDashboardSection: React.FC = () => {
   const overduePickupPieces = useMemo(() => {
     return pieces
       .filter(p => {
-        if (p.status !== 'Ready for Collection') return false;
+        if (p.status !== 'Ready for Pickup') return false;
         
         // Calculate days waiting since ready date or daysElapsed
         const readyDate = p.expectedReadyDate || p.actualReadyDate || p.readyDate || p.dateCreated || todayDateStr;
@@ -128,6 +133,14 @@ export const AdminDashboardSection: React.FC = () => {
       })
       .sort((a, b) => b.daysWaiting - a.daysWaiting);
   }, [pieces, todayDateStr]);
+
+  /* Five rows a page on every dashboard table. Nothing is dropped — the rest
+     is a page turn away — and the page resets itself when the row count
+     changes, which is what happens as bookings arrive through the day. */
+  const todaysPager = usePagination(todaysBookings, 5);
+  const tomorrowsPager = usePagination(tomorrowsBookings, 5);
+  const birthdayPager = usePagination(monthlyBirthdayBookings, 5);
+  const overduePager = usePagination(overduePickupPieces, 5);
 
   // Handle Mark Piece as Collected
   const handleMarkCollected = async (pieceId: string, pieceCode: string, customerName: string) => {
@@ -308,6 +321,7 @@ export const AdminDashboardSection: React.FC = () => {
             No active bookings or walk-ins for today ({todayDateStr}).
           </div>
         ) : (
+          <>
           <div className="overflow-x-auto">
             <table className="w-full text-xs text-left">
               <thead>
@@ -324,7 +338,7 @@ export const AdminDashboardSection: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-brand-clay/30 font-medium">
-                {todaysBookings.map(a => (
+                {todaysPager.pageItems.map(a => (
                   <tr key={a.id} className="hover:bg-brand-sand/15 transition-colors">
                     <td className="py-3 px-3 font-mono font-bold text-brand-terracotta">{a.time}</td>
                     <td className="py-3 px-3 font-bold text-brand-charcoal">{a.customerName}</td>
@@ -386,6 +400,16 @@ export const AdminDashboardSection: React.FC = () => {
               </tbody>
             </table>
           </div>
+          <TablePager
+            page={todaysPager.page}
+            totalPages={todaysPager.totalPages}
+            from={todaysPager.from}
+            to={todaysPager.to}
+            total={todaysPager.total}
+            onPage={todaysPager.setPage}
+            noun="bookings"
+          />
+          </>
         )}
       </div>
 
@@ -416,6 +440,7 @@ export const AdminDashboardSection: React.FC = () => {
             No bookings scheduled for tomorrow ({tomorrowDateStr}) yet.
           </div>
         ) : (
+          <>
           <div className="overflow-x-auto">
             <table className="w-full text-xs text-left">
               <thead>
@@ -432,7 +457,7 @@ export const AdminDashboardSection: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-brand-clay/30 font-medium">
-                {tomorrowsBookings.map(b => (
+                {tomorrowsPager.pageItems.map(b => (
                   <tr key={b.id} className="hover:bg-brand-sand/15 transition-colors">
                     <td className="py-3 px-3">
                       <p className="font-bold text-brand-charcoal">{b.date}</p>
@@ -442,7 +467,7 @@ export const AdminDashboardSection: React.FC = () => {
                     <td className="py-3 px-3 font-mono text-brand-charcoal/80">{b.customerPhone}</td>
                     <td className="py-3 px-3">
                       <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
-                        {b.workshopTitle.toLowerCase().includes('birthday') ? 'Birthday Package' : 'Workshop'}
+                        {searchText(b.workshopTitle).includes('birthday') ? 'Birthday Package' : 'Workshop'}
                       </span>
                     </td>
                     <td className="py-3 px-3 font-bold text-brand-charcoal">{b.workshopTitle}</td>
@@ -473,6 +498,16 @@ export const AdminDashboardSection: React.FC = () => {
               </tbody>
             </table>
           </div>
+          <TablePager
+            page={tomorrowsPager.page}
+            totalPages={tomorrowsPager.totalPages}
+            from={tomorrowsPager.from}
+            to={tomorrowsPager.to}
+            total={tomorrowsPager.total}
+            onPage={tomorrowsPager.setPage}
+            noun="bookings"
+          />
+          </>
         )}
       </div>
 
@@ -503,6 +538,7 @@ export const AdminDashboardSection: React.FC = () => {
             No birthday packages are booked for this month ({currentRiyadhMonth}).
           </div>
         ) : (
+          <>
           <div className="overflow-x-auto">
             <table className="w-full text-xs text-left">
               <thead>
@@ -519,7 +555,7 @@ export const AdminDashboardSection: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-brand-clay/30 font-medium">
-                {monthlyBirthdayBookings.map(b => (
+                {birthdayPager.pageItems.map(b => (
                   <tr key={b.id} className="hover:bg-brand-sand/15 transition-colors">
                     <td className="py-3 px-3">
                       <p className="font-bold text-brand-charcoal">{b.date}</p>
@@ -559,6 +595,16 @@ export const AdminDashboardSection: React.FC = () => {
               </tbody>
             </table>
           </div>
+          <TablePager
+            page={birthdayPager.page}
+            totalPages={birthdayPager.totalPages}
+            from={birthdayPager.from}
+            to={birthdayPager.to}
+            total={birthdayPager.total}
+            onPage={birthdayPager.setPage}
+            noun="bookings"
+          />
+          </>
         )}
       </div>
 
@@ -574,7 +620,7 @@ export const AdminDashboardSection: React.FC = () => {
             <div>
               <h2 className="font-display font-bold text-lg text-brand-charcoal">Pottery Awaiting Pickup for 7+ Days</h2>
               <p className="text-xs text-brand-charcoal/60">
-                Pieces in "Ready for Collection" status that have been waiting on storage shelves for 7 days or longer.
+                Pieces in "Ready for Pickup" status that have been waiting on storage shelves for 7 days or longer.
               </p>
             </div>
           </div>
@@ -586,9 +632,11 @@ export const AdminDashboardSection: React.FC = () => {
 
         {overduePickupPieces.length === 0 ? (
           <div className="p-8 text-center text-xs text-brand-charcoal/50 italic bg-brand-cream/30 rounded-2xl border border-dashed border-brand-clay">
-            🎉 Excellent! No pottery pieces are currently overdue for collection (7+ days).
+            <CheckCircle2 className="inline h-4 w-4 me-1.5 align-[-3px] text-brand-sage" />
+            Excellent! No pottery pieces are currently overdue for collection (7+ days).
           </div>
         ) : (
+          <>
           <div className="overflow-x-auto">
             <table className="w-full text-xs text-left">
               <thead>
@@ -604,7 +652,7 @@ export const AdminDashboardSection: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-brand-clay/30 font-medium">
-                {overduePickupPieces.map(p => (
+                {overduePager.pageItems.map(p => (
                   <tr key={p.id} className="hover:bg-brand-sand/15 transition-colors">
                     <td className="py-3 px-3 font-mono font-bold text-brand-terracotta">{p.pieceCode || p.id}</td>
                     <td className="py-3 px-3">
@@ -659,6 +707,16 @@ export const AdminDashboardSection: React.FC = () => {
               </tbody>
             </table>
           </div>
+          <TablePager
+            page={overduePager.page}
+            totalPages={overduePager.totalPages}
+            from={overduePager.from}
+            to={overduePager.to}
+            total={overduePager.total}
+            onPage={overduePager.setPage}
+            noun="pieces"
+          />
+          </>
         )}
       </div>
 

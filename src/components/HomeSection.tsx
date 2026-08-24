@@ -12,6 +12,8 @@ import { CountingNumber } from './ui/CountingNumber';
 import { ScrollReveal } from './ui/ScrollReveal';
 import Reveal from './ui/Reveal';
 import { AnimatedMap } from './ui/AnimatedMap';
+import { BirthdayBalloons } from './ui/BirthdayBalloons';
+import { AppImage } from './ui/AppImage';
 import {
   ContainerStagger,
   ContainerAnimated,
@@ -19,6 +21,7 @@ import {
   GalleryGridCell
 } from './ui/CtaSectionWithGallery';
 import { formatDate } from '../utils/calendarConfig';
+import { isWorkshopFullyBooked } from '../utils/queueUtils';
 import { Calendar, Sparkles, ChevronRight, Paintbrush, MousePointerClick, CalendarRange, Gift, Coffee, ChevronDown, ChevronUp, Phone, Mail, UserCheck, Star } from 'lucide-react';
 
 /**
@@ -58,7 +61,8 @@ const HERO_ALTS = [
 export const HomeSection: React.FC = () => {
   const {
     workshops, setCustomerTab, setSelectedWorkshopId, events,
-    setSelectedBirthdayPackage, publishedBirthdayPackages, setWorkshopsInitialCategory
+    setSelectedBirthdayPackage, publishedBirthdayPackages, setWorkshopsInitialCategory,
+    workshopSessions, bookings, queue, todayDateStr
   } = useApp();
   const [showOwnerContact, setShowOwnerContact] = useState(false);
 
@@ -231,26 +235,21 @@ export const HomeSection: React.FC = () => {
                   height (not aspect-video) so every card's image locks to the
                   same box regardless of the source photo's own dimensions. */}
               <div className="relative h-48 sm:h-52 shrink-0 bg-brand-sand">
-                <img
+                <AppImage
                   src={ws.image}
                   alt={ws.title}
                   className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                   referrerPolicy="no-referrer"
                 />
                 
-                {/* Spots Pill */}
-                {/* Both chips ride the top of the image: availability on the
-                    leading edge, category on the trailing one. */}
+                {/* Availability chip — silent unless every upcoming date is
+                    full; category chip always shows. */}
                 <div className="absolute inset-x-3 top-3 flex items-start justify-between gap-2">
-                  {ws.spotsLeft === 0 ? (
+                  {isWorkshopFullyBooked(ws.id, { workshopSessions, workshops, bookings, queue }, todayDateStr) ? (
                     <span className="inline-flex items-center rounded-full bg-brand-charcoal/85 px-3 py-1.5 text-[11px] font-semibold text-brand-cream backdrop-blur-sm">
                       Fully booked
                     </span>
-                  ) : (
-                    <span className="inline-flex items-center rounded-full bg-brand-charcoal/85 px-3 py-1.5 text-[11px] font-semibold text-brand-cream backdrop-blur-sm">
-                      {ws.spotsLeft} spots left
-                    </span>
-                  )}
+                  ) : <span />}
                   <span className="inline-flex items-center rounded-full bg-brand-cream/90 px-3 py-1.5 text-[11px] font-semibold text-brand-charcoal backdrop-blur-sm">
                     {ws.category}
                   </span>
@@ -341,8 +340,11 @@ export const HomeSection: React.FC = () => {
           other section on the page, instead of a card floating on the cream
           background. Points only at the packages themselves; custom, one-off
           events live in their own section below so the two never blur. */}
-      <section className="bg-brand-charcoal py-16 md:py-20">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <section className="relative overflow-hidden bg-brand-charcoal py-16 md:py-20">
+      {/* Decorative only. The balloons layer is pointer-events-none, so the
+          button and the package cards stay fully clickable through it. */}
+      <BirthdayBalloons />
+      <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16 items-center">
 
             <div className="text-start">
@@ -395,6 +397,9 @@ export const HomeSection: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => {
+                    // Overview mode: clearing the selection is what stops a
+                    // package chosen earlier from opening itself here.
+                    setSelectedBirthdayPackage('');
                     setWorkshopsInitialCategory('Birthday Packages');
                     setCustomerTab('workshops');
                   }}
@@ -703,15 +708,37 @@ export const HomeSection: React.FC = () => {
             </div>
 
             {/* Map — drawn rather than embedded, and clickable as a whole:
-                it opens the studio's real Google Maps listing. */}
-            <div className="lg:col-span-7">
-              <AnimatedMap
-                href="https://maps.app.goo.gl/Br4QagaCrPKeJ8EW8"
-                label="Arty Café Jeddah"
-                coordinates="21.5897° N, 39.1288° E"
-                className="h-72 md:h-96"
-              />
-            </div>
+                it opens the studio's real Google Maps listing.
+
+                Wiped in from the trailing edge, the same way the Custom Events
+                studio photo arrives. As there, the observed element is not the
+                clipped one: an element clipped to zero area reports zero
+                intersection, so useInView would never fire and the reveal would
+                hold it invisible. The wipe lives on the inner element, which
+                inherits the variant. */}
+            <ScrollReveal
+              once
+              viewOptions={{ once: true, amount: 0.25 }}
+              transition={{ delay: 0.15, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+              variants={{ hidden: { opacity: 0, x: 48 }, visible: { opacity: 1, x: 0 } }}
+              className="lg:col-span-7"
+            >
+              <motion.div
+                className="relative overflow-hidden rounded-[26px]"
+                variants={{
+                  hidden: { clipPath: 'inset(0 0 0 100%)' },
+                  visible: { clipPath: 'inset(0 0 0 0%)' }
+                }}
+                transition={{ delay: 0.15, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <AnimatedMap
+                  href="https://maps.app.goo.gl/Br4QagaCrPKeJ8EW8"
+                  label="Arty Café Jeddah"
+                  coordinates="21.5897° N, 39.1288° E"
+                  className="h-72 md:h-96"
+                />
+              </motion.div>
+            </ScrollReveal>
 
           </div>
       </div>

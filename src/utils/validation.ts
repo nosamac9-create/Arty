@@ -21,8 +21,9 @@
 import { sdb } from '../lib/supabaseDb';
 import { CustomerAccount, StaffMember, WorkshopSessionRecord } from '../types';
 import { normalizeCustomerPhone, customerPhoneKey } from './customerIdentity';
-import { getSessionSeatUsage } from './queueUtils';
+import { getSessionSeatUsage, minBirthdayNoticeDays, isBirthdayDateFull, isBirthdaySlotFull } from './queueUtils';
 import { parseArabicDigits } from './phoneUtils';
+import { getMinBirthdayBookingDateStr } from './dateUtils';
 
 export interface ValidationResult {
   valid: boolean;
@@ -409,6 +410,67 @@ export async function validateBookingForm(
     fields.participants = fail(
       `Only ${availability.remaining} ${availability.remaining === 1 ? 'spot is' : 'spots are'} left for this session.`
     );
+  }
+
+  return collectErrors(fields);
+}
+
+// ==========================================================
+// BIRTHDAY PACKAGE BOOKING
+//
+// A birthday reservation has no workshop session, so it is re-checked
+// against the bookings table directly rather than through
+// getSessionAvailability. The same rule runs here (submit time, against a
+// fresh read) and in the booking form (as the customer picks a date/time),
+// so a slot that fills up in between is still caught.
+// ==========================================================
+
+export interface BirthdayBookingInput {
+  date?: string;
+  time?: string;
+  /** Total headcount, including the birthday person — never subtracted. */
+  totalPeople?: number | string;
+  /** The booking's own id, so editing it does not count itself twice. */
+  excludeBookingId?: string;
+}
+
+export async function validateBirthdayBookingForm(
+  input: BirthdayBookingInput,
+  source: ValidationDb = db
+): Promise<Record<string, string>> {
+  const fields: Record<string, ValidationResult> = {};
+
+  const totalPeople = Number(input.totalPeople);
+  if (!input.totalPeople || Number.isNaN(totalPeople) || totalPeople < 1) {
+    fields.numberOfPeople = fail('Enter at least 1 person.');
+  }
+
+  if (!input.date) {
+    fields.bookingDate = fail('Select a date for this celebration.');
+  }
+  if (!input.time) {
+    fields.bookingTime = fail('Select a time slot for this celebration.');
+  }
+  if (Object.keys(fields).length > 0) return collectErrors(fields);
+
+  const requiredNotice = minBirthdayNoticeDays(totalPeople);
+  const minDate = getMinBirthdayBookingDateStr(requiredNotice);
+  if (input.date! < minDate) {
+    fields.bookingDate = fail(
+      `Birthday bookings for ${totalPeople} ${totalPeople === 1 ? 'guest' : 'guests'} need at least ${requiredNotice} day${requiredNotice === 1 ? '' : 's'} notice.`
+    );
+    return collectErrors(fields);
+  }
+
+  const bookings = await source.bookings.toArray();
+
+  if (isBirthdayDateFull(bookings, input.date!, input.excludeBookingId)) {
+    fields.bookingDate = fail('This date is fully booked for birthday celebrations. Please choose another date.');
+    return collectErrors(fields);
+  }
+
+  if (isBirthdaySlotFull(bookings, input.date!, input.time!, input.excludeBookingId)) {
+    fields.bookingTime = fail('This time slot is fully booked for birthday celebrations. Please choose another time.');
   }
 
   return collectErrors(fields);

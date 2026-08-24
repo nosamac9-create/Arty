@@ -9,7 +9,7 @@ import { StaffMember, StaffTimeOff, StaffScheduleDayEntry, StaffWeeklyShift } fr
 import {
   Users, UserPlus, Calendar, Clock, CheckCircle2, AlertCircle, XCircle,
   Search, Filter, Edit3, Trash2, CalendarDays, Award, Phone, Mail,
-  ChevronLeft, ChevronRight, Briefcase, Plus, UserCheck, Shield, Sparkles
+  ChevronLeft, ChevronRight, Briefcase, Plus, UserCheck, Shield, Sparkles, RefreshCw
 } from 'lucide-react';
 import { checkStaffMemberAvailability } from '../utils/staffAvailabilityUtils';
 import { buildStaffAssignmentMap, getUpcomingAssignments, describeInactiveWarning } from '../utils/staffAssignments';
@@ -17,6 +17,15 @@ import { validateStaffForm, staffStorageFields } from '../utils/validation';
 import { WEEKDAYS, toDaySchedule, createShift, countScheduledDays } from '../utils/staffScheduleUtils';
 import { getRiyadhDateString } from '../utils/dateUtils';
 import { DateInput } from './DateInput';
+import { matchesQuery } from '../utils/search';
+import { TimePicker } from './ui/TimePicker';
+import { normalizeDateString } from '../utils/timeUtils';
+import { ConsoleModal } from './ui/ConsoleModal';
+import { timeToMinutes } from '../utils/timeUtils';
+
+/** One width for every time control, so the columns line up down the day list. */
+const timeInputClass =
+  'w-full min-w-0 rounded-lg border border-brand-clay bg-white px-2 py-1.5 text-xs font-semibold text-brand-charcoal';
 
 export const AdminStaffSection: React.FC = () => {
   const {
@@ -36,7 +45,16 @@ export const AdminStaffSection: React.FC = () => {
 
   // Navigation / View Tabs inside Staff Section
   const [activeTab, setActiveTab] = useState<'roster' | 'calendar' | 'schedule'>('roster');
-  const [calendarView, setCalendarView] = useState<'day' | 'week' | 'month'>('week');
+  /**
+   * The view the user picked, or null when nothing is selected.
+   *
+   * Null is a real state rather than a stand-in for the default: after Clear
+   * Filters none of the three tabs should look active, while the calendar still
+   * has to draw something. `effectiveCalendarView` is what the range and the
+   * navigation read; `calendarView` is only what the tabs highlight.
+   */
+  const [calendarView, setCalendarView] = useState<'day' | 'week' | 'month' | null>('week');
+  const effectiveCalendarView = calendarView ?? 'week';
   const [calendarDate, setCalendarDate] = useState<string>(todayDateStr);
 
   // Filter & Search
@@ -81,15 +99,117 @@ export const AdminStaffSection: React.FC = () => {
     [staff, selectedStaffId]
   );
 
+  /**
+   * The window the calendar is showing.
+   *
+   * Computed once from the selected date and the view, rather than per staff
+   * member inside the render. Both ends are inclusive `YYYY-MM-DD` strings, and
+   * every assignment date is normalised before comparison — an assignment
+   * stored as "2026-7-1" sorts before "2026-06-30" as a plain string, which is
+   * why days and months were showing the wrong rows.
+   */
+  const calendarRange = useMemo(() => {
+    // Nothing chosen at all — no view, no anchor date — is a real state, not a
+    // default to invent a range for. Clear Filters lands here, and the section
+    // then lists every assignment rather than silently filtering to this week.
+    if (!calendarView && !calendarDate) return null;
+
+    // The anchor. The view decides how it is read; the date itself never
+    // changes when the view does, so switching never asks for it again.
+    const base = calendarDate || todayDateStr;
+    const [y, m, d] = base.split('-').map(Number);
+    // Built from parts as a local date. Parsing "2026-08-20" as a string would
+    // be read as UTC midnight and land on the 19th west of Greenwich, which is
+    // how assignments end up one day out.
+    const cur = new Date(y || 1970, (m || 1) - 1, d || 1);
+    const toStr = (dt: Date) =>
+      `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+
+    if (effectiveCalendarView === 'day') {
+      const day = toStr(cur);
+      return {
+        start: day,
+        end: day,
+        label: cur.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+      };
+    }
+
+    if (effectiveCalendarView === 'week') {
+      // Sunday through Saturday, containing the anchor whichever day it is.
+      const sun = new Date(cur);
+      sun.setDate(cur.getDate() - cur.getDay());
+      const sat = new Date(sun);
+      sat.setDate(sun.getDate() + 6);
+
+      // "16–22 Aug 2026" when the week sits in one month, and the longer
+      // "28 Sep – 4 Oct 2026" only when it actually straddles two.
+      const sameMonth = sun.getMonth() === sat.getMonth() && sun.getFullYear() === sat.getFullYear();
+      const label = sameMonth
+        ? `${sun.getDate()}–${sat.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`
+        : `${sun.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} – ${sat.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`;
+
+      return { start: toStr(sun), end: toStr(sat), label };
+    }
+
+    const first = new Date(cur.getFullYear(), cur.getMonth(), 1);
+    // Day 0 of the next month is the last day of this one, leap years included.
+    const last = new Date(cur.getFullYear(), cur.getMonth() + 1, 0);
+    return {
+      start: toStr(first),
+      end: toStr(last),
+      label: cur.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+    };
+  }, [calendarDate, calendarView, effectiveCalendarView, todayDateStr]);
+
+  /**
+   * Whether anything is narrowing what the calendar shows.
+   *
+   * The roster search and status are included because this section renders the
+   * same filtered staff list as the list tab — clearing here has to clear those
+   * too, or rows would stay hidden with no visible reason.
+   */
+  const calendarFiltersActive =
+    calendarDate !== '' ||
+    calendarView !== null ||
+    searchQuery.trim() !== '' ||
+    statusFilter !== 'all';
+
+  const clearCalendarFilters = () => {
+    // The anchor is emptied rather than reset to today: with no view selected
+    // either, the section has no range to apply and shows everything.
+    setCalendarDate('');
+    setCalendarView(null);
+    setSearchQuery('');
+    setStatusFilter('all');
+  };
+
+  /** Steps the selected date by one whole view unit in either direction. */
+  const shiftCalendar = (direction: -1 | 1) => {
+    // Stepping from the cleared state anchors on today and adopts a view, so
+    // the arrows always move something visible.
+    if (!calendarView) setCalendarView('day');
+    const base = calendarDate || todayDateStr;
+    const [y, m, d] = base.split('-').map(Number);
+    const cur = new Date(y || 1970, (m || 1) - 1, d || 1);
+
+    if (effectiveCalendarView === 'day') cur.setDate(cur.getDate() + direction);
+    else if (effectiveCalendarView === 'week') cur.setDate(cur.getDate() + direction * 7);
+    else cur.setMonth(cur.getMonth() + direction);
+
+    setCalendarDate(
+      `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`
+    );
+  };
+
   // Filtered staff roster
   const filteredStaff = useMemo(() => {
     return staff.filter(member => {
-      const q = searchQuery.trim().toLowerCase();
-      const matchesSearch = 
-        member.name.toLowerCase().includes(q) ||
-        member.position.toLowerCase().includes(q) ||
-        member.phone.includes(q) ||
-        member.email.toLowerCase().includes(q);
+      // A staff record without a phone or an email is normal — reading the
+      // fields directly threw on the first keystroke and blanked the page.
+      const matchesSearch = matchesQuery(
+        [member.name, member.position, member.phone, member.email, member.role],
+        searchQuery
+      );
       const matchesStatus = statusFilter === 'all' || member.status === statusFilter;
       return matchesSearch && matchesStatus;
     });
@@ -135,6 +255,82 @@ export const AdminStaffSection: React.FC = () => {
     setShowAddEditModal(true);
   };
 
+  /**
+   * A shift that ends before it starts.
+   *
+   * The picker rules out malformed times, but not an impossible pair — 2 PM to
+   * 10 AM is two valid times in the wrong order. Returned keyed by
+   * `${day}-${index}` so the offending row can be marked as well as blocked.
+   * Overnight shifts are not a case the studio has, so end === start is invalid
+   * too: a zero-length shift would silently block every assignment that day.
+   */
+  const shiftTimeProblems = useMemo(() => {
+    const problems: Record<string, string> = {};
+    const schedule = formData.weeklySchedule || {};
+
+    Object.entries(schedule).forEach(([day, entry]) => {
+      // Older records store a single shift rather than a day object, so the
+      // entry goes through the same normaliser the editor itself uses.
+      const shifts = toDaySchedule(entry).shifts;
+
+      shifts.forEach((shift, idx) => {
+        const key = `${day}-${idx}`;
+        const start = shift.startTime ? timeToMinutes(shift.startTime) : null;
+        const end = shift.endTime ? timeToMinutes(shift.endTime) : null;
+
+        // Equal counts as invalid: a zero-length shift would silently block
+        // every assignment that day. Overnight shifts are not a case the studio
+        // has, so no wrap-around is allowed for either.
+        if (start !== null && end !== null && end <= start) {
+          problems[key] = 'Shift end must be after its start.';
+          return;
+        }
+
+        const breakStart = shift.breakStart ? timeToMinutes(shift.breakStart) : null;
+        const breakEnd = shift.breakEnd ? timeToMinutes(shift.breakEnd) : null;
+
+        // Both halves of a break, or neither — one alone has no meaning.
+        if ((breakStart === null) !== (breakEnd === null)) {
+          problems[key] = 'A break needs both a start and an end, or neither.';
+          return;
+        }
+
+        if (breakStart !== null && breakEnd !== null) {
+          if (breakEnd <= breakStart) {
+            problems[key] = 'Break end must be after its start.';
+            return;
+          }
+          if (start !== null && end !== null && (breakStart < start || breakEnd > end)) {
+            problems[key] = 'The break must fall inside the shift.';
+            return;
+          }
+        }
+      });
+
+      // Two shifts on one day may not cover the same minutes — the second one
+      // would be unassignable and the availability check would read the overlap
+      // as double capacity.
+      shifts.forEach((shift, idx) => {
+        if (problems[`${day}-${idx}`]) return;
+        const start = shift.startTime ? timeToMinutes(shift.startTime) : null;
+        const end = shift.endTime ? timeToMinutes(shift.endTime) : null;
+        if (start === null || end === null) return;
+
+        const clashes = shifts.some((other, otherIdx) => {
+          if (otherIdx === idx || !other.startTime || !other.endTime) return false;
+          const otherStart = timeToMinutes(other.startTime);
+          const otherEnd = timeToMinutes(other.endTime);
+          // Touching end-to-start is fine; only true overlap is a clash.
+          return start < otherEnd && otherStart < end;
+        });
+
+        if (clashes) problems[`${day}-${idx}`] = 'This shift overlaps another shift on the same day.';
+      });
+    });
+
+    return problems;
+  }, [formData.weeklySchedule]);
+
   // Save Staff Record
   const handleSaveStaff = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -146,6 +342,14 @@ export const AdminStaffSection: React.FC = () => {
     );
     setStaffErrors(fieldErrors);
     if (Object.keys(fieldErrors).length > 0) return;
+
+    // The schedule is saved with the record, so an impossible shift has to stop
+    // the save rather than being written and found later by availability code.
+    if (Object.keys(shiftTimeProblems).length > 0) {
+      window.alert('Please fix the highlighted working hours before saving:\n\n' +
+        [...new Set(Object.values(shiftTimeProblems))].join('\n'));
+      return;
+    }
 
     const canonical = staffStorageFields({ phone: formData.phone, email: formData.email });
 
@@ -448,21 +652,47 @@ export const AdminStaffSection: React.FC = () => {
               <p className="text-xs text-brand-charcoal/60 font-semibold mt-0.5">
                 Viewing assigned workshops and studio events in Riyadh time
               </p>
+              {/* Says exactly what is on screen, so the view and the range can
+                  never be read as disagreeing. */}
+              <p className="mt-1 text-xs font-bold text-brand-terracotta">
+                {calendarRange ? calendarRange.label : 'All scheduled assignments'}
+              </p>
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
+              {/* Steps by whichever unit is being viewed — a day, a week or a
+                  month — so the arrows always move the visible range by one
+                  screenful rather than always by a day. */}
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  aria-label={`Previous ${effectiveCalendarView}`}
+                  onClick={() => shiftCalendar(-1)}
+                  className="rounded-xl border border-brand-clay bg-white p-1.5 text-brand-charcoal transition-colors hover:bg-brand-sand/60 cursor-pointer"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Next ${effectiveCalendarView}`}
+                  onClick={() => shiftCalendar(1)}
+                  className="rounded-xl border border-brand-clay bg-white p-1.5 text-brand-charcoal transition-colors hover:bg-brand-sand/60 cursor-pointer"
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
               <DateInput
                 value={calendarDate}
-                onChange={e => setCalendarDate(e.target.value)}
+                onChange={e => {
+                  setCalendarDate(e.target.value);
+                  // Choosing a date with no view selected would otherwise change
+                  // nothing on screen. Day is the narrowest reading of "this
+                  // date" and matches what picking one implies.
+                  if (e.target.value && !calendarView) setCalendarView('day');
+                }}
                 className="bg-brand-cream/50 border border-brand-clay rounded-xl px-2.5 py-1 text-xs font-semibold text-brand-charcoal"
               />
-              <button
-                onClick={() => setCalendarDate(todayDateStr)}
-                className="px-2.5 py-1 bg-brand-sand hover:bg-brand-sand/80 text-brand-charcoal rounded-xl text-xs font-bold"
-              >
-                Today
-              </button>
-
               <div className="flex bg-brand-cream p-1 rounded-xl border border-brand-clay text-xs font-bold">
                 {(['day', 'week', 'month'] as const).map(v => (
                   <button
@@ -476,33 +706,37 @@ export const AdminStaffSection: React.FC = () => {
                   </button>
                 ))}
               </div>
+
+              {/* Same control as the Bookings page: only shown when something
+                  is actually filtering, so it never reads as an active state
+                  of its own. Resets the date, the view and the roster filters
+                  this section shares with the list tab. */}
+              {calendarFiltersActive && (
+                <button
+                  type="button"
+                  onClick={clearCalendarFilters}
+                  className="text-xs font-bold text-brand-terracotta hover:underline ml-1 cursor-pointer flex items-center gap-1"
+                >
+                  <RefreshCw className="h-3 w-3" />
+                  <span>Clear Filters</span>
+                </button>
+              )}
             </div>
           </div>
 
           <div className="divide-y divide-brand-clay/60 border border-brand-clay/60 rounded-xl overflow-hidden">
-            {staff.map(member => {
+            {/* The same roster the list tab is showing, so the search and
+                status filters apply here too instead of the two tabs
+                disagreeing about who is on the team. */}
+            {filteredStaff.map(member => {
               const assignments = staffAssignments.get(member.id) || [];
-              let filteredAssignments = assignments;
-
-              if (calendarView === 'day') {
-                filteredAssignments = assignments.filter(a => a.date === calendarDate);
-              } else if (calendarView === 'week') {
-                // Parse as a local date so the week window is not shifted by UTC.
-                const [y, m, d] = calendarDate.split('-').map(Number);
-                const cur = new Date(y, (m || 1) - 1, d || 1);
-                const sun = new Date(cur);
-                sun.setDate(cur.getDate() - cur.getDay());
-                const sat = new Date(sun);
-                sat.setDate(sun.getDate() + 6);
-                const toStr = (dt: Date) =>
-                  `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
-                const sunStr = toStr(sun);
-                const satStr = toStr(sat);
-                filteredAssignments = assignments.filter(a => a.date >= sunStr && a.date <= satStr);
-              } else if (calendarView === 'month') {
-                const prefix = calendarDate.substring(0, 7);
-                filteredAssignments = assignments.filter(a => a.date.startsWith(prefix));
-              }
+              // No range selected means no date filtering at all.
+              const filteredAssignments = calendarRange
+                ? assignments.filter(a => {
+                    const date = normalizeDateString(a.date);
+                    return !!date && date >= calendarRange.start && date <= calendarRange.end;
+                  })
+                : assignments;
 
               return (
                 <div key={member.id} className="p-4 hover:bg-brand-cream/40 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -543,26 +777,39 @@ export const AdminStaffSection: React.FC = () => {
 
       {/* DETAIL MODAL */}
       {showDetailModal && selectedStaff && (
-        <div className="fixed inset-0 bg-brand-charcoal/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
-          <div className="bg-white border border-brand-clay rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-6 shadow-2xl text-left">
-            <div className="flex items-start justify-between border-b border-brand-clay pb-4">
-              <div className="flex items-center gap-3">
-                <div className="h-14 w-14 rounded-full bg-brand-terracotta text-brand-cream font-bold text-xl flex items-center justify-center">
-                  {selectedStaff.name.charAt(0)}
-                </div>
-                <div>
-                  <h2 className="text-lg font-bold text-brand-charcoal">{selectedStaff.name}</h2>
-                  <p className="text-xs text-brand-terracotta font-semibold">{selectedStaff.position}</p>
-                </div>
-              </div>
-
-              <button 
-                onClick={() => setShowDetailModal(false)}
-                className="p-1 hover:bg-brand-sand rounded-lg text-brand-charcoal/60"
+        <ConsoleModal
+          maxWidth="max-w-2xl"
+          onClose={() => setShowDetailModal(false)}
+          title={
+            <span className="flex min-w-0 items-center gap-3">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand-terracotta text-lg font-bold text-brand-cream">
+                {selectedStaff.name.charAt(0)}
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-lg font-bold text-brand-charcoal">{selectedStaff.name}</span>
+                <span className="block truncate text-xs font-semibold text-brand-terracotta">{selectedStaff.position}</span>
+              </span>
+            </span>
+          }
+          footer={
+            <div className="flex w-full items-center justify-between gap-3">
+              <button
+                onClick={() => setShowTimeOffModal(true)}
+                className="px-3.5 py-2 bg-brand-sand hover:bg-brand-sand/80 text-brand-charcoal rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
               >
-                ✕
+                <Plus className="h-3.5 w-3.5" />
+                <span>Record Time Off / Leave</span>
+              </button>
+
+              <button
+                onClick={() => setShowDetailModal(false)}
+                className="px-4 py-2 bg-brand-charcoal text-brand-cream rounded-xl text-xs font-bold cursor-pointer"
+              >
+                Close
               </button>
             </div>
+          }
+        >
 
             {/* Availability status */}
             <div className="bg-brand-cream border border-brand-clay rounded-xl p-4 flex items-center justify-between">
@@ -590,7 +837,11 @@ export const AdminStaffSection: React.FC = () => {
                       {upcoming.length} upcoming · {allAssignments.length} total
                     </span>
                   </h3>
-                  <div className="space-y-2 max-h-48 overflow-y-auto border border-brand-clay/60 rounded-xl p-3 bg-brand-cream/20">
+                  {/* Fixed height with the rest reached by scrolling — the
+                      same shape the piece logging console's customer search
+                      uses, so a heavily booked instructor cannot stretch the
+                      modal. */}
+                  <div className="max-h-56 space-y-2 overflow-y-auto always-scrollbar rounded-xl border border-brand-clay/60 bg-brand-cream/20 p-3">
                     {upcoming.length === 0 ? (
                       <p className="text-xs text-brand-charcoal/50 italic py-2 text-center">No upcoming workshops or events assigned to this staff member.</p>
                     ) : (
@@ -649,34 +900,40 @@ export const AdminStaffSection: React.FC = () => {
               </div>
             </div>
 
-            {/* Time off actions */}
-            <div className="pt-2 flex justify-between items-center">
-              <button
-                onClick={() => setShowTimeOffModal(true)}
-                className="px-3.5 py-2 bg-brand-sand hover:bg-brand-sand/80 text-brand-charcoal rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                <span>Record Time Off / Leave</span>
-              </button>
-
-              <button
-                onClick={() => setShowDetailModal(false)}
-                className="px-4 py-2 bg-brand-charcoal text-brand-cream rounded-xl text-xs font-bold cursor-pointer"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
+        </ConsoleModal>
       )}
 
       {/* ADD / EDIT STAFF MODAL */}
       {showAddEditModal && (
-        <div className="fixed inset-0 bg-brand-charcoal/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
-          <form onSubmit={handleSaveStaff} className="bg-white border border-brand-clay rounded-2xl max-w-xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-4 shadow-2xl text-left">
-            <h2 className="text-lg font-bold text-brand-charcoal border-b border-brand-clay pb-3">
-              {editStaffId ? 'Edit Staff Member' : 'Add New Staff Member'}
-            </h2>
+        <ConsoleModal
+          maxWidth="max-w-2xl"
+          onClose={() => setShowAddEditModal(false)}
+          onSubmit={handleSaveStaff}
+          title={
+            <>
+              <UserCheck className="h-5 w-5 text-brand-terracotta" />
+              <span>{editStaffId ? 'Edit Staff Member' : 'Add New Staff Member'}</span>
+            </>
+          }
+          footer={
+            <>
+              <button
+                type="button"
+                onClick={() => setShowAddEditModal(false)}
+                className="px-4 py-2 bg-brand-sand text-brand-charcoal rounded-xl text-xs font-bold cursor-pointer"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="submit"
+                className="px-5 py-2 bg-brand-terracotta hover:bg-brand-terracotta-dark text-brand-cream rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+              >
+                Save Staff Record
+              </button>
+            </>
+          }
+        >
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-semibold text-brand-charcoal">
               <div>
@@ -787,7 +1044,7 @@ export const AdminStaffSection: React.FC = () => {
                 Days with no shift count as non-working and block assignments.
               </p>
 
-              <div className="space-y-2 max-h-72 overflow-y-auto border border-brand-clay/60 rounded-xl p-3 bg-brand-cream/30">
+              <div className="max-h-80 space-y-2 overflow-y-auto always-scrollbar rounded-xl border border-brand-clay/60 bg-brand-cream/30 p-3">
                 {WEEKDAYS.map(day => {
                   const shifts = toDaySchedule(formData.weeklySchedule?.[day]).shifts;
 
@@ -821,47 +1078,75 @@ export const AdminStaffSection: React.FC = () => {
                       ) : (
                         <div className="space-y-1.5">
                           {shifts.map((shift, idx) => (
-                            <div key={shift.id || idx} className="flex flex-wrap items-center gap-2">
-                              <input
-                                type="text"
-                                value={shift.startTime}
-                                onChange={e => handleUpdateShift(day, idx, { startTime: e.target.value })}
-                                placeholder="Start (e.g. 10:00 AM)"
-                                className="w-24 bg-brand-cream/50 border border-brand-clay rounded-lg px-2 py-1 text-xs font-semibold"
-                              />
-                              <span className="text-brand-charcoal/60 font-bold">–</span>
-                              <input
-                                type="text"
-                                value={shift.endTime}
-                                onChange={e => handleUpdateShift(day, idx, { endTime: e.target.value })}
-                                placeholder="End (e.g. 02:00 PM)"
-                                className="w-24 bg-brand-cream/50 border border-brand-clay rounded-lg px-2 py-1 text-xs font-semibold"
-                              />
+                            /* Two labelled pairs on their own rows rather than
+                               eight controls wrapping into each other — the
+                               row used to reflow unpredictably at narrow
+                               widths and the break inputs lost their label. */
+                            <div
+                              key={shift.id || idx}
+                              className={`rounded-xl border p-2.5 space-y-2 ${
+                                shiftTimeProblems[`${day}-${idx}`]
+                                  ? 'border-red-400 bg-red-50/40'
+                                  : 'border-brand-clay/60 bg-brand-cream/40'
+                              }`}
+                            >
+                              {/* One grid for both rows, so the labels, the two
+                                  time fields, the dash and the trailing action
+                                  sit on the same four columns instead of each
+                                  row laying itself out independently. */}
+                              <div className="grid grid-cols-[3.25rem_minmax(0,1fr)_auto_minmax(0,1fr)_5rem] items-center gap-x-2 gap-y-2">
+                                <span className="text-[10px] font-bold uppercase tracking-wide text-brand-charcoal/50">
+                                  Shift
+                                </span>
+                                <TimePicker
+                                  ariaLabel={`${day} shift ${idx + 1} start time`}
+                                  value={shift.startTime}
+                                  onChange={val => handleUpdateShift(day, idx, { startTime: val })}
+                                  invalid={!!shiftTimeProblems[`${day}-${idx}`]}
+                                />
+                                <span className="text-center font-bold text-brand-charcoal/40">–</span>
+                                <TimePicker
+                                  ariaLabel={`${day} shift ${idx + 1} end time`}
+                                  value={shift.endTime}
+                                  onChange={val => handleUpdateShift(day, idx, { endTime: val })}
+                                  invalid={!!shiftTimeProblems[`${day}-${idx}`]}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveShift(day, idx)}
+                                  className="justify-self-end text-[10px] font-bold text-red-600 hover:underline cursor-pointer"
+                                >
+                                  Remove
+                                </button>
 
-                              <span className="text-[10px] font-bold text-brand-charcoal/50">Break</span>
-                              <input
-                                type="text"
-                                value={shift.breakStart || ''}
-                                onChange={e => handleUpdateShift(day, idx, { breakStart: e.target.value })}
-                                placeholder="optional"
-                                className="w-20 bg-brand-cream/50 border border-brand-clay rounded-lg px-2 py-1 text-xs font-semibold"
-                              />
-                              <span className="text-brand-charcoal/60 font-bold">–</span>
-                              <input
-                                type="text"
-                                value={shift.breakEnd || ''}
-                                onChange={e => handleUpdateShift(day, idx, { breakEnd: e.target.value })}
-                                placeholder="optional"
-                                className="w-20 bg-brand-cream/50 border border-brand-clay rounded-lg px-2 py-1 text-xs font-semibold"
-                              />
+                                <span className="text-[10px] font-bold uppercase tracking-wide text-brand-charcoal/50">
+                                  Break
+                                </span>
+                                <TimePicker
+                                  ariaLabel={`${day} shift ${idx + 1} break start`}
+                                  value={shift.breakStart}
+                                  onChange={val => handleUpdateShift(day, idx, { breakStart: val })}
+                                  invalid={!!shiftTimeProblems[`${day}-${idx}`]}
+                                  optional
+                                />
+                                <span className="text-center font-bold text-brand-charcoal/40">–</span>
+                                <TimePicker
+                                  ariaLabel={`${day} shift ${idx + 1} break end`}
+                                  value={shift.breakEnd}
+                                  onChange={val => handleUpdateShift(day, idx, { breakEnd: val })}
+                                  invalid={!!shiftTimeProblems[`${day}-${idx}`]}
+                                  optional
+                                />
+                                <span className="justify-self-end text-[10px] font-semibold text-brand-charcoal/35">
+                                  optional
+                                </span>
+                              </div>
 
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveShift(day, idx)}
-                                className="text-[10px] text-red-600 hover:underline px-1 font-bold cursor-pointer"
-                              >
-                                Remove
-                              </button>
+                              {shiftTimeProblems[`${day}-${idx}`] && (
+                                <p className="text-[10px] font-bold text-red-600">
+                                  {shiftTimeProblems[`${day}-${idx}`]}
+                                </p>
+                              )}
                             </div>
                           ))}
                         </div>
@@ -872,10 +1157,22 @@ export const AdminStaffSection: React.FC = () => {
               </div>
             </div>
 
-            <div className="pt-4 border-t border-brand-clay flex justify-end gap-3">
+        </ConsoleModal>
+      )}
+
+      {/* RECORD TIME OFF MODAL */}
+      {showTimeOffModal && selectedStaff && (
+        /* Opened from the profile modal, so it needs the same portalled shell —
+           left inline it would inherit the broken containing block again. */
+        <ConsoleModal
+          onClose={() => setShowTimeOffModal(false)}
+          onSubmit={handleSaveTimeOff}
+          title={<span className="truncate">Record Leave for {selectedStaff.name}</span>}
+          footer={
+            <>
               <button
                 type="button"
-                onClick={() => setShowAddEditModal(false)}
+                onClick={() => setShowTimeOffModal(false)}
                 className="px-4 py-2 bg-brand-sand text-brand-charcoal rounded-xl text-xs font-bold cursor-pointer"
               >
                 Cancel
@@ -883,22 +1180,13 @@ export const AdminStaffSection: React.FC = () => {
 
               <button
                 type="submit"
-                className="px-5 py-2 bg-brand-terracotta hover:bg-brand-terracotta-dark text-brand-cream rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+                className="px-4 py-2 bg-brand-terracotta text-brand-cream rounded-xl text-xs font-bold shadow-xs cursor-pointer"
               >
-                Save Staff Record
+                Save Leave Record
               </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* RECORD TIME OFF MODAL */}
-      {showTimeOffModal && selectedStaff && (
-        <div className="fixed inset-0 bg-brand-charcoal/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
-          <form onSubmit={handleSaveTimeOff} className="bg-white border border-brand-clay rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl text-left">
-            <h2 className="text-sm font-bold text-brand-charcoal uppercase tracking-wider border-b border-brand-clay pb-3">
-              Record Leave for {selectedStaff.name}
-            </h2>
+            </>
+          }
+        >
 
             <div className="space-y-3 text-xs font-semibold text-brand-charcoal">
               <div>
@@ -934,24 +1222,7 @@ export const AdminStaffSection: React.FC = () => {
               </div>
             </div>
 
-            <div className="pt-3 border-t border-brand-clay flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setShowTimeOffModal(false)}
-                className="px-4 py-2 bg-brand-sand text-brand-charcoal rounded-xl text-xs font-bold cursor-pointer"
-              >
-                Cancel
-              </button>
-
-              <button
-                type="submit"
-                className="px-4 py-2 bg-brand-terracotta text-brand-cream rounded-xl text-xs font-bold shadow-xs cursor-pointer"
-              >
-                Save Leave Record
-              </button>
-            </div>
-          </form>
-        </div>
+        </ConsoleModal>
       )}
 
     </div>

@@ -10,7 +10,7 @@ import {
   UserPlus, Shield, Info, AlertTriangle, Palette, Clock, Lock, 
   MapPin, Sliders, Settings, Users, BookOpen, Calendar, HelpCircle, 
   ChevronDown, ChevronUp, GripVertical, RotateCcw
-} from 'lucide-react';
+, Pencil } from 'lucide-react';
 import {
   PipelineStage, StaffMember, WorkshopOption, StaffRole,
   WORKSHOP_OPTION_LISTS, isWorkshopOptionEnabled,
@@ -28,6 +28,8 @@ import { PhoneInput } from './PhoneInput';
 import { PotteryLoggingConsoleSettings } from './PotteryLoggingConsoleSettings';
 import { AdminCapacitySettings } from './AdminCapacitySettings';
 import { AdminEventsSettings } from './AdminEventsSettings';
+import { LineListTextarea } from './ui/LineListTextarea';
+import { usePagination, TablePager } from './ui/TablePager';
 
 export const AdminSettingsSection: React.FC = () => {
   const {
@@ -127,6 +129,9 @@ export const AdminSettingsSection: React.FC = () => {
     updateWorkshopFields(workshopFields.filter(f => f.fieldId !== fieldId));
     setEditingFieldId(null);
   };
+
+  /* Five rows a page in the registry. */
+  const staffPager = usePagination(staff, 5);
 
   // ---- Staff Registry: console account & page permissions ----
   const [permissionsStaffId, setPermissionsStaffId] = useState<string | null>(null);
@@ -423,8 +428,15 @@ export const AdminSettingsSection: React.FC = () => {
           page renders only the selected section — no duplicate tab row here. */}
 
 
-      {/* ACTIVE SCREEN CONTENT PANEL */}
-      <div className="bg-white border border-brand-clay/50 rounded-3xl p-6 md:p-8 shadow-xs">
+      {/* ACTIVE SCREEN CONTENT PANEL
+          Every section renders inside one card, except Events & Birthday, which
+          brings its own three — nesting those inside this one produced a card
+          within a card. */}
+      <div className={
+        activeTab === 'settings-events'
+          ? ''
+          : 'bg-white border border-brand-clay/50 rounded-3xl p-6 md:p-8 shadow-xs'
+      }>
         
         {/* =======================================================
             TAB: DATABASE & DATA RESET
@@ -566,7 +578,7 @@ export const AdminSettingsSection: React.FC = () => {
                     <th className="p-3 w-12"></th>
                     <th className="p-3">Stage Name</th>
                     <th className="p-3 w-28 text-center">Status Color</th>
-                    <th className="p-3 w-40 text-center">Visible to Customers</th>
+                    <th className="p-3 w-56">Customer-facing</th>
                     <th className="p-3 w-32 text-center">Reorder</th>
                     <th className="p-3 w-24 text-right">Actions</th>
                   </tr>
@@ -628,59 +640,70 @@ export const AdminSettingsSection: React.FC = () => {
                           )}
                         </td>
 
-                        {/* Customer visibility slider block */}
-                        <td className="p-3 text-center">
-                          <button
-                            type="button"
-                            onClick={() => updatePipelineStage(stage.id, { visibleToCustomer: !stage.visibleToCustomer })}
-                            className={`px-3 py-1 text-[10px] font-extrabold rounded-full border cursor-pointer transition-all ${
-                              stage.visibleToCustomer 
-                                ? 'bg-brand-sage/10 text-brand-sage border-brand-sage' 
-                                : 'bg-brand-charcoal/5 text-brand-charcoal/40 border-brand-clay/60'
-                            }`}
-                          >
-                            {stage.visibleToCustomer ? '✓ Timeline Visible' : '✗ Hidden'}
-                          </button>
+                        {/* Customer-facing settings — three labelled toggle
+                            rows and the label field, rather than four chips of
+                            different shapes competing in one cell. */}
+                        <td className="p-3 align-top">
+                          <div className="space-y-1.5 text-left">
+                            {([
+                              {
+                                label: 'Enabled',
+                                hint: 'Selectable for new updates',
+                                on: stage.enabled !== false,
+                                toggle: () => updatePipelineStage(stage.id, { enabled: stage.enabled === false })
+                              },
+                              {
+                                label: 'On customer timeline',
+                                hint: 'Shown on My Pieces',
+                                on: stage.visibleToCustomer,
+                                toggle: () => updatePipelineStage(stage.id, { visibleToCustomer: !stage.visibleToCustomer })
+                              },
+                              {
+                                label: 'Notifies customer',
+                                hint: 'Message sent on entering',
+                                on: stage.notifyCustomer !== false,
+                                toggle: () => updatePipelineStage(stage.id, { notifyCustomer: stage.notifyCustomer === false })
+                              }
+                            ]).map(row => (
+                              <button
+                                key={row.label}
+                                type="button"
+                                onClick={row.toggle}
+                                role="switch"
+                                aria-checked={row.on}
+                                title={row.hint}
+                                className="flex w-full items-center justify-between gap-2 rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-brand-sand/40 cursor-pointer"
+                              >
+                                <span className={`text-[10px] font-bold ${
+                                  row.on ? 'text-brand-charcoal' : 'text-brand-charcoal/40'
+                                }`}>
+                                  {row.label}
+                                </span>
+                                {/* One switch shape for all three, so the state
+                                    reads at a glance down the column. */}
+                                <span className={`relative h-4 w-7 shrink-0 rounded-full transition-colors ${
+                                  row.on ? 'bg-brand-sage' : 'bg-brand-clay'
+                                }`}>
+                                  <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white transition-all ${
+                                    row.on ? 'left-3.5' : 'left-0.5'
+                                  }`} />
+                                </span>
+                              </button>
+                            ))}
 
-                          {/* Enabled / disabled — a disabled stage stays valid on
-                              existing pieces but cannot be chosen for new updates. */}
-                          <button
-                            type="button"
-                            onClick={() => updatePipelineStage(stage.id, { enabled: stage.enabled === false })}
-                            className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-colors cursor-pointer ${
-                              stage.enabled === false
-                                ? 'bg-gray-100 border-gray-300 text-gray-600'
-                                : 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                            }`}
-                            title={stage.enabled === false
-                              ? 'Disabled — existing pieces keep this stage'
-                              : 'Enabled — selectable for new updates'}
-                          >
-                            {stage.enabled === false ? 'Disabled' : 'Enabled'}
-                          </button>
-
-                          {/* Whether entering this stage notifies the customer. */}
-                          <button
-                            type="button"
-                            onClick={() => updatePipelineStage(stage.id, { notifyCustomer: stage.notifyCustomer === false })}
-                            className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-colors cursor-pointer ${
-                              stage.notifyCustomer === false
-                                ? 'bg-brand-sand/50 border-brand-clay text-brand-charcoal/50'
-                                : 'bg-blue-50 border-blue-200 text-blue-800'
-                            }`}
-                            title="Send the customer a notification when a piece enters this stage"
-                          >
-                            {stage.notifyCustomer === false ? 'No notification' : 'Notifies customer'}
-                          </button>
-
-                          {/* Optional customer-facing wording. */}
-                          <input
-                            type="text"
-                            value={stage.customerLabel || ''}
-                            onChange={e => updatePipelineStage(stage.id, { customerLabel: e.target.value })}
-                            placeholder={`Customer label (defaults to "${stage.name}")`}
-                            className="bg-brand-cream/40 border border-brand-clay rounded-lg px-2 py-1 text-[10px] font-semibold text-brand-charcoal w-52"
-                          />
+                            <div className="space-y-0.5 border-t border-brand-clay/40 pt-1.5">
+                              <label className="block px-1.5 text-[9px] font-bold uppercase tracking-wider text-brand-charcoal/45">
+                                Customer label
+                              </label>
+                              <input
+                                type="text"
+                                value={stage.customerLabel || ''}
+                                onChange={e => updatePipelineStage(stage.id, { customerLabel: e.target.value })}
+                                placeholder={stage.name}
+                                className="w-full rounded-lg border border-brand-clay bg-brand-cream/40 px-2 py-1 text-[10px] font-semibold text-brand-charcoal"
+                              />
+                            </div>
+                          </div>
                         </td>
 
                         {/* Arrow key manual sorting fallback block */}
@@ -758,6 +781,18 @@ export const AdminSettingsSection: React.FC = () => {
                   })}
                 </tbody>
               </table>
+
+              <div className="px-3 pb-3">
+                <TablePager
+                  page={staffPager.page}
+                  totalPages={staffPager.totalPages}
+                  from={staffPager.from}
+                  to={staffPager.to}
+                  total={staffPager.total}
+                  onPage={staffPager.setPage}
+                  noun="staff"
+                />
+              </div>
             </div>
           </div>
         )}
@@ -992,12 +1027,10 @@ export const AdminSettingsSection: React.FC = () => {
                         ) : fieldTypeUsesOptions(field.fieldType) ? (
                           <div className="space-y-1">
                             <label className="font-bold text-brand-charcoal/75 block">Options (one per line)</label>
-                            <textarea
+                            <LineListTextarea
                               rows={4}
-                              value={(field.options || []).join('\n')}
-                              onChange={e => handleUpdateWorkshopField(field.fieldId, {
-                                options: e.target.value.split('\n').map(v => v.trim()).filter(Boolean)
-                              })}
+                              value={field.options || []}
+                              onChange={options => handleUpdateWorkshopField(field.fieldId, { options })}
                               className="w-full bg-white border border-brand-clay rounded-xl p-2.5 font-semibold"
                             />
                             {field.fieldKey === 'category' && (
@@ -1208,7 +1241,8 @@ export const AdminSettingsSection: React.FC = () => {
                     </div>
                   ) : (
                     <div className="text-[10px] font-bold text-brand-sage flex items-center gap-1 bg-brand-sage/5 p-2 rounded-lg border border-brand-sage/10">
-                      <span>✓ Unconditional Booking: Customers can immediately click purchase.</span>
+                      <Check className="h-3.5 w-3.5 shrink-0" />
+                      <span>Unconditional Booking: Customers can immediately click purchase.</span>
                     </div>
                   )}
 
@@ -1248,8 +1282,9 @@ export const AdminSettingsSection: React.FC = () => {
                 handleAddStaff(e);
               }
             }} className="p-5 bg-brand-sand/30 border border-brand-clay/50 rounded-2xl space-y-4">
-              <h3 className="text-xs font-bold text-brand-charcoal uppercase tracking-wider">
-                {editingStaffId ? '✏️ Edit Staff Profile' : '➕ Register New Staff Member'}
+              <h3 className="flex items-center gap-1.5 text-xs font-bold text-brand-charcoal uppercase tracking-wider">
+                {editingStaffId ? <Pencil className="h-3.5 w-3.5" /> : <UserPlus className="h-3.5 w-3.5" />}
+                <span>{editingStaffId ? 'Edit Staff Profile' : 'Register New Staff Member'}</span>
               </h3>
               
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
@@ -1384,7 +1419,7 @@ export const AdminSettingsSection: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-brand-clay/20">
-                  {staff.map((member) => (
+                  {staffPager.pageItems.map((member) => (
                     <tr key={member.id} className="hover:bg-brand-sand/15 transition-colors">
                       {/* Avatar & Name */}
                       <td className="p-3 text-left">
@@ -1475,6 +1510,18 @@ export const AdminSettingsSection: React.FC = () => {
                   ))}
                 </tbody>
               </table>
+
+              <div className="px-3 pb-3">
+                <TablePager
+                  page={staffPager.page}
+                  totalPages={staffPager.totalPages}
+                  from={staffPager.from}
+                  to={staffPager.to}
+                  total={staffPager.total}
+                  onPage={staffPager.setPage}
+                  noun="staff"
+                />
+              </div>
             </div>
           </div>
         )}

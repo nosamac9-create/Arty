@@ -7,14 +7,58 @@ import React, { useState } from 'react';
 import { PasswordField } from './PasswordField';
 import { useApp } from '../context/AppContext';
 import { ScrollReveal } from './ui/ScrollReveal';
-import { motion, useReducedMotion } from 'motion/react';
-import { Palette, Mail, Lock, User, Check, AlertCircle, ArrowLeft, LogIn, KeyRound, ShieldCheck, CheckCircle2, RefreshCw } from 'lucide-react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { Palette, Mail, Lock, User, Check, AlertCircle, ArrowLeft, LogIn, KeyRound, ShieldCheck, CheckCircle2, RefreshCw , Pin } from 'lucide-react';
 import { PhoneInput } from './PhoneInput';
+import { AuthBackdrop } from './AuthBackdrop';
 import { validatePhone, normalisePhone } from '../utils/phoneUtils';
 import {
   validateCustomerForm, canonicalEmail, canonicalPhone, passwordChecklist,
   validatePasswordRule, validatePasswordConfirmation
 } from '../utils/validation';
+
+/** Staggered fade-up for the title block over the photograph. */
+const textVariants = {
+  initial: { opacity: 0, y: 15 },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.4, delay: 0.1, ease: 'easeOut' as const } }
+};
+
+/**
+ * The overlay copy, in four parts so the composition is a hierarchy rather
+ * than one large caption: a small sans kicker, the serif line that carries the
+ * meaning, an emphasised close, and a quiet supporting sentence.
+ *
+ * Both tabs use the same four slots, so switching changes the words and never
+ * the shape of the block. Placeholder wording — the studio edits these.
+ */
+const AUTH_OVERLAY = {
+  login: {
+    kicker: 'Returning maker',
+    lead: 'Where clay',
+    accent: 'meets calm.',
+    support: 'Your wheel, your shelf, and every piece you have made are waiting.'
+  },
+  register: {
+    kicker: 'Your first piece',
+    lead: 'Every masterpiece begins with',
+    accent: 'a single touch of clay.',
+    support: 'Follow each piece from the wheel to the kiln to the shelf.'
+  }
+} as const;
+
+/** Each line arrives just behind the one above it. */
+const overlayLineVariants = {
+  initial: { opacity: 0, y: 16 },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.55, ease: [0.16, 1, 0.3, 1] as const } },
+  exit: { opacity: 0, y: -8, transition: { duration: 0.25 } }
+};
+
+/** The form swapping between logging in and signing up. */
+const formVariants = {
+  initial: { opacity: 0, x: 20 },
+  animate: { opacity: 1, x: 0, transition: { duration: 0.3, ease: 'easeOut' as const } },
+  exit: { opacity: 0, x: -20, transition: { duration: 0.2, ease: 'easeIn' as const } }
+};
 
 export const AuthSection: React.FC = () => {
   const { 
@@ -214,8 +258,16 @@ export const AuthSection: React.FC = () => {
   };
 
   return (
-    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-10 animate-in fade-in duration-300">
-      
+    <div
+      className={
+        currentUser
+          ? 'mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-10 animate-in fade-in duration-300'
+          : // Signed out, the page is a split screen and each half sets its own
+            // padding — no shared gutter here.
+            'w-full animate-in fade-in duration-300'
+      }
+    >
+
       {/* ACCOUNT DETAILS — read-only profile; the only thing changeable
           here is the password. */}
       {currentUser ? (
@@ -340,7 +392,11 @@ export const AuthSection: React.FC = () => {
                             item.met ? 'text-brand-sage' : 'text-brand-muted'
                           }`}
                         >
-                          <span>{item.met ? '✓' : '•'}</span>
+                          <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+                            {item.met
+                              ? <Check className="h-3.5 w-3.5" />
+                              : <span className="h-1 w-1 rounded-full bg-current opacity-60" />}
+                          </span>
                           <span>{item.label}</span>
                         </li>
                       ))}
@@ -405,7 +461,8 @@ export const AuthSection: React.FC = () => {
             <div className="space-y-3">
               {pendingBooking && (
                 <div className="rounded-[22px] border border-brand-clay bg-brand-sand/40 p-4 text-xs font-semibold text-brand-charcoal text-start">
-                  📌 You have an active booking draft for:{' '}
+                  <Pin className="inline h-3.5 w-3.5 me-1 align-[-2px]" />
+                  You have an active booking draft for:{' '}
                   <span className="text-brand-terracotta">{pendingBooking.workshopTitle}</span> ({pendingBooking.date})
                 </div>
               )}
@@ -432,15 +489,99 @@ export const AuthSection: React.FC = () => {
 
         </div>
       ) : (
-        /* SPLIT SCREEN LAYOUT — the same entrance the Custom Events card
-           uses: the panel wipes in from the side while the card rises. */
-        <ScrollReveal
-          once
-          viewOptions={{ once: true, amount: 0.15 }}
-          transition={{ duration: 0.5, ease: 'easeOut' }}
-          variants={{ hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0 } }}
-          className="max-w-5xl mx-auto"
-        >
+        /* SPLIT SCREEN: the slideshow and the title on one half, the form on a
+           solid panel on the other. On phones the halves stack — the image
+           becomes a banner rather than a full screen, so the fields are not
+           pushed below the fold.
+
+           `items-start` is what decouples the two columns: a grid item
+           stretches to the tallest row by default, which is why the taller
+           sign-up form was making the image column grow and re-crop the
+           photograph. */
+        <div className="grid grid-cols-1 items-start lg:grid-cols-2 lg:min-h-[calc(100vh-5rem)]">
+
+        {/* IMAGE HALF. The slideshow is contained to this column, so the form
+            never sits over a moving photograph. */}
+        {/* Fixed to the viewport below the header on desktop, so the crop is
+            identical whichever form is showing, and pinned while a longer form
+            scrolls past it. */}
+        <div className="relative overflow-hidden flex items-end justify-center h-[40vh] min-h-[260px] p-6 sm:p-10 lg:sticky lg:top-20 lg:h-[calc(100vh-5rem)] lg:min-h-[calc(100vh-5rem)] lg:p-14">
+          <AuthBackdrop />
+
+          {/* EDITORIAL OVERLAY — a kicker, a rule, the serif line, then the
+              supporting sentence. Anchored to the lower-left of the frame and
+              held to a narrow measure so it reads as part of the photograph
+              rather than a caption laid across it.
+
+              Keyed on the screen so the tab swap plays, and `wait` so the two
+              never overlap on top of a moving image. The stagger comes from the
+              parent; the shadow is what keeps it legible as the slideshow moves
+              underneath, since the scrim alone is not enough for text this
+              size. */}
+          <AnimatePresence mode="wait" initial={false}>
+            {(authScreen === 'login' || authScreen === 'register') && (() => {
+              const copy = AUTH_OVERLAY[authScreen];
+              return (
+                <motion.figure
+                  key={authScreen}
+                  initial={prefersReducedMotion ? false : 'initial'}
+                  animate="animate"
+                  exit={prefersReducedMotion ? undefined : 'exit'}
+                  variants={{
+                    animate: { transition: { staggerChildren: prefersReducedMotion ? 0 : 0.08 } },
+                    exit: { transition: { staggerChildren: 0 } }
+                  }}
+                  className="relative z-10 w-full max-w-lg text-center lg:text-start auth-heading-shadow"
+                >
+                  {/* Kicker — sans, wide-tracked, sage. The one accent colour. */}
+                  <motion.figcaption
+                    variants={overlayLineVariants}
+                    className="flex items-center justify-center gap-3 lg:justify-start"
+                  >
+                    <span className="hidden h-px w-10 bg-brand-sage/70 lg:block" aria-hidden="true" />
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-brand-sage">
+                      {copy.kicker}
+                    </span>
+                  </motion.figcaption>
+
+                  {/* The line itself. The close is set in italic so the phrase
+                      turns without needing a second size or weight. */}
+                  <motion.blockquote
+                    variants={overlayLineVariants}
+                    className="auth-title mt-5 text-[30px] leading-[1.12] text-brand-cream sm:text-[40px] lg:text-[46px]"
+                  >
+                    {copy.lead}{' '}
+                    <span className="italic text-brand-cream/90">{copy.accent}</span>
+                  </motion.blockquote>
+
+                  <motion.div
+                    variants={overlayLineVariants}
+                    aria-hidden="true"
+                    className="mx-auto mt-7 h-px w-16 bg-brand-cream/35 lg:mx-0"
+                  />
+
+                  <motion.p
+                    variants={overlayLineVariants}
+                    className="mx-auto mt-5 max-w-sm text-sm font-medium leading-relaxed text-brand-cream/75 lg:mx-0"
+                  >
+                    {copy.support}
+                  </motion.p>
+
+                  <motion.p
+                    variants={overlayLineVariants}
+                    className="mt-8 text-[10px] font-semibold uppercase tracking-[0.28em] text-brand-cream/45"
+                  >
+                    Arty Café · Jeddah
+                  </motion.p>
+                </motion.figure>
+              );
+            })()}
+          </AnimatePresence>
+        </div>
+
+        {/* FORM HALF — a solid panel, so the fields read against a flat
+            surface rather than a photograph. */}
+        <div className="flex min-h-full items-center justify-center bg-brand-cream px-4 py-10 sm:px-8 lg:min-h-[calc(100vh-5rem)] lg:px-14 lg:py-16">
         {/* `layout` animates the height between the two forms. The fixed
             min-height it replaces was the resize bug: it held the card at
             550px whatever the login form actually needed, so returning from
@@ -449,50 +590,64 @@ export const AuthSection: React.FC = () => {
         <motion.div
           layout={!prefersReducedMotion}
           transition={{ duration: 0.35, ease: 'easeOut' }}
-          className="grid grid-cols-1 lg:grid-cols-12 rounded-[28px] border border-brand-clay overflow-hidden shadow-card-sm"
+          className="w-full max-w-md"
         >
-          
-          {/* Left Column: the studio, with just the overlay copy on top —
-              no brand chip, no location label. */}
-          {/* The observed element is never clipped: an element clipped to zero
-              area reports zero intersection, so useInView would never fire and
-              the reveal would hold it invisible for good. The wipe lives on an
-              inner element that inherits the variant instead. */}
-          <ScrollReveal
-            once
-            viewOptions={{ once: true, amount: 0.15 }}
-            transition={{ delay: 0.15, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-            variants={{ hidden: { opacity: 0 }, visible: { opacity: 1 } }}
-            className="lg:col-span-5 relative hidden lg:block bg-brand-sand min-h-full"
-          >
-            <motion.div
-              className="absolute inset-0"
-              variants={{
-                hidden: { clipPath: 'inset(0 100% 0 0)' },
-                visible: { clipPath: 'inset(0 0% 0 0)' }
-              }}
-              transition={{ delay: 0.15, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+
+          {/* TABS — the primary switch between the two forms. Password
+              recovery is reached from inside the sign-in form, so it is not a
+              tab: it is a detour, not a third destination. The pill slides
+              between them with a shared layout id rather than a width
+              transition, so it tracks whatever the labels measure. */}
+          {(authScreen === 'login' || authScreen === 'register') && (
+            <div
+              role="tablist"
+              aria-label="Account"
+              className="mb-8 grid grid-cols-2 gap-1 rounded-full border border-brand-clay bg-brand-sand/50 p-1"
             >
-            <img
-              src={`${import.meta.env.BASE_URL}images/auth-panel.jpg`}
-              alt="The Arty Café studio in Jeddah"
-              className="absolute inset-0 w-full h-full object-cover filter brightness-[0.75]"
-            />
-
-            <div className="absolute inset-0 flex flex-col justify-end p-10 text-start bg-gradient-to-t from-brand-charcoal/80 via-transparent to-brand-charcoal/40 text-brand-cream">
-              <div className="space-y-3">
-                <p className="font-display text-3xl font-semibold leading-tight">Your wheel is waiting.</p>
-                <p className="text-sm text-brand-cream/80 max-w-xs font-medium">
-                  Log in to track your clay pieces, review upcoming workshop sessions, and manage reservations easily.
-                </p>
-              </div>
+              {([
+                { screen: 'login' as const, label: 'Sign In' },
+                { screen: 'register' as const, label: 'Create Account' }
+              ]).map(tab => {
+                const isOn = authScreen === tab.screen;
+                return (
+                  <button
+                    key={tab.screen}
+                    type="button"
+                    role="tab"
+                    aria-selected={isOn}
+                    onClick={() => { setErrorMsg(null); setAuthScreen(tab.screen); }}
+                    className={`relative cursor-pointer rounded-full px-4 py-2.5 text-sm font-semibold transition-colors ${
+                      isOn ? 'text-brand-cream' : 'text-brand-ink hover:text-brand-charcoal'
+                    }`}
+                  >
+                    {isOn && (
+                      <motion.span
+                        layoutId={prefersReducedMotion ? undefined : 'auth-tab-pill'}
+                        transition={{ duration: 0.3, ease: 'easeOut' }}
+                        className="absolute inset-0 rounded-full bg-brand-terracotta"
+                      />
+                    )}
+                    <span className="relative">{tab.label}</span>
+                  </button>
+                );
+              })}
             </div>
-            </motion.div>
-          </ScrollReveal>
+          )}
 
-          {/* Right Column: Form Column */}
-          <div className="lg:col-span-7 bg-brand-cream p-8 md:p-12 flex flex-col justify-center text-start">
-            
+          {/* Keyed on the screen so the outgoing form actually plays its exit
+              before the incoming one arrives — without a changing key React
+              would reuse the node and neither transition would run. `wait`
+              keeps the two forms from overlapping while the card resizes. */}
+          <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={authScreen}
+            variants={formVariants}
+            initial={prefersReducedMotion ? false : 'initial'}
+            animate="animate"
+            exit={prefersReducedMotion ? undefined : 'exit'}
+            className="flex flex-col justify-center text-start"
+          >
+
             {errorMsg && (
               <div className="mb-6 p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold flex items-start gap-2.5">
                 <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-red-600" />
@@ -516,12 +671,14 @@ export const AuthSection: React.FC = () => {
               <div className="space-y-6">
                 <div>
                   <h2 className="font-display text-3xl font-semibold text-brand-charcoal">Welcome back</h2>
-                  <p className="text-xs text-brand-muted mt-1">Access your bookings and pottery pieces tracker.</p>
+                  <p className="mt-1.5 text-sm text-brand-ink">
+                    Access your bookings and pottery pieces tracker.
+                  </p>
                 </div>
 
                 <form onSubmit={handleLogin} className="space-y-4">
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-brand-ink">Email address or Phone number</label>
+                    <label className="text-xs font-bold text-brand-charcoal/80">Email address or Phone number</label>
                     <input
                       type="text"
                       required
@@ -534,7 +691,7 @@ export const AuthSection: React.FC = () => {
 
                   <div className="space-y-1">
                     <div className="flex justify-between items-center">
-                      <label className="text-xs font-semibold text-brand-ink">Password</label>
+                      <label className="text-xs font-bold text-brand-charcoal/80">Password</label>
                       <button
                         type="button"
                         onClick={() => { 
@@ -584,7 +741,7 @@ export const AuthSection: React.FC = () => {
                         It has to be the address already on the record. */}
                     {!claimIdentifier.includes('@') && (
                       <div className="space-y-1">
-                        <label className="text-xs font-semibold text-brand-ink">Your email address *</label>
+                        <label className="text-xs font-bold text-brand-charcoal/80">Your email address *</label>
                         <input
                           type="email"
                           required
@@ -602,7 +759,7 @@ export const AuthSection: React.FC = () => {
                     )}
 
                     <div className="space-y-1">
-                      <label className="text-xs font-semibold text-brand-ink">New password *</label>
+                      <label className="text-xs font-bold text-brand-charcoal/80">New password *</label>
                       <PasswordField
                         required
                         placeholder="••••••••"
@@ -618,7 +775,11 @@ export const AuthSection: React.FC = () => {
                               item.met ? 'text-brand-sage' : 'text-brand-charcoal/45'
                             }`}
                           >
-                            <span>{item.met ? '✓' : '•'}</span>
+                            <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+                            {item.met
+                              ? <Check className="h-3.5 w-3.5" />
+                              : <span className="h-1 w-1 rounded-full bg-current opacity-60" />}
+                          </span>
                             <span>{item.label}</span>
                           </li>
                         ))}
@@ -626,7 +787,7 @@ export const AuthSection: React.FC = () => {
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-xs font-semibold text-brand-ink">Confirm password *</label>
+                      <label className="text-xs font-bold text-brand-charcoal/80">Confirm password *</label>
                       <PasswordField
                         required
                         placeholder="••••••••"
@@ -655,7 +816,7 @@ export const AuthSection: React.FC = () => {
                   </form>
                 )}
 
-                <div className="text-center pt-4 border-t border-brand-clay">
+                <div className="text-center pt-2">
                   <p className="text-xs font-medium text-brand-ink">
                     New here?{' '}
                     <button
@@ -674,12 +835,14 @@ export const AuthSection: React.FC = () => {
               <div className="space-y-6">
                 <div>
                   <h2 className="font-display text-3xl font-semibold text-brand-charcoal">Join the Café</h2>
-                  <p className="text-xs text-brand-muted mt-1">Create an account to begin tracking mud creations.</p>
+                  <p className="mt-1.5 text-sm text-brand-ink">
+                    Create an account to begin tracking mud creations.
+                  </p>
                 </div>
 
                 <form onSubmit={handleRegister} className="space-y-4">
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-brand-ink">Full name *</label>
+                    <label className="text-xs font-bold text-brand-charcoal/80">Full name *</label>
                     <input
                       type="text"
                       required
@@ -692,7 +855,7 @@ export const AuthSection: React.FC = () => {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-brand-ink">Email address *</label>
+                    <label className="text-xs font-bold text-brand-charcoal/80">Email address *</label>
                     <input
                       type="email"
                       required
@@ -714,7 +877,7 @@ export const AuthSection: React.FC = () => {
                   />
 
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-brand-ink">Password *</label>
+                    <label className="text-xs font-bold text-brand-charcoal/80">Password *</label>
                     <PasswordField
                       required
                       placeholder="••••••••"
@@ -731,7 +894,11 @@ export const AuthSection: React.FC = () => {
                             item.met ? 'text-brand-sage' : 'text-brand-charcoal/45'
                           }`}
                         >
-                          <span>{item.met ? '✓' : '•'}</span>
+                          <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+                            {item.met
+                              ? <Check className="h-3.5 w-3.5" />
+                              : <span className="h-1 w-1 rounded-full bg-current opacity-60" />}
+                          </span>
                           <span>{item.label}</span>
                         </li>
                       ))}
@@ -740,7 +907,7 @@ export const AuthSection: React.FC = () => {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-brand-ink">Confirm password *</label>
+                    <label className="text-xs font-bold text-brand-charcoal/80">Confirm password *</label>
                     <PasswordField
                       required
                       placeholder="••••••••"
@@ -762,7 +929,7 @@ export const AuthSection: React.FC = () => {
                   </button>
                 </form>
 
-                <div className="text-center pt-4 border-t border-brand-clay">
+                <div className="text-center pt-2">
                   <p className="text-xs font-medium text-brand-ink">
                     Already have an account?{' '}
                     <button
@@ -820,7 +987,7 @@ export const AuthSection: React.FC = () => {
                 {forgotMethod === 'email' ? (
                   <form onSubmit={handleRequestPasswordReset} className="space-y-4">
                     <div className="space-y-1">
-                      <label className="text-xs font-semibold text-brand-ink">Registered Email Address</label>
+                      <label className="text-xs font-bold text-brand-charcoal/80">Registered Email Address</label>
                       <input
                         type="email"
                         required
@@ -884,10 +1051,13 @@ export const AuthSection: React.FC = () => {
               </div>
             )}
 
-          </div>
+          </motion.div>
+          </AnimatePresence>
 
         </motion.div>
-        </ScrollReveal>
+        </div>
+
+        </div>
       )}
 
     </div>
