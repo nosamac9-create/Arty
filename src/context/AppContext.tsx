@@ -835,19 +835,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const authId = data.user?.id;
     if (!authId) return { success: false, error: 'Could not create the account. Please try again.' };
 
-    // Matched on the identifier that was signed in with, not on the typed
-    // email, so no second customer is ever created for the same person.
-    const linkedId = await linkAuthToCustomer(input, authId);
-    if (!linkedId) {
-      return { success: false, error: 'No account found with these details. Please create an account.' };
-    }
-
+    // Email confirmation is on: there is no session yet, so auth.uid() is not
+    // this caller and claim_customer_account() correctly will not attach
+    // anything (see 0006_fix_customer_ownership_verification.sql). Ask for
+    // confirmation now rather than attempting the link and reporting the
+    // wrong error; resolveSessions()'s heal step completes the claim
+    // automatically once the confirmation link is opened and the session
+    // becomes real.
     if (!data.session) {
       return {
         success: false,
         needsEmailConfirmation: true,
         error: 'Almost there — check your email and confirm your address to finish claiming your account.'
       };
+    }
+
+    // Matched on the identifier that was signed in with, not on the typed
+    // email, so no second customer is ever created for the same person.
+    const linkedId = await linkAuthToCustomer(input, authId);
+    if (!linkedId) {
+      return { success: false, error: 'No account found with these details. Please create an account.' };
     }
 
     const claimed = await db.customers.get(linkedId);
@@ -2326,7 +2333,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let cancelled = false;
 
     /** Who is signed in, re-derived from each session's auth id. */
-    const resolveSessions = async (staffAuthId: string | null, customerAuthId: string | null) => {
+    const resolveSessions = async (
+      staffAuthId: string | null,
+      customerAuthId: string | null,
+      customerAuthEmail: string | null
+    ) => {
       if (cancelled) return;
 
       // The staff session decides which client data reads use, so set it
@@ -2346,7 +2357,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (customerAuthId) {
         const customerRows = await fetchTable<CustomerAccount>('customers');
         if (cancelled) return;
-        const row = customerRows.find(c => c.userId === customerAuthId);
+        let row = customerRows.find(c => c.userId === customerAuthId);
+
+        // An authenticated session with no customer record behind it yet.
+        // This is the deferred half of registerCustomer()'s walk-in claim:
+        // that call ran before email confirmation existed, when auth.uid()
+        // was not yet this user, so resolve_customer_record() could not
+        // attach ownership (see 0006_fix_customer_ownership_verification.sql
+        // / audit finding C-1). Retry now that the session is real — the RPC
+        // only attaches when auth.uid() matches AND the target record's own
+        // stored email already equals this address, so this cannot attach
+        // somebody else's record, only complete a legitimate one.
+        if (!row && customerAuthEmail && supabase) {
+          const { data: healedId, error: healError } = await supabase.rpc('resolve_customer_record', {
+            p_name: null,
+            p_phone: null,
+            p_email: customerAuthEmail,
+            p_auth_id: customerAuthId,
+            p_source: 'Website Registration'
+          });
+          if (healError) console.error('resolve_customer_record heal failed:', healError.message);
+          if (cancelled) return;
+          if (healedId) {
+            const healedRows = await fetchTable<CustomerAccount>('customers');
+            if (cancelled) return;
+            row = healedRows.find(c => c.id === healedId);
+          }
+        }
+
         setCurrentUser(row
           ? { id: row.id, name: row.name, email: row.email, phone: row.phone }
           : null);
@@ -2364,6 +2402,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     let staffId: string | null = null;
     let customerId: string | null = null;
+    let customerEmail: string | null = null;
 
     Promise.all([
       supabaseStaff.auth.getSession(),
@@ -2371,17 +2410,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     ]).then(([staffSession, customerSession]) => {
       staffId = staffSession.data.session?.user?.id ?? null;
       customerId = customerSession.data.session?.user?.id ?? null;
-      resolveSessions(staffId, customerId);
+      customerEmail = customerSession.data.session?.user?.email ?? null;
+      resolveSessions(staffId, customerId, customerEmail);
     });
 
     const staffSub = supabaseStaff.auth.onAuthStateChange((_e, session) => {
       staffId = session?.user?.id ?? null;
-      resolveSessions(staffId, customerId);
+      resolveSessions(staffId, customerId, customerEmail);
     });
 
     const customerSub = supabase.auth.onAuthStateChange((_e, session) => {
       customerId = session?.user?.id ?? null;
-      resolveSessions(staffId, customerId);
+      customerEmail = session?.user?.email ?? null;
+      resolveSessions(staffId, customerId, customerEmail);
     });
 
     return () => {
