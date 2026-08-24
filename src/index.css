@@ -158,14 +158,14 @@ input:focus, select:focus, textarea:focus {
    BIRTHDAY BALLOONS
    balloons-js draws the balloons and owns their motion; it has no colour API —
    `colorPairs` is a module-private const, so the palette cannot be passed in.
-   The tint is therefore applied to the library's own <balloons> layer: flatten
-   to greyscale, push through sepia to get one hue, then rotate that hue into
-   pink. The originals differ in lightness, so what comes out is a set of tonal
-   pastel pinks rather than one flat colour.
+   Its own palette is already a festive five — yellow, orange-red, blue, green,
+   purple — cycled round-robin per balloon, so the mix is evenly distributed on
+   its own. Nothing here recolours them; the filter only softens the library's
+   fairly saturated originals into gentler, on-brand tones.
    ============================================================================= */
 
 balloons {
-  filter: grayscale(1) sepia(1) hue-rotate(285deg) saturate(1.9) brightness(1.06);
+  filter: saturate(0.88) brightness(1.06);
   /* Held back a little so a balloon crossing the heading never fights it. */
   opacity: 0.85;
 }
