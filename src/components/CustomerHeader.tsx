@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Palette, Coffee, Menu, X, User, Calendar, Flame, Mail, Instagram, Facebook } from 'lucide-react';
+import { Palette, Coffee, Menu, X, User, Calendar, Flame, Instagram, Facebook } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { Footer } from './ui/Footer';
 import { LanguageToggle } from './LanguageToggle';
@@ -195,11 +195,6 @@ export const CustomerFooter: React.FC = () => {
           icon: <WhatsAppIcon />,
           href: 'https://wa.me/966548182404',
           label: t('WhatsApp', 'واتساب')
-        },
-        {
-          icon: <Mail className="h-5 w-5" />,
-          href: 'mailto:hello@artycafe.sa',
-          label: t('Email', 'البريد الإلكتروني')
         },
         {
           icon: <Instagram className="h-5 w-5" />,
