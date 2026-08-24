@@ -175,6 +175,35 @@ balloons {
 }
 
 /* =============================================================================
+   BIRTHDAY PACKAGE TICKETS
+   The two package cards are cut into a tear-off ticket silhouette. A mask is
+   what makes the side notches real holes rather than circles painted in the
+   section's colour: the card keeps its translucent fill, so whatever sits
+   behind it — the charcoal band, a passing balloon — shows through the bite,
+   and the notch survives the hover fill change with no second colour to keep
+   in sync.
+   Two radial gradients, transparent inside the circle and opaque outside,
+   intersected so each one only subtracts its own notch. `intersect` is the
+   standards name and `source-in` its WebKit spelling; both are declared
+   because Safari still ships the prefixed property.
+   Cost of the mask: it clips to the border box, so the card's outer shadow is
+   cut away with it. On the dark band that shadow was barely legible anyway,
+   and the notches read more clearly without a glow bleeding around them.
+   ============================================================================= */
+
+.birthday-ticket {
+  --ticket-notch: 11px;
+  -webkit-mask-image:
+    radial-gradient(circle var(--ticket-notch) at left 50%, transparent 99%, #000 100%),
+    radial-gradient(circle var(--ticket-notch) at right 50%, transparent 99%, #000 100%);
+  mask-image:
+    radial-gradient(circle var(--ticket-notch) at left 50%, transparent 99%, #000 100%),
+    radial-gradient(circle var(--ticket-notch) at right 50%, transparent 99%, #000 100%);
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+}
+
+/* =============================================================================
    CONSOLE MODAL
    Two declarations each: the vh line is the fallback, the dvh line wins where
    it is supported. dvh tracks Safari's collapsing toolbars, so the card cannot

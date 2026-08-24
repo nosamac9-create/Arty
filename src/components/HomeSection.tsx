@@ -430,10 +430,20 @@ export const HomeSection: React.FC = () => {
                       setWorkshopsInitialCategory('Birthday Packages');
                       setCustomerTab('workshops');
                     }}
-                    className={`group h-full w-full cursor-pointer rounded-[22px] border border-brand-cream/15 bg-brand-cream/[0.07] p-6 flex flex-col text-start shadow-card transition-all duration-300 hover:bg-brand-cream/[0.13] hover:border-brand-cream/25 sm:hover:rotate-0 sm:hover:-translate-y-1 ${
+                    className={`birthday-ticket group relative h-full w-full cursor-pointer rounded-[22px] border border-brand-cream/15 bg-brand-cream/[0.07] py-6 ps-6 pe-14 flex flex-col text-start shadow-card transition-all duration-300 hover:bg-brand-cream/[0.13] hover:border-brand-cream/25 sm:hover:rotate-0 sm:hover:-translate-y-1 ${
                       index % 2 === 0 ? 'sm:-rotate-[2.5deg]' : 'sm:rotate-[2.5deg]'
                     }`}
                   >
+                    {/* The tear-off stub: a perforation down the end side, with
+                        the strip beyond it tinted a shade lighter so it reads as
+                        the part that comes away. Logical inset, so it sits on
+                        the correct side in Arabic as well as English. The card's
+                        `pe-14` is what keeps the copy clear of it. */}
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-y-0 end-0 w-11 rounded-e-[22px] border-s border-dashed border-brand-cream/20 bg-brand-cream/[0.04]"
+                    />
+
                     <div className="flex items-start justify-between gap-4">
                       <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-cream/45">
                         Package {String(index + 1).padStart(2, '0')}
