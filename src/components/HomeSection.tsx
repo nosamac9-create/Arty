@@ -292,7 +292,7 @@ export const HomeSection: React.FC = () => {
               fade={0.16}
               gap={0.12}
               autoPlay
-              autoPlayInterval={4500}
+              autoPlayInterval={3500}
               showPagination
               onSelectedChange={setFeaturedIndex}
               onActivate={index => {
