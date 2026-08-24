@@ -179,8 +179,11 @@ export const AdminSettingsSection: React.FC = () => {
       // Super Admin needs no page list; the role grants everything.
       permissions: permDraft.role === 'Super Admin' ? [] : sanitizePermissions(permDraft.permissions),
       password: permDraft.hasConsoleAccess ? (permDraft.password || undefined) : undefined,
-      // Links the login account to this staff profile by stable id.
-      userId: permDraft.hasConsoleAccess ? permissionsStaff.id : undefined,
+      // staff.user_id is established ONLY by the provision-staff Edge
+      // Function now (audit finding C-3) — never written from here. This
+      // used to write userId: permissionsStaff.id (the staff record's own
+      // id, not a real Auth uuid) whenever access was toggled on, silently
+      // overwriting a correctly-provisioned real user_id with a placeholder.
       normalizedPhone: normalizeCustomerPhone(permissionsStaff.phone)
     });
 
