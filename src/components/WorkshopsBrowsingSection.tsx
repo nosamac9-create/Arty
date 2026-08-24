@@ -8,7 +8,7 @@ import { useApp } from '../context/AppContext';
 import Reveal from './ui/Reveal';
 import { ScrollReveal } from './ui/ScrollReveal';
 import { AppImage } from './ui/AppImage';
-import { Search, SlidersHorizontal, RefreshCw, ChevronDown } from 'lucide-react';
+import { Search, SlidersHorizontal, RefreshCw, ChevronDown, ArrowLeft } from 'lucide-react';
 import { Workshop } from '../types';
 import { BirthdayPackagesShowcase } from './BirthdayPackagesShowcase';
 import { isWorkshopFullyBooked } from '../utils/queueUtils';
@@ -124,6 +124,24 @@ export const WorkshopsBrowsingSection: React.FC = () => {
       {/* Header Title — no bottom padding on the birthday view, where the
           filter row below it is gone and the packages follow directly. */}
       <div className={isBirthdayView ? '' : 'pb-8'}>
+        {/* Way out of the birthday view, now that the category chips are gone.
+            Clearing the category is the same switch those chips made, so this
+            is the existing navigation rather than a new route. Deliberately
+            quiet — a text link with a hover colour shift, not a button — so it
+            reads as secondary to the heading it sits above. */}
+        {isBirthdayView && (
+          <Reveal index={0}>
+            <button
+              type="button"
+              onClick={() => setSelectedCategory('All')}
+              className="group -ms-1 mb-5 inline-flex cursor-pointer items-center gap-1.5 rounded-full px-1 py-1 text-[13px] font-medium text-brand-muted transition-colors hover:text-brand-charcoal"
+            >
+              <ArrowLeft className="h-4 w-4 transition-transform duration-200 group-hover:-translate-x-0.5 flip-rtl" />
+              <span>Back to Workshops</span>
+            </button>
+          </Reveal>
+        )}
+
         <Reveal index={0}>
           <span className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-sage">
             {isBirthdayView ? 'Private Parties' : 'Catalogue'}
