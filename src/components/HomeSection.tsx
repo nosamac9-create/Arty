@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { PhotoGallery } from './ui/PhotoGallery';
@@ -13,14 +13,14 @@ import { ScrollReveal } from './ui/ScrollReveal';
 import Reveal from './ui/Reveal';
 import { AnimatedMap } from './ui/AnimatedMap';
 import { BirthdayBalloons } from './ui/BirthdayBalloons';
-import { AppImage } from './ui/AppImage';
+import { CoverflowCarousel } from './ui/CoverflowCarousel';
 import {
   ContainerStagger,
   ContainerAnimated
 } from './ui/CtaSectionWithGallery';
 import { formatDate } from '../utils/calendarConfig';
-import { isWorkshopFullyBooked } from '../utils/queueUtils';
-import { Calendar, Sparkles, ChevronRight, Paintbrush, MousePointerClick, CalendarRange, Gift, Coffee, ChevronDown, Phone, Mail, UserCheck, Star, ArrowLeft } from 'lucide-react';
+import { selectFeaturedWorkshops } from '../utils/featuredWorkshops';
+import { Calendar, Sparkles, ChevronRight, Paintbrush, MousePointerClick, CalendarRange, Gift, Coffee, ChevronDown, Phone, Mail, UserCheck, Star, ArrowLeft, Clock }  from 'lucide-react';
 
 /**
  * The arc gallery's photographs, in the order the studio supplied them.
@@ -85,8 +85,28 @@ export const HomeSection: React.FC = () => {
         transition: { duration: 0.7, ease: [0.22, 1, 0.36, 1] as const }
       };
 
-  // Get first 3 workshops as featured
-  const featuredWorkshops = workshops.slice(0, 3);
+  /**
+   * The week's featured workshops: available in the next seven days, ranked by
+   * active bookings over the trailing thirty, capped at four. The aggregation
+   * walks every session and booking, so it is memoised on the records it reads
+   * — the carousel re-renders on every settle and must not re-run this.
+   */
+  const featuredWorkshops = useMemo(
+    () => selectFeaturedWorkshops({ workshops, workshopSessions, bookings, queue }, todayDateStr),
+    [workshops, workshopSessions, bookings, queue, todayDateStr]
+  );
+
+  /** Images only — the carousel renders cards, the details sit below it. */
+  const featuredSlides = useMemo(
+    () => featuredWorkshops.map(ws => ({ src: ws.image, alt: ws.title })),
+    [featuredWorkshops]
+  );
+
+  const [featuredIndex, setFeaturedIndex] = useState(0);
+  // The list can shrink between renders — a session fills up, a workshop is
+  // archived — so the index is resolved against the current array rather than
+  // trusted, and never points past its end.
+  const activeFeatured = featuredWorkshops[featuredIndex] || featuredWorkshops[0] || null;
 
   const publishedEvents = events.filter(evt => evt.status === 'Published');
 
@@ -247,80 +267,87 @@ export const HomeSection: React.FC = () => {
           </ContainerAnimated>
         </ContainerStagger>
 
-        {/* One row of three, not the offset two-column grid this used to use:
-            with three cards that grid always left the third stranded below a
-            gap. Equal columns, stretched cells and h-full cards, so the three
-            share a top and bottom edge and their price rows line up.
-            Same cards, same fields, same click — only the arrangement is new. */}
-        <div className="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-6 lg:mt-12 lg:grid-cols-3 items-stretch">
-          {featuredWorkshops.map((ws, index) => (
-            <ScrollReveal
-              key={ws.id}
-              once
-              viewOptions={{ once: true, amount: 0.3, margin: '0px 0px -80px 0px' }}
-              transition={{ delay: index * 0.12, duration: 0.5, ease: 'easeOut' }}
-              variants={{ hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0 } }}
-              className="h-full"
-            >
-            <div
-              onClick={() => handleCardClick(ws.id)}
-              className="group cursor-pointer rounded-[22px] border border-brand-clay/60 bg-white shadow-card hover:shadow-card hover:-translate-y-1 transition-all duration-300 text-start flex flex-col h-full overflow-hidden"
-            >
-              {/* Photo — flush with the card's top and side edges. A fixed
-                  height (not aspect-video) so every card's image locks to the
-                  same box regardless of the source photo's own dimensions.
-                  Shorter at lg, where three cards share the row: the card is
-                  narrower there, and the old height left it tall and thin. */}
-              <div className="relative h-48 sm:h-52 lg:h-44 shrink-0 bg-brand-sand">
-                <AppImage
-                  src={ws.image}
-                  alt={ws.title}
-                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                  referrerPolicy="no-referrer"
-                />
-                
-                {/* Availability chip — silent unless every upcoming date is
-                    full; category chip always shows. */}
-                <div className="absolute inset-x-3 top-3 flex items-start justify-between gap-2">
-                  {isWorkshopFullyBooked(ws.id, { workshopSessions, workshops, bookings, queue }, todayDateStr) ? (
-                    <span className="inline-flex items-center rounded-full bg-brand-charcoal/85 px-3 py-1.5 text-[11px] font-semibold text-brand-cream backdrop-blur-sm">
-                      Fully booked
-                    </span>
-                  ) : <span />}
-                  <span className="inline-flex items-center rounded-full bg-brand-cream/90 px-3 py-1.5 text-[11px] font-semibold text-brand-charcoal backdrop-blur-sm">
-                    {ws.category}
-                  </span>
-                </div>
-              </div>
+        {/* The carousel. Only the images ride in it; the details for whichever
+            card is centred are rendered below in the site's own type, which is
+            why the component takes no caption of its own. */}
+        {featuredSlides.length > 0 && (
+          <div className="mt-8 lg:mt-10">
+            <CoverflowCarousel
+              slides={featuredSlides}
+              label="Featured workshops"
+              /* Narrower cards on a phone, so a neighbour still shows at the
+                 edges without the active card losing the frame. */
+              cardWidth="clamp(190px, 46vw, 320px)"
+              /* Softer rake than the reference default: these are photographs
+                 of a studio, not album art, and a hard tilt makes the
+                 neighbours unreadable. */
+              rotate={38}
+              depth={0.5}
+              perspective={3.2}
+              autoPlay
+              autoPlayInterval={4500}
+              showNavigation
+              showPagination
+              onSelectedChange={setFeaturedIndex}
+              onActivate={index => {
+                const workshop = featuredWorkshops[index];
+                if (workshop) handleCardClick(workshop.id);
+              }}
+            />
 
-              {/* Info details */}
-              <div className="flex-1 flex flex-col justify-between p-4">
-                <div>
-                  <h3 className="font-display text-xl font-semibold text-brand-charcoal group-hover:text-brand-terracotta transition-colors line-clamp-1">
-                    {ws.title}
-                  </h3>
-                  <p className="text-sm text-brand-ink line-clamp-2 mt-1.5 leading-relaxed">
-                    {ws.hook}
+            {/* The centred workshop, in full. Keyed on the id so the block
+                re-enters as the carousel settles on a new one. */}
+            {activeFeatured && (
+              <div key={activeFeatured.id} className="mt-6 text-center animate-in fade-in duration-500">
+                <span className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-sage">
+                  {activeFeatured.category}
+                  {activeFeatured.skillLevel ? ` · ${activeFeatured.skillLevel}` : ''}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => handleCardClick(activeFeatured.id)}
+                  className="group mt-2 cursor-pointer font-display text-2xl md:text-[28px] font-semibold text-brand-charcoal transition-colors hover:text-brand-terracotta"
+                >
+                  {activeFeatured.title}
+                </button>
+
+                {activeFeatured.hook && (
+                  <p className="mx-auto mt-2 max-w-xl text-[15px] leading-[1.7] text-brand-ink">
+                    {activeFeatured.hook}
                   </p>
+                )}
+
+                {/* The site's meta treatment: lucide at h-4 w-4 in sage, 1.5
+                    gap — the same pairing the workshop and package cards use. */}
+                <div className="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-[13px] text-brand-ink">
+                  {activeFeatured.duration && (
+                    <span className="inline-flex items-center gap-1.5">
+                      <Clock className="h-4 w-4 shrink-0 text-brand-sage" />
+                      <span className="ltr-numerals">{activeFeatured.duration}</span>
+                    </span>
+                  )}
+                  {activeFeatured.ageRange && (
+                    <span className="inline-flex items-center gap-1.5">
+                      <Sparkles className="h-4 w-4 shrink-0 text-brand-sage" />
+                      <span className="ltr-numerals">{activeFeatured.ageRange}</span>
+                    </span>
+                  )}
+                  {activeFeatured.instructor && (
+                    <span className="inline-flex items-center gap-1.5">
+                      <Paintbrush className="h-4 w-4 shrink-0 text-brand-sage" />
+                      <span>Instructor {activeFeatured.instructor}</span>
+                    </span>
+                  )}
                 </div>
 
-                <div className="mt-5 pt-4 border-t border-brand-clay flex items-end justify-between gap-3">
-                  <div className="text-[13px] text-brand-ink space-y-0.5 min-w-0">
-                    <p className="truncate">{ws.duration}</p>
-                    <p className="truncate">{ws.ageRange}</p>
-                  </div>
-                  <div className="text-end shrink-0">
-                    <span className="block text-[10px] font-semibold uppercase tracking-[0.12em] text-brand-muted">Price</span>
-                    <span className="font-display text-[22px] font-semibold text-brand-charcoal ltr-numerals">
-                      {ws.price} <span className="text-xs font-medium text-brand-muted">SAR</span>
-                    </span>
-                  </div>
-                </div>
+                <p className="mt-4 font-display text-[26px] font-semibold text-brand-charcoal ltr-numerals">
+                  {activeFeatured.price} <span className="text-sm font-medium text-brand-muted">SAR</span>
+                </p>
               </div>
-            </div>
-            </ScrollReveal>
-          ))}
-        </div>
+            )}
+          </div>
+        )}
 
       </div>
       </section>
