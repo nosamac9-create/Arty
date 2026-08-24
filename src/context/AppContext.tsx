@@ -17,7 +17,7 @@ import {
 } from '../types';
 import { useLiveTable, fetchTable, fetchRow } from '../lib/supabaseData';
 import { getDataClient } from '../lib/supabase';
-import { toRow, rowToModel } from '../lib/mappers';
+import { toRow } from '../lib/mappers';
 // Stage 2: the data layer is Supabase. `db` is the Dexie-shaped façade over it
 // (lib/supabaseDb), so each mutator keeps its exact logic and invariants while
 // the storage underneath changed. Seat allocation does NOT go through it — see
@@ -2748,12 +2748,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { customer: (cached || { id: '', name: input.name || 'Guest' }) as CustomerAccount, created: false, matchedOn: reason };
     }
 
-    // Read the row back. A guest has no session, so this goes through the
-    // summary function rather than a direct select.
-    const { data: summary } = await supabase.rpc('get_customer_summary', { p_id: id });
-    const row = Array.isArray(summary) ? summary[0] : summary;
-
-    const customer = (row ? rowToModel<CustomerAccount>(row) : { ...buildCustomerIdentity(input), id }) as CustomerAccount;
+    // resolve_customer_record() already returned the id — the caller's own
+    // input is the rest of what any of this function's callers ever read
+    // (only .id is actually used downstream). There is no need to read the
+    // row back through get_customer_summary(), which had no ownership check
+    // and let an anonymous caller harvest another customer's PII by guessing
+    // an id (audit finding C-2).
+    const customer = { ...buildCustomerIdentity(input), id } as CustomerAccount;
 
     return { customer, created: !cached, matchedOn: cached ? reason : 'none' };
   };
