@@ -2676,19 +2676,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, error: friendlyAuthError(error?.message || '') };
     }
 
-    // 2. The staff record, resolved from the auth id. Role and permissions are
-    //    read from this row — never from the token or anything stored locally.
-    // Read fresh, not from the cached list: a role or access change made a
-    // moment ago must apply to this sign-in.
+    // 2. The staff record, resolved from the auth id ONLY (audit finding
+    //    C-3). Role and permissions are read from this row — never from the
+    //    token or anything stored locally. Read fresh, not from the cached
+    //    list: a role or access change made a moment ago must apply to this
+    //    sign-in.
+    //
+    //    There is deliberately no email-match fallback here anymore. That
+    //    fallback used to let anyone who could authenticate as ANY Supabase
+    //    Auth identity sharing a staff member's email get bound to that
+    //    staff row on whichever login happened to reach it first — the
+    //    account merely needed to exist and the addresses to match, nothing
+    //    about actually being that person. staff.user_id is now established
+    //    exclusively by the provision-staff Edge Function, under a
+    //    server-verified Super Admin check; login only ever reads that
+    //    relationship, never creates or repoints it.
     const all = await fetchTable<StaffMember>('staff');
-    const account =
-      all.find(member => member.userId === data.user!.id) ||
-      // First sign-in after the account was provisioned: link by email once.
-      all.find(member => canonicalEmail(member.email) === email);
+    const account = all.find(member => member.userId === data.user!.id);
 
     if (!account) {
       await supabaseStaff.auth.signOut();
-      return { success: false, error: 'No staff account found with those details.' };
+      // staff_read's RLS policy (is_staff()) gates the entire table on the
+      // exact same condition this lookup is testing — user_id = auth.uid(),
+      // console access on, status active — so if that policy let any rows
+      // through at all, this caller's own row is guaranteed to be among
+      // them and guaranteed to match. Reaching this branch always means the
+      // caller isn't currently a recognized, console-enabled staff member;
+      // there is no other distinguishable case to report. Safe to be this
+      // specific because signInWithPassword already succeeded — this
+      // message only ever reaches someone who has already proven a real
+      // credential, not an anonymous prober.
+      return {
+        success: false,
+        error: 'This account is not recognized by the Admin Console. If you were recently provisioned, ask a Super Admin to confirm your console access is enabled.'
+      };
     }
 
     // 3. The existing console guards, unchanged.
@@ -2705,10 +2726,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // staff-only tables.
     setStaffSessionActive(true);
     setCurrentStaffId(account.id);
+    // user_id is never written here (audit finding C-3) — it was already
+    // required to equal data.user.id for account to have been found above,
+    // and login only ever reads that relationship, never establishes it.
     await db.staff.update(account.id, {
-      lastLoginAt: new Date().toISOString(),
-      // Bind the record to this auth user on first sign-in.
-      userId: account.userId || data.user.id
+      lastLoginAt: new Date().toISOString()
     });
 
     return { success: true, mustChangePassword: account.passwordIsTemporary === true };
