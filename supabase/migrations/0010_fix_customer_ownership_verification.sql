@@ -1,7 +1,7 @@
 -- =============================================================================
--- 0006 — CLOSE THE WALK-IN ACCOUNT-TAKEOVER PATH (audit finding C-1)
+-- 0010 — CLOSE THE WALK-IN ACCOUNT-TAKEOVER PATH (audit finding C-1)
 --
--- Run once, in the Supabase SQL editor, after 0005.
+-- Run once, in the Supabase SQL editor, after 0009.
 --
 -- THE BUG
 -- resolve_customer_record() (0003) and claim_customer_account() /
