@@ -504,10 +504,42 @@ async function linkAuthToCustomer(identifier: string | undefined, authId: string
   return (typeof data === 'string' && data) ? data : null;
 }
 
+/**
+ * Post-split, the staff console and customer site are served from
+ * different subdomains (customer domain vs. staff.<domain>). This looks
+ * only at the hostname's first label so an unrelated domain that merely
+ * contains "staff" elsewhere (e.g. staffing-co.example) can't false-positive.
+ * Anything else — including localhost/dev — defaults to 'customer';
+ * the existing "Staff Login" click is still how you reach the staff area
+ * locally, unchanged by this.
+ */
+function initialAreaFromHostname(): 'customer' | 'staff' {
+  if (typeof window === 'undefined') return 'customer';
+  const firstLabel = window.location.hostname.split('.')[0];
+  return firstLabel === 'staff' ? 'staff' : 'customer';
+}
+
+/**
+ * Cross-domain link targets, set only once the two sites are actually
+ * deployed separately. Unset (local dev, or a single shared deployment)
+ * falls back to today's in-app setArea(...) switch — see goToStaffLogin,
+ * viewCustomerSite and returnToStaffConsole below.
+ */
+const CUSTOMER_SITE_URL = import.meta.env.VITE_CUSTOMER_SITE_URL || undefined;
+const STAFF_SITE_URL = import.meta.env.VITE_STAFF_SITE_URL || undefined;
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Navigation State
-  // Everyone starts on the customer site.
-  const [area, setArea] = useState<'customer' | 'staff'>('customer');
+  // Everyone starts on the customer site, unless the hostname says otherwise (see initialAreaFromHostname).
+  const [area, setArea] = useState<'customer' | 'staff'>(initialAreaFromHostname);
+
+  // Keeps the tab title honest about which site you're on — matters most
+  // in local dev / a single shared deployment, where the same tab can
+  // switch between areas via setArea without a real navigation.
+  useEffect(() => {
+    document.title = area === 'staff' ? 'Arty Café — Staff Console' : 'Arty Café';
+  }, [area]);
+
   /** What Supabase said about a reset link, when it refused one. */
   const [recoveryLinkError, setRecoveryLinkError] = useState<string | null>(null);
 
@@ -2937,11 +2969,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setArea('customer');
   };
 
-  const goToStaffLogin = () => setArea('staff');
-  const viewCustomerSite = () => setArea('customer');
-  /** Only meaningful for an authenticated staff member. */
+  const goToStaffLogin = () => {
+    if (STAFF_SITE_URL) { window.location.href = STAFF_SITE_URL; return; }
+    setArea('staff');
+  };
+  const viewCustomerSite = () => {
+    if (CUSTOMER_SITE_URL) { window.location.href = CUSTOMER_SITE_URL; return; }
+    setArea('customer');
+  };
+  /**
+   * Only meaningful for an authenticated staff member. Once the sites are
+   * split, a staff session's storage lives on the staff origin, so
+   * currentStaffId is never populated while landing on the customer
+   * origin from a fresh cross-domain navigation — this stays dead code
+   * in that case, which is correct: there's no session to jump back into
+   * without visiting the staff site's own login again.
+   */
   const returnToStaffConsole = () => {
-    if (currentStaffId) setArea('staff');
+    if (!currentStaffId) return;
+    if (STAFF_SITE_URL) { window.location.href = STAFF_SITE_URL; return; }
+    setArea('staff');
   };
 
   const canAccessAdminPage = (pageId: string) => canAccessPage(currentStaff, pageId);
