@@ -506,17 +506,21 @@ async function linkAuthToCustomer(identifier: string | undefined, authId: string
 
 /**
  * Post-split, the staff console and customer site are served from
- * different subdomains (customer domain vs. staff.<domain>). This looks
- * only at the hostname's first label so an unrelated domain that merely
- * contains "staff" elsewhere (e.g. staffing-co.example) can't false-positive.
+ * different origins. That's a real subdomain once there's a custom
+ * domain (staff.artycafe.com), but today it's Vercel's auto-generated
+ * preview/production URL (arty-staff.vercel.app), where "staff" is a
+ * hyphen-separated word rather than a dot-separated label. Splitting on
+ * both '.' and '-' and requiring an exact 'staff' segment matches both,
+ * while still rejecting an unrelated domain that merely contains "staff"
+ * as a substring of a longer word (e.g. staffing-tool.vercel.app).
  * Anything else — including localhost/dev — defaults to 'customer';
  * the existing "Staff Login" click is still how you reach the staff area
  * locally, unchanged by this.
  */
 function initialAreaFromHostname(): 'customer' | 'staff' {
   if (typeof window === 'undefined') return 'customer';
-  const firstLabel = window.location.hostname.split('.')[0];
-  return firstLabel === 'staff' ? 'staff' : 'customer';
+  const segments = window.location.hostname.split(/[.-]/);
+  return segments.includes('staff') ? 'staff' : 'customer';
 }
 
 /**
