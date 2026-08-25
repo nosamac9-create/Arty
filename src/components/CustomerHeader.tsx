@@ -169,7 +169,7 @@ const TikTokIcon: React.FC<{ className?: string }> = ({ className = 'h-5 w-5' })
 );
 
 export const CustomerFooter: React.FC = () => {
-  const { goToStaffLogin, currentStaff, returnToStaffConsole } = useApp();
+  const { currentStaff, returnToStaffConsole } = useApp();
   const { t } = useLanguage();
 
   /* Hours, the address and the front-desk number are deliberately absent:
@@ -212,20 +212,22 @@ export const CustomerFooter: React.FC = () => {
           label: 'Facebook'
         }
       ]}
-      mainLinks={[
-        /* The only way into the staff area. Signing in is still required —
-           this opens the staff login, it grants nothing. */
+      mainLinks={
+        /* Staff have their own dedicated URL now, so this footer no longer
+           advertises the staff console to public visitors. The one
+           exception: an already-authenticated staff session that's
+           currently viewing the customer site (local dev / a shared
+           origin) still gets a way back in. */
         currentStaff
-          ? {
-              label: t('Back to Staff Console', 'العودة إلى لوحة الموظفين'),
-              onClick: () => returnToStaffConsole(),
-              emphasis: true
-            }
-          : {
-              label: t('Staff Login', 'دخول الموظفين'),
-              onClick: () => goToStaffLogin()
-            }
-      ]}
+          ? [
+              {
+                label: t('Back to Staff Console', 'العودة إلى لوحة الموظفين'),
+                onClick: () => returnToStaffConsole(),
+                emphasis: true
+              }
+            ]
+          : []
+      }
       copyright={{
         text: t('© 2026 Arty Café Jeddah.', '© ٢٠٢٦ آرتي كافيه جدة.'),
         license: t('All rights reserved.', 'جميع الحقوق محفوظة.')
