@@ -15,16 +15,16 @@ import { searchText } from '../utils/search';
 import { usePagination, TablePager } from './ui/TablePager';
 
 export const AdminDashboardSection: React.FC = () => {
-  const { 
-    bookings, 
-    queue, 
-    pieces, 
-    workshops, 
-    setAdminTab, 
-    todayDateStr, 
-    getRelativeRiyadhDateStr, 
-    updatePieceStatus,
-    updatePiece,
+  const {
+    bookings,
+    queue,
+    workshops,
+    setAdminTab,
+    todayDateStr,
+    getRelativeRiyadhDateStr,
+    overduePickupPieces: overduePickupPiecesRaw,
+    markPieceCollected,
+    sendPickupReminder,
     setSelectedEventBookingId
   } = useApp();
 
@@ -97,15 +97,16 @@ export const AdminDashboardSection: React.FC = () => {
   }, [bookings, currentRiyadhMonth]);
 
   // 4. OVERDUE READY-FOR-PICKUP PIECES (7+ DAYS)
+  // overduePickupPiecesRaw is already filtered to status = 'Ready for Pickup'
+  // server-side, inside get_overdue_pickup_pieces() itself (audit finding
+  // C-4) — no need to re-check status here.
   const overduePickupPieces = useMemo(() => {
-    return pieces
+    return overduePickupPiecesRaw
       .filter(p => {
-        if (p.status !== 'Ready for Pickup') return false;
-        
         // Calculate days waiting since ready date or daysElapsed
         const readyDate = p.expectedReadyDate || p.actualReadyDate || p.readyDate || p.dateCreated || todayDateStr;
         let daysWaiting = p.daysElapsed || 0;
-        
+
         if (readyDate) {
           const t1 = new Date(todayDateStr).getTime();
           const t2 = new Date(readyDate.split('T')[0]).getTime();
@@ -114,7 +115,7 @@ export const AdminDashboardSection: React.FC = () => {
             daysWaiting = Math.max(daysWaiting, diffDays);
           }
         }
-        
+
         return daysWaiting >= 7;
       })
       .map(p => {
@@ -132,7 +133,7 @@ export const AdminDashboardSection: React.FC = () => {
         };
       })
       .sort((a, b) => b.daysWaiting - a.daysWaiting);
-  }, [pieces, todayDateStr]);
+  }, [overduePickupPiecesRaw, todayDateStr]);
 
   /* Five rows a page on every dashboard table. Nothing is dropped — the rest
      is a page turn away — and the page resets itself when the row count
@@ -142,17 +143,35 @@ export const AdminDashboardSection: React.FC = () => {
   const birthdayPager = usePagination(monthlyBirthdayBookings, 5);
   const overduePager = usePagination(overduePickupPieces, 5);
 
-  // Handle Mark Piece as Collected
-  const handleMarkCollected = async (pieceId: string, pieceCode: string, customerName: string) => {
-    await updatePieceStatus(pieceId, 'Collected', 'Front Desk Admin', 'Customer collected piece in-store.');
-    await updatePiece(pieceId, { collectionDate: todayDateStr });
-    showToast(`Piece ${pieceCode || pieceId} marked as Collected for ${customerName}!`);
+  // Handle Mark Piece as Collected — via markPieceCollected() (audit finding
+  // C-4): a direct updatePieceStatus()/updatePiece() call would be refused by
+  // pieces/piece_history RLS for a caller without the pieces-admin
+  // permission once 0014 is applied. Takes the whole row rather than just an
+  // id, since the display fields needed for the notification it writes are
+  // already on hand here — a fresh piece read would itself now be blocked.
+  const handleMarkCollected = async (piece: PotteryPiece & { daysWaiting: number }) => {
+    const result = await markPieceCollected({
+      id: piece.id,
+      name: piece.name,
+      pieceCode: piece.pieceCode,
+      customerName: piece.customerName,
+      customerPhone: piece.customerPhone
+    });
+    if (result.success) {
+      showToast(`Piece ${piece.pieceCode || piece.id} marked as Collected for ${piece.customerName}!`);
+    } else {
+      showToast(result.error || 'Could not mark this piece as collected. Please try again.');
+    }
   };
 
-  // Handle Send Pickup Reminder
-  const handleSendReminder = async (pieceId: string, pieceCode: string, customerName: string) => {
-    await updatePiece(pieceId, { lastNotificationDate: todayDateStr });
-    showToast(`Pickup reminder notification sent to ${customerName} for piece ${pieceCode || pieceId}.`);
+  // Handle Send Pickup Reminder — via sendPickupReminder(), same reasoning.
+  const handleSendReminder = async (piece: PotteryPiece & { daysWaiting: number }) => {
+    const result = await sendPickupReminder(piece.id);
+    if (result.success) {
+      showToast(`Pickup reminder notification sent to ${piece.customerName} for piece ${piece.pieceCode || piece.id}.`);
+    } else {
+      showToast(result.error || 'Could not send a reminder for this piece. Please try again.');
+    }
   };
 
   // Live Queue & Revenue Metrics
@@ -686,7 +705,7 @@ export const AdminDashboardSection: React.FC = () => {
                     <td className="py-3 px-3 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <button
-                          onClick={() => handleSendReminder(p.id, p.pieceCode || p.id, p.customerName)}
+                          onClick={() => handleSendReminder(p)}
                           className="bg-brand-sand border border-brand-clay/70 text-brand-charcoal hover:bg-brand-clay/30 px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
                         >
                           <Bell className="h-3 w-3 text-amber-600" />
@@ -694,7 +713,7 @@ export const AdminDashboardSection: React.FC = () => {
                         </button>
 
                         <button
-                          onClick={() => handleMarkCollected(p.id, p.pieceCode || p.id, p.customerName)}
+                          onClick={() => handleMarkCollected(p)}
                           className="bg-emerald-600 text-white hover:bg-emerald-700 px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer shadow-2xs"
                         >
                           <CheckCircle2 className="h-3 w-3" />

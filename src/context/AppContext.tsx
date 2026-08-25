@@ -17,7 +17,7 @@ import {
 } from '../types';
 import { useLiveTable, fetchTable, fetchRow } from '../lib/supabaseData';
 import { getDataClient } from '../lib/supabase';
-import { toRow } from '../lib/mappers';
+import { toRow, rowsToModels } from '../lib/mappers';
 // Stage 2: the data layer is Supabase. `db` is the Dexie-shaped façade over it
 // (lib/supabaseDb), so each mutator keeps its exact logic and invariants while
 // the storage underneath changed. Seat allocation does NOT go through it — see
@@ -342,6 +342,12 @@ interface AppContextType {
   updatePieceStatus: (id: string, status: PotteryPiece['status'], performerUser?: string, reason?: string) => void;
   addPiece: (piece: Omit<PotteryPiece, 'id' | 'daysElapsed' | 'expectedCompletion' | 'notes'> & Partial<Pick<PotteryPiece, 'expectedCompletion' | 'notes'>>) => void;
   updatePiece: (id: string, updates: Partial<PotteryPiece>) => Promise<void>;
+  /** Dashboard "Pottery Awaiting Pickup" widget data (audit finding C-4) — fed by get_overdue_pickup_pieces(), works for any console-access staff member regardless of the pieces-admin permission. */
+  overduePickupPieces: PotteryPiece[];
+  markPieceCollected: (piece: {
+    id: string; name: string; pieceCode?: string; customerName: string; customerPhone: string;
+  }) => Promise<{ success: boolean; error?: string }>;
+  sendPickupReminder: (pieceId: string) => Promise<{ success: boolean; error?: string }>;
   markNotificationAsRead: (id: string) => Promise<void>;
   clearAllNotifications: (type?: 'customer' | 'staff') => Promise<void>;
   runAllTests: () => void;
@@ -2651,6 +2657,155 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [currentStaffId, currentStaff, staff]);
 
+  // ---- Dashboard "Pottery Awaiting Pickup" widget (audit finding C-4) ----
+  /**
+   * Fed by get_overdue_pickup_pieces(), a narrow SECURITY DEFINER RPC gated
+   * on is_staff() alone (not staff_can('pieces-admin')) — this widget must
+   * keep working for any console-access staff member independent of that
+   * specific permission, once pieces/piece_history RLS requires it (see the
+   * C-4 chunk 2 migration, 0014 — not yet applied).
+   *
+   * Polled rather than Realtime-subscribed. Supabase Realtime's
+   * postgres_changes respects RLS on the underlying table, so a staff
+   * session without pieces-admin would silently receive zero change events
+   * for `pieces` once 0014 lands — a Realtime subscription here would look
+   * live for a Super Admin and quietly never update for exactly the staff
+   * member this mechanism exists for. The RPC itself is unaffected (SECURITY
+   * DEFINER bypasses RLS internally); only the "tell me when it changed"
+   * signal is unreliable, so this refetches on an interval, plus explicitly
+   * right after this session's own mark-collected/send-reminder calls
+   * succeed, instead of waiting for the next tick.
+   */
+  const [overduePickupPieces, setOverduePickupPieces] = useState<PotteryPiece[]>([]);
+
+  const fetchOverduePickupPieces = async () => {
+    if (!supabase) return;
+    const { data, error } = await supabase.rpc('get_overdue_pickup_pieces');
+    if (error) {
+      console.error('get_overdue_pickup_pieces failed:', error.message);
+      return;
+    }
+    setOverduePickupPieces(rowsToModels<PotteryPiece>(data || []));
+  };
+
+  useEffect(() => {
+    if (!currentStaffId) {
+      setOverduePickupPieces([]);
+      return;
+    }
+    fetchOverduePickupPieces();
+    const interval = setInterval(fetchOverduePickupPieces, 45000);
+    return () => clearInterval(interval);
+  }, [currentStaffId]);
+
+  /**
+   * The Dashboard widget's "Mark Collected" — replaces a direct
+   * updatePieceStatus()/updatePiece() call, which pieces/piece_history RLS
+   * would refuse for a caller without pieces-admin once 0014 is applied.
+   * mark_piece_collected() only performs the pieces/piece_history writes;
+   * the customer/staff notifications below are unaffected by that gating
+   * (notifications stays on blanket is_staff()) and are reproduced here
+   * exactly as updatePieceStatus() already does for this transition. The
+   * caller supplies the display fields it already has from
+   * get_overdue_pickup_pieces()'s own result, since a fresh db.pieces.get()
+   * would itself now be blocked for this same caller.
+   */
+  const markPieceCollected = async (piece: {
+    id: string; name: string; pieceCode?: string; customerName: string; customerPhone: string;
+  }) => {
+    if (!supabase) return { success: false, error: SUPABASE_NOT_CONFIGURED };
+
+    const riyadhTime = `${getRiyadhDateString()} ${getRiyadhNow().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+    const { data: ok, error } = await supabase.rpc('mark_piece_collected', {
+      p_id: piece.id,
+      // Riyadh-local, matching the original updatePiece(id, { collectionDate:
+      // todayDateStr }) exactly — Postgres's own current_date would reflect
+      // the database server's timezone (Supabase defaults to UTC), not
+      // Riyadh's, which could record the wrong calendar day near midnight.
+      p_collection_date: todayDateStr,
+      p_riyadh_time: riyadhTime
+    });
+
+    if (error || !ok) {
+      return { success: false, error: error?.message || 'This piece is no longer awaiting pickup.' };
+    }
+
+    await fetchOverduePickupPieces();
+
+    // Same notification behavior updatePieceStatus() already produces for
+    // the 'Collected' transition: skip if the stage is configured not to
+    // notify, dedupe within a minute, one customer row and one staff row.
+    const stageConfig = (await db.pipelineStages.toArray()).find(x => x.name === 'Collected');
+    if (stageConfig && stageConfig.notifyCustomer === false) {
+      return { success: true };
+    }
+
+    const alreadyNotified = await db.notifications
+      .filter(n =>
+        n.type === 'customer' &&
+        n.pieceId === piece.id &&
+        n.newStatus === 'Collected' &&
+        Date.now() - new Date(n.timestamp).getTime() < 60 * 1000
+      )
+      .count();
+    if (alreadyNotified > 0) {
+      return { success: true };
+    }
+
+    await db.notifications.add({
+      id: `NOTIF-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      type: 'customer',
+      customerPhone: piece.customerPhone,
+      title: 'Piece Status Update: Collected',
+      message: `Thank you for picking up your piece "${piece.name}"! We hope you loved crafting it at Arty Café.`,
+      pieceId: piece.id,
+      pieceName: piece.name,
+      newStatus: 'Collected',
+      timestamp: new Date().toISOString(),
+      isRead: false,
+      highlighted: false
+    });
+
+    await db.notifications.add({
+      id: `NOTIF-STAFF-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      type: 'staff',
+      title: 'Piece Status Shifted',
+      message: `Piece ${piece.id} (${piece.customerName}) moved to "Collected" by Front Desk Admin. Reason: Customer collected piece in-store.`,
+      pieceId: piece.id,
+      pieceName: piece.name,
+      newStatus: 'Collected',
+      performedBy: 'Front Desk Admin',
+      timestamp: new Date().toISOString(),
+      isRead: false,
+      highlighted: false
+    });
+
+    return { success: true };
+  };
+
+  /**
+   * The Dashboard widget's "Send Reminder" — matches handleSendReminder()'s
+   * existing behavior exactly: only last_notification_date changes, no
+   * notification row (there never was one for this action).
+   */
+  const sendPickupReminder = async (pieceId: string) => {
+    if (!supabase) return { success: false, error: SUPABASE_NOT_CONFIGURED };
+
+    const { data: ok, error } = await supabase.rpc('send_piece_pickup_reminder', {
+      p_id: pieceId,
+      // Riyadh-local, matching the original updatePiece(id, {
+      // lastNotificationDate: todayDateStr }) exactly — same reasoning as
+      // markPieceCollected()'s p_collection_date above.
+      p_reminder_date: todayDateStr
+    });
+    if (error || !ok) {
+      return { success: false, error: error?.message || 'This piece is no longer awaiting pickup.' };
+    }
+
+    await fetchOverduePickupPieces();
+    return { success: true };
+  };
+
   /**
    * Signs a staff member in with an email address or a phone number in any
    * format. There is no default staff account: a failed match signs nobody in.
@@ -3351,6 +3506,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       addQueueItem, addStaffNotification, updateQueueStatus, updateQueueItem, reorderQueue, returnQueueItemToWaiting,
       assignQueueTables, seatQueueItem, changeQueueItemTables,
       updatePieceStatus, addPiece, updatePiece, markNotificationAsRead, clearAllNotifications,
+      overduePickupPieces, markPieceCollected, sendPickupReminder,
       runAllTests, toggleTestResult,
       isTestRunning, testProgress, testsPassing,
       addEvent, updateEvent, deleteEvent,
