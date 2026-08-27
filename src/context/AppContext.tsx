@@ -2731,8 +2731,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [overduePickupPieces, setOverduePickupPieces] = useState<PotteryPiece[]>([]);
 
   const fetchOverduePickupPieces = async () => {
-    if (!supabase) return;
-    const { data, error } = await supabase.rpc('get_overdue_pickup_pieces');
+    // Staff-only (see the useEffect below, gated on currentStaffId): must go
+    // through the staff auth client, not the customer one. A staff session
+    // with no simultaneous customer sign-in has no session at all on
+    // `supabase`, so calling it directly here sent every request
+    // unauthenticated — PostgREST treated it as anon, and 0015's own
+    // `revoke ... from anon` correctly rejected it with a 401.
+    const client = getDataClient();
+    if (!client) return;
+    const { data, error } = await client.rpc('get_overdue_pickup_pieces');
     if (error) {
       console.error('get_overdue_pickup_pieces failed:', error.message);
       return;
@@ -2765,10 +2772,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const markPieceCollected = async (piece: {
     id: string; name: string; pieceCode?: string; customerName: string; customerPhone: string;
   }) => {
-    if (!supabase) return { success: false, error: SUPABASE_NOT_CONFIGURED };
+    // Staff-only (see AdminDashboardSection.tsx, its only caller) — must go
+    // through the staff auth client, not the customer one. Same reasoning
+    // as fetchOverduePickupPieces() above.
+    const client = getDataClient();
+    if (!client) return { success: false, error: SUPABASE_NOT_CONFIGURED };
 
     const riyadhTime = `${getRiyadhDateString()} ${getRiyadhNow().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
-    const { data: ok, error } = await supabase.rpc('mark_piece_collected', {
+    const { data: ok, error } = await client.rpc('mark_piece_collected', {
       p_id: piece.id,
       // Riyadh-local, matching the original updatePiece(id, { collectionDate:
       // todayDateStr }) exactly — Postgres's own current_date would reflect
@@ -2843,9 +2854,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const sendPickupReminder = async (piece: {
     id: string; name: string; pieceCode?: string; customerName: string; customerPhone: string;
   }): Promise<SendPickupReminderOutcome> => {
-    if (!supabase) return { outcome: 'failed', error: SUPABASE_NOT_CONFIGURED };
+    // Staff-only (see AdminDashboardSection.tsx, its only caller) — must go
+    // through the staff auth client, not the customer one. Same reasoning
+    // as fetchOverduePickupPieces() above. (The send-sms call further down
+    // already correctly used supabaseStaff — only this RPC call was wrong.)
+    const client = getDataClient();
+    if (!client) return { outcome: 'failed', error: SUPABASE_NOT_CONFIGURED };
 
-    const { data: result, error } = await supabase.rpc('send_piece_pickup_reminder', {
+    const { data: result, error } = await client.rpc('send_piece_pickup_reminder', {
       p_id: piece.id,
       // Riyadh-local, matching the original updatePiece(id, {
       // lastNotificationDate: todayDateStr }) exactly — same reasoning as
