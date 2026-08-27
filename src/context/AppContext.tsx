@@ -2357,6 +2357,59 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isRead: false,
         highlighted: status === 'Ready for Pickup'
       });
+
+      // SMS (SMS integration, Chunk 3) — Ready for Pickup and Broken only,
+      // for now. Gated behind the exact same notifyCustomer/dedup checks
+      // above: this code only runs once both of those early-returns have
+      // already been passed, so a suppressed stage or a duplicate call
+      // within 60s never sends a text either — there is no separate
+      // SMS-specific guard that could drift out of sync with the in-app
+      // one. Reuses friendlyMsg as-is (no separate SMS copy to keep in
+      // sync) and passes the phone through unnormalized — send-sms's own
+      // shared helper already normalizes it, same as sendPickupReminder().
+      //
+      // Deliberately not awaited: this function's one real caller
+      // (AdminPiecesTrackingSection.tsx's handleUpdatePieceStatus) awaits
+      // it before showing its own status-change toast, which doesn't
+      // display any SMS outcome — that toast should not wait on an SMS
+      // round-trip whose result it can't show. The status change and both
+      // notification writes above have already committed regardless of
+      // what happens next; failures here are logged, never thrown, never
+      // surfaced as a rolled-back status change.
+      if (status === 'Ready for Pickup' || status === 'Broken') {
+        if (!piece.customerPhone) {
+          console.error(`updatePieceStatus: SMS for piece ${piece.id} (${status}) not sent — no phone number on file.`);
+        } else {
+          const smsClient = supabaseStaff;
+          if (!smsClient) {
+            console.error(`updatePieceStatus: SMS for piece ${piece.id} (${status}) not sent — staff client not configured.`);
+          } else {
+            (async () => {
+              try {
+                const { data: smsData, error: smsError } = await smsClient.functions.invoke('send-sms', {
+                  body: { phone: piece.customerPhone, message: friendlyMsg }
+                });
+                if (smsError) {
+                  let reason = smsError.message || 'unknown error';
+                  if (smsError instanceof FunctionsHttpError) {
+                    try {
+                      const body = await smsError.context.json();
+                      reason = (body as { error?: string })?.error || reason;
+                    } catch {
+                      /* keep the generic reason */
+                    }
+                  }
+                  console.error(`updatePieceStatus: SMS for piece ${piece.id} (${status}) failed:`, reason);
+                } else if (!(smsData as { success?: boolean })?.success) {
+                  console.error(`updatePieceStatus: SMS for piece ${piece.id} (${status}) was not confirmed sent:`, (smsData as { error?: string })?.error);
+                }
+              } catch (err: any) {
+                console.error(`updatePieceStatus: SMS for piece ${piece.id} (${status}) failed:`, err?.message || err);
+              }
+            })();
+          }
+        }
+      }
     }
   };
 
