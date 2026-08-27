@@ -111,6 +111,20 @@ export type ProvisionStaffOutcome =
   | { kind: 'response'; response: ProvisionStaffResponse }
   | { kind: 'network_error'; message: string };
 
+/**
+ * What sendPickupReminder() actually returns (SMS integration, Chunk 2).
+ * 'sent' always means send_piece_pickup_reminder's database write already
+ * committed — an SMS failure past that point can never roll it back, it
+ * only means smsSent is false. 'cooldown' means nothing was written and
+ * no SMS was attempted; 'failed' means the RPC itself didn't succeed
+ * (network error, or the piece no longer qualifies at all).
+ */
+export type SendPickupReminderOutcome =
+  | { outcome: 'sent'; smsSent: true }
+  | { outcome: 'sent'; smsSent: false; smsError: string }
+  | { outcome: 'cooldown' }
+  | { outcome: 'failed'; error: string };
+
 interface AppContextType {
   // Navigation
   /**
@@ -347,7 +361,9 @@ interface AppContextType {
   markPieceCollected: (piece: {
     id: string; name: string; pieceCode?: string; customerName: string; customerPhone: string;
   }) => Promise<{ success: boolean; error?: string }>;
-  sendPickupReminder: (pieceId: string) => Promise<{ success: boolean; error?: string }>;
+  sendPickupReminder: (piece: {
+    id: string; name: string; pieceCode?: string; customerName: string; customerPhone: string;
+  }) => Promise<SendPickupReminderOutcome>;
   markNotificationAsRead: (id: string) => Promise<void>;
   clearAllNotifications: (type?: 'customer' | 'staff') => Promise<void>;
   runAllTests: () => void;
@@ -2824,22 +2840,75 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
    * existing behavior exactly: only last_notification_date changes, no
    * notification row (there never was one for this action).
    */
-  const sendPickupReminder = async (pieceId: string) => {
-    if (!supabase) return { success: false, error: SUPABASE_NOT_CONFIGURED };
+  const sendPickupReminder = async (piece: {
+    id: string; name: string; pieceCode?: string; customerName: string; customerPhone: string;
+  }): Promise<SendPickupReminderOutcome> => {
+    if (!supabase) return { outcome: 'failed', error: SUPABASE_NOT_CONFIGURED };
 
-    const { data: ok, error } = await supabase.rpc('send_piece_pickup_reminder', {
-      p_id: pieceId,
+    const { data: result, error } = await supabase.rpc('send_piece_pickup_reminder', {
+      p_id: piece.id,
       // Riyadh-local, matching the original updatePiece(id, {
       // lastNotificationDate: todayDateStr }) exactly — same reasoning as
-      // markPieceCollected()'s p_collection_date above.
+      // markPieceCollected()'s p_collection_date above. Also what 0016's
+      // cooldown compares against, so "today" here and "today" in the
+      // cooldown check can never disagree.
       p_reminder_date: todayDateStr
     });
-    if (error || !ok) {
-      return { success: false, error: error?.message || 'This piece is no longer awaiting pickup.' };
+
+    if (error || result === 'not_found') {
+      return { outcome: 'failed', error: error?.message || 'This piece is no longer awaiting pickup.' };
     }
 
+    if (result === 'cooldown') {
+      // Nothing was written and no SMS was attempted — surfaced as its
+      // own outcome, not a failure, so the UI doesn't tell staff
+      // something went wrong when nothing did.
+      return { outcome: 'cooldown' };
+    }
+
+    // result === 'sent': the database write already committed. Nothing
+    // below can undo it — an SMS failure past this point only changes
+    // smsSent, never the outcome kind, matching the "fire-and-forget,
+    // don't block the primary action" posture from the design phase.
     await fetchOverduePickupPieces();
-    return { success: true };
+
+    if (!piece.customerPhone) {
+      return { outcome: 'sent', smsSent: false, smsError: 'No phone number on file for this customer.' };
+    }
+    if (!supabaseStaff) {
+      return { outcome: 'sent', smsSent: false, smsError: SUPABASE_NOT_CONFIGURED };
+    }
+
+    const message = `Hi ${piece.customerName}, this is a reminder that your pottery piece "${piece.name}" is ready for pickup at Arty Café! Please come collect it at the café shelf.`;
+
+    try {
+      const { data: smsData, error: smsError } = await supabaseStaff.functions.invoke('send-sms', {
+        body: { phone: piece.customerPhone, message }
+      });
+
+      if (!smsError) {
+        const response = smsData as { success: boolean; error?: string };
+        return response.success
+          ? { outcome: 'sent', smsSent: true }
+          : { outcome: 'sent', smsSent: false, smsError: response.error || 'The SMS provider could not deliver this message.' };
+      }
+
+      if (smsError instanceof FunctionsHttpError) {
+        try {
+          const body = await smsError.context.json();
+          const response = body as { success: boolean; error?: string };
+          return { outcome: 'sent', smsSent: false, smsError: response.error || 'The SMS provider could not deliver this message.' };
+        } catch {
+          return { outcome: 'sent', smsSent: false, smsError: 'The server returned an unexpected response.' };
+        }
+      }
+
+      // FunctionsRelayError / FunctionsFetchError / anything else the SDK
+      // throws before a structured answer exists.
+      return { outcome: 'sent', smsSent: false, smsError: smsError.message || 'Could not reach the SMS server. Check your connection and try again.' };
+    } catch (err: any) {
+      return { outcome: 'sent', smsSent: false, smsError: err?.message || 'Could not reach the SMS server. Check your connection and try again.' };
+    }
   };
 
   /**

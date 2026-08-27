@@ -164,11 +164,28 @@ export const AdminDashboardSection: React.FC = () => {
     }
   };
 
-  // Handle Send Pickup Reminder — via sendPickupReminder(), same reasoning.
+  // Handle Send Pickup Reminder — via sendPickupReminder(), same reasoning
+  // as handleMarkCollected above. Now also fires a real SMS (SMS
+  // integration, Chunk 2): four distinct outcomes are surfaced so staff
+  // never mistake a cooldown or a text-only failure for the reminder not
+  // having been recorded at all.
   const handleSendReminder = async (piece: PotteryPiece & { daysWaiting: number }) => {
-    const result = await sendPickupReminder(piece.id);
-    if (result.success) {
-      showToast(`Pickup reminder notification sent to ${piece.customerName} for piece ${piece.pieceCode || piece.id}.`);
+    const result = await sendPickupReminder({
+      id: piece.id,
+      name: piece.name,
+      pieceCode: piece.pieceCode,
+      customerName: piece.customerName,
+      customerPhone: piece.customerPhone
+    });
+
+    if (result.outcome === 'sent') {
+      if (result.smsSent === true) {
+        showToast(`Pickup reminder texted to ${piece.customerName} for piece ${piece.pieceCode || piece.id}.`);
+      } else {
+        showToast(`Reminder recorded for ${piece.pieceCode || piece.id}, but the text message could not be sent: ${result.smsError}`);
+      }
+    } else if (result.outcome === 'cooldown') {
+      showToast(`${piece.customerName} was already reminded today for piece ${piece.pieceCode || piece.id}.`);
     } else {
       showToast(result.error || 'Could not send a reminder for this piece. Please try again.');
     }
