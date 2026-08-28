@@ -2263,6 +2263,177 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await db.queue.bulkAdd(newQueue);
   };
 
+  /**
+   * Computes the customer-facing message for a status, applies the
+   * notifyCustomer/dedup gates, writes both notification rows (customer
+   * + staff), and fires SMS for the statuses that have it wired (Ready
+   * for Pickup, Broken, Created, First Burn and Colored — Collected
+   * stays in-app-only, unchanged). Shared by updatePieceStatus() and
+   * addPiece(): a piece's very first status, set at creation, never
+   * goes through updatePieceStatus() (addPiece() inserts it directly —
+   * see the SMS Chunk 4 diagnostic), so both callers go through this
+   * exact same logic rather than addPiece() reimplementing it.
+   *
+   * Deliberately does NOT touch piece_history — each caller already
+   * writes its own entry with its own correct reason text
+   * (addPiece()'s "Piece manually logged or initialized" vs.
+   * updatePieceStatus()'s caller-supplied reason); a second write here
+   * would either duplicate or contradict that.
+   */
+  const notifyPieceStatusChange = async (
+    piece: PotteryPiece,
+    status: PotteryPiece['status'],
+    performerUser: string = 'Staff',
+    reason?: string
+  ) => {
+    // Generate CUSTOMER notification
+    let friendlyMsg = `Your piece "${piece.name}" has been updated to "${status}".`;
+    if (status === 'Ready for Pickup') {
+      friendlyMsg = `Your beautiful pottery piece "${piece.name}" is ready for pickup! Please come pick it up at the café shelf.`;
+    } else if (status === 'Collected') {
+      friendlyMsg = `Thank you for picking up your piece "${piece.name}"! We hope you loved crafting it at Arty Café.`;
+    } else if (status === 'First Burn and Colored') {
+      friendlyMsg = `Your piece "${piece.name}" has been through its first burn and is now being coloured.`;
+    } else if (status === 'Created') {
+      // expected_ready_date is a required field on the "Log Piece
+      // Manually" form, but degrade gracefully rather than trust that
+      // unconditionally — a missing/invalid value (data predating the
+      // field, or any future bypass of that form) falls back to the
+      // original date-less sentence instead of interpolating "" or
+      // "Invalid Date" into it.
+      const formattedReadyDate = piece.expectedReadyDate
+        ? formatDate(piece.expectedReadyDate, { year: 'numeric', month: 'long', day: 'numeric', timeZone: RIYADH_TIME_ZONE })
+        : '';
+      friendlyMsg = formattedReadyDate
+        ? `Your piece "${piece.name}" has been created and is now resting before its first burn. We expect it to be ready around ${formattedReadyDate}.`
+        : `Your piece "${piece.name}" has been created and is now resting before its first burn.`;
+    } else if (status === 'Broken') {
+      // States the outcome plainly, without exposing the internal damage note.
+      friendlyMsg = `Unfortunately, your pottery piece ${piece.pieceCode || piece.id} was damaged and has been marked as broken. Please contact Arty Café so our team can assist you with a replacement.`;
+    }
+
+    // Stages can be configured not to notify the customer at all.
+    const stageConfig = (await db.pipelineStages.toArray()).find(x => x.name === status);
+    if (stageConfig && stageConfig.notifyCustomer === false) {
+      return;
+    }
+
+    // Exactly one customer notification per status change for this piece.
+    // A brand-new piece's id has never appeared in a notification before
+    // (ids are never reused — see allocatePieceIdentifier's own taken-set
+    // check), so this can only ever find 0 rows for addPiece()'s call —
+    // it cannot suppress a piece's very first notification.
+    const alreadyNotified = await db.notifications
+      .filter(n =>
+        n.type === 'customer' &&
+        n.pieceId === piece.id &&
+        n.newStatus === status &&
+        // Same change, re-applied within a short window.
+        Date.now() - new Date(n.timestamp).getTime() < 60 * 1000
+      )
+      .count();
+
+    if (alreadyNotified > 0) {
+      return;
+    }
+
+    // Exactly one customer notification, addressed to this piece's customer.
+    await db.notifications.add({
+      id: `NOTIF-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      type: 'customer',
+      customerPhone: piece.customerPhone,
+      title: status === 'Ready for Pickup'
+        ? 'Piece Ready for Pickup!'
+        : status === 'Broken'
+          ? `Piece ${piece.pieceCode || piece.id} marked as broken`
+          : `Piece Status Update: ${status}`,
+      message: friendlyMsg,
+      pieceId: piece.id,
+      pieceName: piece.name,
+      newStatus: status,
+      timestamp: new Date().toISOString(),
+      isRead: false,
+      highlighted: status === 'Ready for Pickup'
+    });
+
+    // Generate STAFF notification
+    await db.notifications.add({
+      id: `NOTIF-STAFF-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      type: 'staff',
+      title: status === 'Ready for Pickup'
+        ? 'Piece Ready for Pickup Alert'
+        : status === 'Broken'
+          ? 'Piece Marked Broken'
+          : 'Piece Status Shifted',
+      message: `Piece ${piece.id} (${piece.customerName}) moved to "${status}" by ${performerUser}.${reason ? ` Reason: ${reason}` : ''}`,
+      pieceId: piece.id,
+      pieceName: piece.name,
+      newStatus: status,
+      performedBy: performerUser,
+      timestamp: new Date().toISOString(),
+      isRead: false,
+      highlighted: status === 'Ready for Pickup'
+    });
+
+    // SMS (SMS integration, Chunk 3 + Chunk 4) — Ready for Pickup,
+    // Broken, Created, and First Burn and Colored only, for now
+    // (Collected still isn't wired). Gated behind the exact same
+    // notifyCustomer/dedup checks above: this code only runs once both
+    // of those early-returns have already been passed, so a suppressed
+    // stage or a duplicate call within 60s never sends a text either —
+    // there is no separate SMS-specific guard that could drift out of
+    // sync with the in-app one. Reuses friendlyMsg as-is (no separate
+    // SMS copy to keep in sync) and passes the phone through
+    // unnormalized — send-sms's own shared helper already normalizes
+    // it, same as sendPickupReminder().
+    //
+    // Deliberately not awaited: both of this helper's callers
+    // (updatePieceStatus(), and addPiece() as of this chunk) are awaited
+    // by their own callers before showing a status-change toast that
+    // doesn't display any SMS outcome — that toast should not wait on an
+    // SMS round-trip whose result it can't show. The status change and
+    // both notification writes above have already committed regardless
+    // of what happens next; failures here are logged, never thrown,
+    // never surfaced as a rolled-back status change.
+    if (
+      status === 'Ready for Pickup' || status === 'Broken' ||
+      status === 'Created' || status === 'First Burn and Colored'
+    ) {
+      if (!piece.customerPhone) {
+        console.error(`notifyPieceStatusChange: SMS for piece ${piece.id} (${status}) not sent — no phone number on file.`);
+      } else {
+        const smsClient = supabaseStaff;
+        if (!smsClient) {
+          console.error(`notifyPieceStatusChange: SMS for piece ${piece.id} (${status}) not sent — staff client not configured.`);
+        } else {
+          (async () => {
+            try {
+              const { data: smsData, error: smsError } = await smsClient.functions.invoke('send-sms', {
+                body: { phone: piece.customerPhone, message: friendlyMsg }
+              });
+              if (smsError) {
+                let reason = smsError.message || 'unknown error';
+                if (smsError instanceof FunctionsHttpError) {
+                  try {
+                    const body = await smsError.context.json();
+                    reason = (body as { error?: string })?.error || reason;
+                  } catch {
+                    /* keep the generic reason */
+                  }
+                }
+                console.error(`notifyPieceStatusChange: SMS for piece ${piece.id} (${status}) failed:`, reason);
+              } else if (!(smsData as { success?: boolean })?.success) {
+                console.error(`notifyPieceStatusChange: SMS for piece ${piece.id} (${status}) was not confirmed sent:`, (smsData as { error?: string })?.error);
+              }
+            } catch (err: any) {
+              console.error(`notifyPieceStatusChange: SMS for piece ${piece.id} (${status}) failed:`, err?.message || err);
+            }
+          })();
+        }
+      }
+    }
+  };
+
   const updatePieceStatus = async (id: string, status: PotteryPiece['status'], performerUser: string = 'Staff', reason?: string) => {
     const piece = await db.pieces.get(id);
     if (piece) {
@@ -2285,148 +2456,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // overwritten by a concurrent update the way a JSON column could.
       await db.pieceHistory.add({ pieceId: id, ...historyEntry });
 
-      // Generate CUSTOMER notification
-      let friendlyMsg = `Your piece "${piece.name}" has been updated to "${status}".`;
-      if (status === 'Ready for Pickup') {
-        friendlyMsg = `Your beautiful pottery piece "${piece.name}" is ready for pickup! Please come pick it up at the café shelf.`;
-      } else if (status === 'Collected') {
-        friendlyMsg = `Thank you for picking up your piece "${piece.name}"! We hope you loved crafting it at Arty Café.`;
-      } else if (status === 'First Burn and Colored') {
-        friendlyMsg = `Your piece "${piece.name}" has been through its first burn and is now being coloured.`;
-      } else if (status === 'Created') {
-        // expected_ready_date is a required field on the "Log Piece
-        // Manually" form, but degrade gracefully rather than trust that
-        // unconditionally — a missing/invalid value (data predating the
-        // field, or any future bypass of that form) falls back to the
-        // original date-less sentence instead of interpolating "" or
-        // "Invalid Date" into it.
-        const formattedReadyDate = piece.expectedReadyDate
-          ? formatDate(piece.expectedReadyDate, { year: 'numeric', month: 'long', day: 'numeric', timeZone: RIYADH_TIME_ZONE })
-          : '';
-        friendlyMsg = formattedReadyDate
-          ? `Your piece "${piece.name}" has been created and is now resting before its first burn. We expect it to be ready around ${formattedReadyDate}.`
-          : `Your piece "${piece.name}" has been created and is now resting before its first burn.`;
-      } else if (status === 'Broken') {
-        // States the outcome plainly, without exposing the internal damage note.
-        friendlyMsg = `Unfortunately, your pottery piece ${piece.pieceCode || piece.id} was damaged and has been marked as broken. Please contact Arty Café so our team can assist you with a replacement.`;
-      }
-
-      // Stages can be configured not to notify the customer at all.
-      const stageConfig = (await db.pipelineStages.toArray()).find(x => x.name === status);
-      if (stageConfig && stageConfig.notifyCustomer === false) {
-        return;
-      }
-
-      // Exactly one customer notification per status change for this piece.
-      const alreadyNotified = await db.notifications
-        .filter(n =>
-          n.type === 'customer' &&
-          n.pieceId === piece.id &&
-          n.newStatus === status &&
-          // Same change, re-applied within a short window.
-          Date.now() - new Date(n.timestamp).getTime() < 60 * 1000
-        )
-        .count();
-
-      if (alreadyNotified > 0) {
-        return;
-      }
-
-      // Exactly one customer notification, addressed to this piece's customer.
-      await db.notifications.add({
-        id: `NOTIF-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-        type: 'customer',
-        customerPhone: piece.customerPhone,
-        title: status === 'Ready for Pickup'
-          ? 'Piece Ready for Pickup!'
-          : status === 'Broken'
-            ? `Piece ${piece.pieceCode || piece.id} marked as broken`
-            : `Piece Status Update: ${status}`,
-        message: friendlyMsg,
-        pieceId: piece.id,
-        pieceName: piece.name,
-        newStatus: status,
-        timestamp: new Date().toISOString(),
-        isRead: false,
-        highlighted: status === 'Ready for Pickup'
-      });
-
-      // Generate STAFF notification
-      await db.notifications.add({
-        id: `NOTIF-STAFF-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-        type: 'staff',
-        title: status === 'Ready for Pickup'
-          ? 'Piece Ready for Pickup Alert'
-          : status === 'Broken'
-            ? 'Piece Marked Broken'
-            : 'Piece Status Shifted',
-        message: `Piece ${piece.id} (${piece.customerName}) moved to "${status}" by ${performerUser}.${reason ? ` Reason: ${reason}` : ''}`,
-        pieceId: piece.id,
-        pieceName: piece.name,
-        newStatus: status,
-        performedBy: performerUser,
-        timestamp: new Date().toISOString(),
-        isRead: false,
-        highlighted: status === 'Ready for Pickup'
-      });
-
-      // SMS (SMS integration, Chunk 3 + Chunk 4) — Ready for Pickup,
-      // Broken, Created, and First Burn and Colored only, for now
-      // (Collected still isn't wired). Gated behind the exact same
-      // notifyCustomer/dedup checks above: this code only runs once both
-      // of those early-returns have already been passed, so a suppressed
-      // stage or a duplicate call within 60s never sends a text either —
-      // there is no separate SMS-specific guard that could drift out of
-      // sync with the in-app one. Reuses friendlyMsg as-is (no separate
-      // SMS copy to keep in sync) and passes the phone through
-      // unnormalized — send-sms's own shared helper already normalizes
-      // it, same as sendPickupReminder().
-      //
-      // Deliberately not awaited: this function's one real caller
-      // (AdminPiecesTrackingSection.tsx's handleUpdatePieceStatus) awaits
-      // it before showing its own status-change toast, which doesn't
-      // display any SMS outcome — that toast should not wait on an SMS
-      // round-trip whose result it can't show. The status change and both
-      // notification writes above have already committed regardless of
-      // what happens next; failures here are logged, never thrown, never
-      // surfaced as a rolled-back status change.
-      if (
-        status === 'Ready for Pickup' || status === 'Broken' ||
-        status === 'Created' || status === 'First Burn and Colored'
-      ) {
-        if (!piece.customerPhone) {
-          console.error(`updatePieceStatus: SMS for piece ${piece.id} (${status}) not sent — no phone number on file.`);
-        } else {
-          const smsClient = supabaseStaff;
-          if (!smsClient) {
-            console.error(`updatePieceStatus: SMS for piece ${piece.id} (${status}) not sent — staff client not configured.`);
-          } else {
-            (async () => {
-              try {
-                const { data: smsData, error: smsError } = await smsClient.functions.invoke('send-sms', {
-                  body: { phone: piece.customerPhone, message: friendlyMsg }
-                });
-                if (smsError) {
-                  let reason = smsError.message || 'unknown error';
-                  if (smsError instanceof FunctionsHttpError) {
-                    try {
-                      const body = await smsError.context.json();
-                      reason = (body as { error?: string })?.error || reason;
-                    } catch {
-                      /* keep the generic reason */
-                    }
-                  }
-                  console.error(`updatePieceStatus: SMS for piece ${piece.id} (${status}) failed:`, reason);
-                } else if (!(smsData as { success?: boolean })?.success) {
-                  console.error(`updatePieceStatus: SMS for piece ${piece.id} (${status}) was not confirmed sent:`, (smsData as { error?: string })?.error);
-                }
-              } catch (err: any) {
-                console.error(`updatePieceStatus: SMS for piece ${piece.id} (${status}) failed:`, err?.message || err);
-              }
-            })();
-          }
-        }
-      }
+      await notifyPieceStatusChange(piece, status, performerUser, reason);
     }
   };
 
@@ -2495,6 +2525,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       user: 'Staff',
       reason: 'Piece manually logged or initialized'
     });
+
+    // A piece's initial status (Created, in practice today) never goes
+    // through updatePieceStatus() — this is the only place it's ever
+    // set — so the notification/SMS pipeline is invoked here directly,
+    // via the same shared helper updatePieceStatus() uses. Does not
+    // duplicate the piece_history entry above; the helper only handles
+    // notifications and SMS.
+    await notifyPieceStatusChange(newPiece, newPiece.status);
   };
 
   const updatePiece = async (id: string, updates: Partial<PotteryPiece>) => {
