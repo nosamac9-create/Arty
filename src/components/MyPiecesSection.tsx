@@ -310,7 +310,7 @@ export const MyPiecesSection: React.FC = () => {
                   <div className="mt-4 p-3 rounded-2xl bg-red-50 border border-red-200 text-start">
                     <p className="text-xs font-semibold text-red-800">Status: Broken</p>
                     <p className="text-[11px] text-red-700 mt-0.5 leading-relaxed">
-                      Unfortunately this piece was damaged. Please contact Arty Café so our team can assist you.
+                      Unfortunately this piece was damaged. Please contact Arty Café so our team can assist you with a replacement.
                     </p>
                   </div>
                 )}

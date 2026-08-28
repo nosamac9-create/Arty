@@ -2296,7 +2296,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         friendlyMsg = `Your piece "${piece.name}" has been created and is now resting before its first burn.`;
       } else if (status === 'Broken') {
         // States the outcome plainly, without exposing the internal damage note.
-        friendlyMsg = `Unfortunately, your pottery piece ${piece.pieceCode || piece.id} was damaged and has been marked as broken. Please contact Arty Café so our team can assist you.`;
+        friendlyMsg = `Unfortunately, your pottery piece ${piece.pieceCode || piece.id} was damaged and has been marked as broken. Please contact Arty Café so our team can assist you with a replacement.`;
       }
 
       // Stages can be configured not to notify the customer at all.
