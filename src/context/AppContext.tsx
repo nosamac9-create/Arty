@@ -49,6 +49,7 @@ import {
   getRelativeRiyadhDateStr 
 } from '../utils/dateUtils';
 import { validateSaudiPhone, normaliseSaudiPhone, normalisePhone } from '../utils/phoneUtils';
+import { formatDate, RIYADH_TIME_ZONE } from '../utils/calendarConfig';
 import { getConfiguredTables, computeTableStates, validateTableSelection } from '../utils/tableSeatingUtils';
 
 export {
@@ -2293,7 +2294,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       } else if (status === 'First Burn and Colored') {
         friendlyMsg = `Your piece "${piece.name}" has been through its first burn and is now being coloured.`;
       } else if (status === 'Created') {
-        friendlyMsg = `Your piece "${piece.name}" has been created and is now resting before its first burn.`;
+        // expected_ready_date is a required field on the "Log Piece
+        // Manually" form, but degrade gracefully rather than trust that
+        // unconditionally — a missing/invalid value (data predating the
+        // field, or any future bypass of that form) falls back to the
+        // original date-less sentence instead of interpolating "" or
+        // "Invalid Date" into it.
+        const formattedReadyDate = piece.expectedReadyDate
+          ? formatDate(piece.expectedReadyDate, { year: 'numeric', month: 'long', day: 'numeric', timeZone: RIYADH_TIME_ZONE })
+          : '';
+        friendlyMsg = formattedReadyDate
+          ? `Your piece "${piece.name}" has been created and is now resting before its first burn. We expect it to be ready around ${formattedReadyDate}.`
+          : `Your piece "${piece.name}" has been created and is now resting before its first burn.`;
       } else if (status === 'Broken') {
         // States the outcome plainly, without exposing the internal damage note.
         friendlyMsg = `Unfortunately, your pottery piece ${piece.pieceCode || piece.id} was damaged and has been marked as broken. Please contact Arty Café so our team can assist you with a replacement.`;
@@ -2358,15 +2370,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         highlighted: status === 'Ready for Pickup'
       });
 
-      // SMS (SMS integration, Chunk 3) — Ready for Pickup and Broken only,
-      // for now. Gated behind the exact same notifyCustomer/dedup checks
-      // above: this code only runs once both of those early-returns have
-      // already been passed, so a suppressed stage or a duplicate call
-      // within 60s never sends a text either — there is no separate
-      // SMS-specific guard that could drift out of sync with the in-app
-      // one. Reuses friendlyMsg as-is (no separate SMS copy to keep in
-      // sync) and passes the phone through unnormalized — send-sms's own
-      // shared helper already normalizes it, same as sendPickupReminder().
+      // SMS (SMS integration, Chunk 3 + Chunk 4) — Ready for Pickup,
+      // Broken, Created, and First Burn and Colored only, for now
+      // (Collected still isn't wired). Gated behind the exact same
+      // notifyCustomer/dedup checks above: this code only runs once both
+      // of those early-returns have already been passed, so a suppressed
+      // stage or a duplicate call within 60s never sends a text either —
+      // there is no separate SMS-specific guard that could drift out of
+      // sync with the in-app one. Reuses friendlyMsg as-is (no separate
+      // SMS copy to keep in sync) and passes the phone through
+      // unnormalized — send-sms's own shared helper already normalizes
+      // it, same as sendPickupReminder().
       //
       // Deliberately not awaited: this function's one real caller
       // (AdminPiecesTrackingSection.tsx's handleUpdatePieceStatus) awaits
@@ -2376,7 +2390,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // notification writes above have already committed regardless of
       // what happens next; failures here are logged, never thrown, never
       // surfaced as a rolled-back status change.
-      if (status === 'Ready for Pickup' || status === 'Broken') {
+      if (
+        status === 'Ready for Pickup' || status === 'Broken' ||
+        status === 'Created' || status === 'First Burn and Colored'
+      ) {
         if (!piece.customerPhone) {
           console.error(`updatePieceStatus: SMS for piece ${piece.id} (${status}) not sent — no phone number on file.`);
         } else {
