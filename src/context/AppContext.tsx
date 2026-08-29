@@ -1807,6 +1807,80 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return newBooking;
   };
 
+  /**
+   * Computes the refunded/not-refunded message, writes a customer
+   * notification row, and fires SMS — for cancelBooking() only (booking
+   * cancellation notifications). Not shared with updateQueueStatus()'s
+   * separate booking-cancel-sync branch or the two automatic
+   * cancellation effects — neither has a refund determination of its
+   * own, and both are explicitly out of scope for this chunk.
+   *
+   * No time-based dedup, unlike notifyPieceStatusChange(): cancellation
+   * is a one-way, terminal transition. cancelBooking()'s own
+   * `booking.status !== 'Cancelled'` guard means this can never run
+   * twice for the same booking once the first call's write has
+   * committed — not just within a short window, the way a piece's
+   * status can legitimately be re-applied later. The only theoretical
+   * duplicate risk is a genuine concurrent double-click racing past
+   * that guard before either write commits, which is a pre-existing
+   * characteristic of cancelBooking() itself, unrelated to
+   * notifications and out of this chunk's scope to address.
+   */
+  const notifyBookingCancellation = async (booking: Booking, refunded: boolean) => {
+    const formattedDate = formatDate(booking.date, { year: 'numeric', month: 'long', day: 'numeric', timeZone: RIYADH_TIME_ZONE });
+    const friendlyMsg = refunded
+      ? `Your booking for "${booking.workshopTitle}" on ${formattedDate} has been cancelled, and ${booking.totalPrice} SAR has been refunded. We hope to see you again soon!`
+      : `Your booking for "${booking.workshopTitle}" on ${formattedDate} has been cancelled. Per our cancellation policy, this booking was not eligible for a refund. Please contact Arty Café with any questions.`;
+
+    await db.notifications.add({
+      id: `NOTIF-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      type: 'customer',
+      customerPhone: booking.customerPhone,
+      title: refunded ? 'Booking Cancelled — Refunded' : 'Booking Cancelled',
+      message: friendlyMsg,
+      timestamp: new Date().toISOString(),
+      isRead: false,
+      highlighted: false
+    });
+
+    // SMS — same established pattern as notifyPieceStatusChange():
+    // fire-and-forget, phone passed through unnormalized (send-sms's
+    // shared helper normalizes it), failures logged only, never thrown,
+    // never blocking cancelBooking()'s own already-committed writes.
+    if (!booking.customerPhone) {
+      console.error(`notifyBookingCancellation: SMS for booking ${booking.id} not sent — no phone number on file.`);
+      return;
+    }
+    const smsClient = supabaseStaff;
+    if (!smsClient) {
+      console.error(`notifyBookingCancellation: SMS for booking ${booking.id} not sent — staff client not configured.`);
+      return;
+    }
+    (async () => {
+      try {
+        const { data: smsData, error: smsError } = await smsClient.functions.invoke('send-sms', {
+          body: { phone: booking.customerPhone, message: friendlyMsg }
+        });
+        if (smsError) {
+          let reason = smsError.message || 'unknown error';
+          if (smsError instanceof FunctionsHttpError) {
+            try {
+              const body = await smsError.context.json();
+              reason = (body as { error?: string })?.error || reason;
+            } catch {
+              /* keep the generic reason */
+            }
+          }
+          console.error(`notifyBookingCancellation: SMS for booking ${booking.id} failed:`, reason);
+        } else if (!(smsData as { success?: boolean })?.success) {
+          console.error(`notifyBookingCancellation: SMS for booking ${booking.id} was not confirmed sent:`, (smsData as { error?: string })?.error);
+        }
+      } catch (err: any) {
+        console.error(`notifyBookingCancellation: SMS for booking ${booking.id} failed:`, err?.message || err);
+      }
+    })();
+  };
+
   const cancelBooking = async (id: string, user: string = 'Staff', paymentStatusUpdate?: 'Refunded' | 'Paid' | 'Unpaid' | 'Deposit Paid') => {
     const booking = await db.bookings.get(id);
     if (booking && booking.status !== 'Cancelled') {
@@ -1867,6 +1941,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // Seats go back in one clamped Postgres statement.
         await releaseSeats(booking.id);
       });
+
+      await notifyBookingCancellation(booking, finalPaymentStatus === 'Refunded');
     }
   };
 
