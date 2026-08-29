@@ -773,6 +773,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
    * address the account lives at, and the RPC releases that solely to a caller
    * who has already proved they hold the password.
    */
+  /**
+   * After Supabase Auth has already authenticated `authUser` for `email`,
+   * resolves (and links, if needed) the customers row that session
+   * should attach to. Extracted so loginCustomer()'s claim_email retry
+   * below can share the exact same call sequence its ordinary password
+   * path already used, rather than keeping a second, driftable copy.
+   *
+   * No new security surface: linkAuthToCustomer() and
+   * resolve_customer_record() are unchanged, called with the same
+   * verified email either way — see loginCustomer()'s own doc comment
+   * for why that's safe.
+   */
+  const resolveCustomerForAuthUser = async (
+    email: string,
+    authUser: { id: string; user_metadata?: Record<string, unknown> | null }
+  ): Promise<CustomerAccount | undefined> => {
+    const linkedId = await linkAuthToCustomer(email, authUser.id);
+    let customer =
+      (await db.customers.toArray()).find(c => c.userId === authUser.id) ||
+      (linkedId ? await db.customers.get(linkedId) : undefined);
+
+    // An authenticated account with no customer record behind it. This
+    // happens when sign-up created the auth user but the record write
+    // did not land. Create and attach it now rather than leaving them
+    // locked out.
+    if (!customer && supabase) {
+      const { data: healedId } = await supabase.rpc('resolve_customer_record', {
+        p_name: (authUser.user_metadata as { name?: string } | null | undefined)?.name ?? null,
+        p_phone: null,
+        p_email: email,
+        p_auth_id: authUser.id,
+        p_source: 'Website Registration'
+      });
+      if (healedId) customer = await db.customers.get(healedId);
+    }
+
+    return customer;
+  };
+
   const loginCustomer = async (emailOrPhone: string, password?: string) => {
     const input = String(emailOrPhone || '').trim();
     if (!input) return { success: false, error: 'Email or phone number is required.' };
@@ -787,6 +826,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const { route, emailHint } = await resolveSignInRoute(input);
 
     if (route === 'claim_email') {
+      // 'claim_email' means the customers ROW is unclaimed
+      // (customer_signin_route() only ever looks at public.customers,
+      // never auth.users) — it does NOT mean no Auth account exists for
+      // this email. Those are independent facts: a real Auth account can
+      // already exist here (e.g. a registration that created the Auth
+      // user but never completed the resolve_customer_record link — the
+      // exact gap registerCustomer()'s own comment on that RPC call
+      // already documents), in which case its real password should
+      // still work rather than being refused before ever being tried.
+      //
+      // Scoped to an email-typed identifier only: with an email already
+      // in hand, signInWithPassword() can be attempted directly. A
+      // phone-typed identifier reaching this route has no equivalent
+      // path today — customer_signin_email() requires row.user_id to
+      // already be set (it reads auth.users through that id), so it
+      // cannot resolve the real email for a still-unclaimed row. That
+      // narrower case keeps today's "claim" messaging below, unchanged.
+      if (looksLikeEmail) {
+        const { data: attemptData, error: attemptError } = await supabase.auth.signInWithPassword({
+          email: typedEmail,
+          password
+        });
+
+        if (!attemptError && attemptData.user) {
+          // A real account existed after all. Attach it exactly the way
+          // an ordinary sign-in already does below — same
+          // linkAuthToCustomer()/resolve_customer_record() calls, same
+          // verified email, no new security surface: reaching this line
+          // already required knowing the account's real password,
+          // checked entirely by Supabase Auth's own credential store,
+          // unrelated to anything in the customers table.
+          const customer = await resolveCustomerForAuthUser(typedEmail, attemptData.user);
+          if (customer) {
+            signInCustomerRecord(customer);
+            return { success: true };
+          }
+          // Authenticated, but truly nothing to attach even after the
+          // heal attempt — fall through to the claim messaging below.
+        }
+        // Wrong password, or genuinely no Auth account for this email:
+        // fall through to the claim/setup messaging below, unchanged.
+      }
+
       return {
         success: false,
         needsPasswordSetup: true,
@@ -843,24 +925,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     // Resolve the shared record from the auth id, linking it on first sign-in.
-    const linkedId = await linkAuthToCustomer(email, data.user.id);
-    let customer =
-      (await db.customers.toArray()).find(c => c.userId === data.user!.id) ||
-      (linkedId ? await db.customers.get(linkedId) : undefined);
-
-    // An authenticated account with no customer record behind it. This happens
-    // when sign-up created the auth user but the record write did not land.
-    // Create and attach it now rather than leaving them locked out.
-    if (!customer) {
-      const { data: healedId } = await supabase.rpc('resolve_customer_record', {
-        p_name: data.user.user_metadata?.name ?? null,
-        p_phone: null,
-        p_email: email,
-        p_auth_id: data.user.id,
-        p_source: 'Website Registration'
-      });
-      if (healedId) customer = await db.customers.get(healedId);
-    }
+    const customer = await resolveCustomerForAuthUser(email, data.user);
 
     if (!customer) {
       return { success: false, error: 'No customer record is linked to this account yet.' };
