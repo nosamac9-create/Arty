@@ -2281,7 +2281,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
    * would either duplicate or contradict that.
    */
   const notifyPieceStatusChange = async (
-    piece: PotteryPiece,
+    // Narrowed to exactly the fields this function reads, not the full
+    // PotteryPiece — so markPieceCollected() (SMS integration, Chunk 6.5)
+    // can call this with the same display-fields-only shape it already
+    // receives from its caller, without needing a fresh db.pieces.get()
+    // that RLS would refuse for a caller without pieces-admin (see
+    // markPieceCollected()'s own doc comment). A full PotteryPiece (what
+    // updatePieceStatus() and addPiece() already pass) still satisfies
+    // this structurally — narrowing only widens what's accepted.
+    piece: Pick<PotteryPiece, 'id' | 'name' | 'pieceCode' | 'customerName' | 'customerPhone' | 'expectedReadyDate'>,
     status: PotteryPiece['status'],
     performerUser: string = 'Staff',
     reason?: string
@@ -2375,10 +2383,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       highlighted: status === 'Ready for Pickup'
     });
 
-    // SMS (SMS integration, Chunk 3 + Chunk 4) — Ready for Pickup,
-    // Broken, Created, and First Burn and Colored only, for now
-    // (Collected still isn't wired). Gated behind the exact same
-    // notifyCustomer/dedup checks above: this code only runs once both
+    // SMS (SMS integration, Chunk 3 + 4 + 6) — every status now:
+    // Ready for Pickup, Broken, Created, First Burn and Colored, and
+    // Collected. Gated behind the exact same notifyCustomer/dedup
+    // checks above: this code only runs once both
     // of those early-returns have already been passed, so a suppressed
     // stage or a duplicate call within 60s never sends a text either —
     // there is no separate SMS-specific guard that could drift out of
@@ -2397,7 +2405,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // never surfaced as a rolled-back status change.
     if (
       status === 'Ready for Pickup' || status === 'Broken' ||
-      status === 'Created' || status === 'First Burn and Colored'
+      status === 'Created' || status === 'First Burn and Colored' ||
+      status === 'Collected'
     ) {
       if (!piece.customerPhone) {
         console.error(`notifyPieceStatusChange: SMS for piece ${piece.id} (${status}) not sent — no phone number on file.`);
@@ -2903,53 +2912,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     await fetchOverduePickupPieces();
 
-    // Same notification behavior updatePieceStatus() already produces for
-    // the 'Collected' transition: skip if the stage is configured not to
-    // notify, dedupe within a minute, one customer row and one staff row.
-    const stageConfig = (await db.pipelineStages.toArray()).find(x => x.name === 'Collected');
-    if (stageConfig && stageConfig.notifyCustomer === false) {
-      return { success: true };
-    }
-
-    const alreadyNotified = await db.notifications
-      .filter(n =>
-        n.type === 'customer' &&
-        n.pieceId === piece.id &&
-        n.newStatus === 'Collected' &&
-        Date.now() - new Date(n.timestamp).getTime() < 60 * 1000
-      )
-      .count();
-    if (alreadyNotified > 0) {
-      return { success: true };
-    }
-
-    await db.notifications.add({
-      id: `NOTIF-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      type: 'customer',
-      customerPhone: piece.customerPhone,
-      title: 'Piece Status Update: Collected',
-      message: `Thank you for picking up your piece "${piece.name}"! We hope you loved crafting it at Arty Café.`,
-      pieceId: piece.id,
-      pieceName: piece.name,
-      newStatus: 'Collected',
-      timestamp: new Date().toISOString(),
-      isRead: false,
-      highlighted: false
-    });
-
-    await db.notifications.add({
-      id: `NOTIF-STAFF-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      type: 'staff',
-      title: 'Piece Status Shifted',
-      message: `Piece ${piece.id} (${piece.customerName}) moved to "Collected" by Front Desk Admin. Reason: Customer collected piece in-store.`,
-      pieceId: piece.id,
-      pieceName: piece.name,
-      newStatus: 'Collected',
-      performedBy: 'Front Desk Admin',
-      timestamp: new Date().toISOString(),
-      isRead: false,
-      highlighted: false
-    });
+    // Notifications + SMS, via the same shared helper updatePieceStatus()
+    // and addPiece() use (SMS integration, Chunk 6.5). Safe to call here:
+    // the RLS constraint documented in this function's own doc comment
+    // above — why it can't call updatePieceStatus() directly — is
+    // specifically about the pieces/piece_history WRITE, which
+    // mark_piece_collected() already performed server-side a moment ago,
+    // bypassing RLS internally as a SECURITY DEFINER function.
+    // notifyPieceStatusChange() never touches pieces or piece_history —
+    // it only reads pipeline_stages/notifications and writes
+    // notifications — so none of that constraint applies to it. Produces
+    // byte-identical notification rows to what this function used to
+    // build by hand (same title, message, highlighted, performedBy,
+    // gating), plus now also SMS, matching Chunk 6's "Collected" wiring.
+    await notifyPieceStatusChange(piece, 'Collected', 'Front Desk Admin', 'Customer collected piece in-store.');
 
     return { success: true };
   };
