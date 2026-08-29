@@ -1897,16 +1897,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ? `Your booking for "${booking.workshopTitle}" on ${formattedDate} has been cancelled, and ${booking.totalPrice} SAR has been refunded. We hope to see you again soon!`
       : `Your booking for "${booking.workshopTitle}" on ${formattedDate} has been cancelled. Per our cancellation policy, this booking was not eligible for a refund. Please contact Arty Café with any questions.`;
 
-    await db.notifications.add({
-      id: `NOTIF-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      type: 'customer',
-      customerPhone: booking.customerPhone,
-      title: refunded ? 'Booking Cancelled — Refunded' : 'Booking Cancelled',
-      message: friendlyMsg,
-      timestamp: new Date().toISOString(),
-      isRead: false,
-      highlighted: false
-    });
+    // Best-effort, matching the SMS block below: notifications RLS only
+    // grants INSERT to staff (notifications_staff_all) — there is no
+    // customer INSERT policy, since every other notification write in
+    // this codebase is reachable only from a staff session. This is the
+    // one call site reachable from a customer's own session
+    // (MyBookingsSection.tsx's self-cancel), so it's the one write that
+    // can genuinely fail on RLS rather than a network blip — caught here
+    // rather than left to throw uncaught up through cancelBooking()
+    // (called unawaited, with no .catch(), from that page's onClick),
+    // which silently broke the whole cancellation from the UI's
+    // perspective even though the transaction above had already
+    // committed successfully.
+    try {
+      await db.notifications.add({
+        id: `NOTIF-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        type: 'customer',
+        customerPhone: booking.customerPhone,
+        title: refunded ? 'Booking Cancelled — Refunded' : 'Booking Cancelled',
+        message: friendlyMsg,
+        timestamp: new Date().toISOString(),
+        isRead: false,
+        highlighted: false
+      });
+    } catch (err: any) {
+      console.error(`notifyBookingCancellation: in-app notification for booking ${booking.id} failed:`, err?.message || err);
+    }
 
     // SMS — same established pattern as notifyPieceStatusChange():
     // fire-and-forget, phone passed through unnormalized (send-sms's
