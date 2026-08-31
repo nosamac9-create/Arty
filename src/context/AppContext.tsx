@@ -1498,33 +1498,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [todayDateStr, bookings.length]);
 
   /**
-   * The queue row belonging to a booking, if there is one.
-   *
-   * `bookingId` first, since that is the real link the sync writes. The phone
-   * fallback is for rows created before that link, or by a walk-in check-in
-   * that was later matched to a booking — and it compares *normalized* phones,
-   * because the existing exact `===` misses '+966 50 …' against '05…' for the
-   * same person, which is how a seated customer could stay Pending.
-   *
-   * Date-scoped to the booking's own day, so last week's entry for the same
-   * person is never mistaken for today's.
-   */
-  const findQueueRowForBooking = async (booking: Booking): Promise<QueueItem | undefined> => {
-    const rows = await db.queue.toArray();
-
-    const byId = rows.find(q => q.bookingId && String(q.bookingId) === String(booking.id));
-    if (byId) return byId;
-
-    const wanted = normalizeCustomerPhone(booking.customerPhone);
-    if (!wanted) return undefined;
-
-    return rows.find(q =>
-      normalizeCustomerPhone(q.phone) === wanted &&
-      normalizeDateString(q.date) === normalizeDateString(booking.date)
-    );
-  };
-
-  /**
    * Flips a booking to Checked In when its guest is seated.
    *
    * updateQueueStatus() does this when a row moves to In Progress, but
@@ -1648,86 +1621,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => clearInterval(timer);
   }, []);
 
-  // Periodic check for Pending bookings that are past their 15-minute grace period
-  useEffect(() => {
-    const checkPendingCancellations = async () => {
-      try {
-        const nowRiyadh = getRiyadhNow();
-        const activeBookings = await db.bookings.toArray();
-        for (const b of activeBookings) {
-          if (b.status === 'Pending') {
-            const scheduledTime = parseBookingDateTimeToRiyadhDate(b.date, b.time);
-            const elapsedMs = nowRiyadh.getTime() - scheduledTime.getTime();
-
-            // A no-show is now something the studio has actually observed, not
-            // something inferred from the clock alone.
-            //
-            // This used to fire on the elapsed time by itself, without ever
-            // consulting the queue — so a guest standing in the studio on the
-            // Waiting List, or already called to the desk, was cancelled as
-            // absent while present, their seats released underneath them.
-            //
-            // Called is the one state that means "we asked for this person and
-            // they did not come". Waiting means we have not asked yet; no row
-            // at all means they were never queued. Neither is evidence of a
-            // no-show, so both are left for staff to judge.
-            const queueRow = elapsedMs >= 15 * 60 * 1000 ? await findQueueRowForBooking(b) : undefined;
-            const wasCalledAndDidNotArrive = queueRow?.status === 'Called';
-
-            // If check-in time has passed and we have exceeded 15 minutes (900,000 ms)
-            if (elapsedMs >= 15 * 60 * 1000 && wasCalledAndDidNotArrive) {
-              const nowStr = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-              const nowIso = new Date().toISOString();
-              
-              await db.transaction('rw', db.bookings, db.queue, db.workshops, async () => {
-                await db.bookings.update(b.id, {
-                  status: 'Cancelled',
-                  notes: b.notes ? `${b.notes}\n[Did not show up — auto-cancelled]` : 'Did not show up — auto-cancelled',
-                  timeline: [
-                    ...(b.timeline || []),
-                    { time: nowStr, action: 'Did not show up — auto-cancelled (System Action)' }
-                  ]
-                });
-
-                // The row this decision was made on — already located above, and
-                // by construction it is the Called one.
-                //
-                // The old skip list excluded Called, which was right when any
-                // Pending booking could be cancelled from the clock: a called
-                // guest's row was worth preserving. Now that Called is the only
-                // trigger, keeping it would strand the row in Called forever —
-                // still occupying the Called column, and still blocking the
-                // queue sync from re-adding this person if they rebook, since
-                // Called is not a terminal status.
-                if (queueRow) {
-                  await db.queue.update(queueRow.id, {
-                    status: 'Cancelled',
-                    tableIds: [],
-                    history: [...(queueRow.history || []), { status: 'Cancelled', timestamp: nowIso }]
-                  });
-                }
-
-                // Seats go back in one clamped Postgres statement, never a
-                // read-modify-write from here.
-                await releaseSeats(b.id);
-              });
-            }
-          }
-        }
-      } catch (err) {
-        console.error("Error in checkPendingCancellations background check:", err);
-      }
-    };
-
-    const interval = setInterval(checkPendingCancellations, 5000);
-    // Run once initially with a small timeout to let DB settle
-    const initialTimeout = setTimeout(checkPendingCancellations, 500);
-    
-    return () => {
-      clearInterval(interval);
-      clearTimeout(initialTimeout);
-    };
-  }, [bookings]); // re-run or keep active
+  // The no-show and unpaid auto-cancel timers that used to live here are gone.
+  //
+  // They ran in whichever browser happened to have the app open, so they
+  // needed a staff session to have any authority at all — a customer's tab
+  // was silently refused by RLS, and with nobody logged in they simply did
+  // not run. They also could not notify anyone: send-sms requires is_staff(),
+  // which a customer session can never satisfy.
+  //
+  // Both rules now live in the auto-cancel-bookings Edge Function, on a
+  // schedule, with the service role. Same conditions, same 15-minute
+  // thresholds, same Called-only no-show gate — see its logic.ts, which is
+  // where they are now tested. Deliberately not duplicated here: two writers
+  // on a timer would race each other and could double-notify.
 
   // Mutators
   const addWorkshop = async (ws: Omit<Workshop, 'id' | 'slug'>) => {
@@ -1834,63 +1740,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await db.events.delete(id);
     return { success: true };
   };
-
-  // 15-Minute Unpaid Pending Booking Auto-Cancellation Effect
-  useEffect(() => {
-    const checkPendingExpiries = async () => {
-      try {
-        const allBookings = await db.bookings.toArray();
-        const nowMs = Date.now();
-        
-        for (const b of allBookings) {
-          if (b.status === 'Pending' && b.paymentStatus === 'Unpaid') {
-            const createdMs = new Date(b.createdAt).getTime();
-            if (!isNaN(createdMs)) {
-              const diffMinutes = (nowMs - createdMs) / (1000 * 60);
-              if (diffMinutes >= 15) {
-                const timeStr = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-                const nowIso = new Date().toISOString();
-
-                await db.transaction('rw', db.bookings, db.queue, db.workshops, async () => {
-                  await db.bookings.update(b.id, {
-                    status: 'Cancelled',
-                    timeline: [...(b.timeline || []), { time: timeStr, action: 'Cancelled automatically due to 15-minute payment timeout' }]
-                  });
-
-                  // Find linked queue entry by bookingId or fallback matching
-                  let queueEntry = await db.queue.where('bookingId').equals(b.id).first();
-                  if (!queueEntry) {
-                    const allQueue = await db.queue.toArray();
-                    queueEntry = allQueue.find(q => 
-                      q.bookingId === b.id || 
-                      q.id === `Q-${b.id}` || 
-                      (q.phone && q.phone === b.customerPhone && q.date === b.date && q.name === b.customerName)
-                    );
-                  }
-
-                  if (queueEntry && queueEntry.status !== 'Completed' && queueEntry.status !== 'In Progress' && queueEntry.status !== 'Called') {
-                    await db.queue.update(queueEntry.id, {
-                      status: 'Cancelled',
-                      history: [...(queueEntry.history || []), { status: 'Cancelled', timestamp: nowIso }]
-                    });
-                  }
-
-                  // Seats go back in one clamped Postgres statement.
-                  await releaseSeats(b.id);
-                });
-              }
-            }
-          }
-        }
-      } catch (err) {
-        console.error("Error checking pending expiries:", err);
-      }
-    };
-
-    checkPendingExpiries();
-    const interval = setInterval(checkPendingExpiries, 15000);
-    return () => clearInterval(interval);
-  }, []);
 
   const addBooking = (newBookingData: Omit<Booking, 'id' | 'createdAt' | 'timeline'>): Booking => {
     setBookingError(null);
