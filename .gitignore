@@ -6,3 +6,6 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Supabase CLI local state (link target, version cache) — machine-specific
+supabase/.temp/

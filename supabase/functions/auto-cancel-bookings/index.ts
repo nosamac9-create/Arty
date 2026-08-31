@@ -2,8 +2,13 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * auto-cancel-bookings — the scheduled replacement for the two client-side
- * auto-cancel timers that used to live in AppContext.tsx.
+ * auto-cancel-bookings — the scheduled replacement for the client-side
+ * no-show timer that used to live in AppContext.tsx.
+ *
+ * An unpaid-payment rule was moved here alongside it and has since been
+ * removed: every online booking in this system is paid at booking time, so it
+ * could never match, and it would have cancelled a future pay-at-counter
+ * booking fifteen minutes after it was taken.
  *
  * WHY AN EDGE FUNCTION AND NOT pg_cron
  * The job has to send an SMS, and the mShastra credentials live exclusively
@@ -38,11 +43,11 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.112.2';
 import { sendSms } from '../_shared/mshastra.ts';
 import {
-  decideCancellation,
-  timelineAction,
-  bookingNote,
-  customerMessage,
-  notificationTitle,
+  isNoShow,
+  NO_SHOW_TIMELINE_ACTION,
+  NO_SHOW_NOTE,
+  NO_SHOW_NOTIFICATION_TITLE,
+  noShowMessage,
   type BookingRow,
   type QueueRow
 } from './logic.ts';
@@ -62,9 +67,9 @@ const json = (body: AutoCancelResponse, status: number) =>
 
 /**
  * Only bookings that could plausibly qualify are read: Pending, and dated
- * within a few days either side of now. A no-show is judged against a
- * session time and an unpaid timeout against creation, so a narrow window
- * around today covers both without scanning the whole table every minute.
+ * within a few days either side of now. A no-show is judged against its
+ * session time, so a narrow window around today covers every candidate
+ * without scanning the whole table every minute.
  */
 const WINDOW_DAYS = 3;
 
@@ -104,7 +109,7 @@ Deno.serve(async (req: Request) => {
   try {
     const { data: bookings, error: bookingsError } = await admin
       .from('bookings')
-      .select('id, status, payment_status, date, time, created_at, customer_name, customer_phone, workshop_title')
+      .select('id, status, date, time, customer_name, customer_phone, workshop_title')
       .eq('status', 'Pending')
       .gte('date', dayOffset(-WINDOW_DAYS))
       .lte('date', dayOffset(WINDOW_DAYS));
@@ -134,11 +139,10 @@ Deno.serve(async (req: Request) => {
     const queue = (queueRows ?? []) as QueueRow[];
 
     for (const booking of candidates) {
-      const reason = decideCancellation(booking, queue, nowMs);
-      if (!reason) continue;
+      if (!isNoShow(booking, queue, nowMs)) continue;
 
       if (dryRun) {
-        cancelled.push({ bookingId: booking.id, reason, smsSent: false, notificationWritten: false });
+        cancelled.push({ bookingId: booking.id, reason: 'no_show', smsSent: false, notificationWritten: false });
         continue;
       }
 
@@ -152,7 +156,6 @@ Deno.serve(async (req: Request) => {
 
       if (!fresh || fresh.status !== 'Pending') continue;
 
-      const note = bookingNote(reason);
       const timeline = Array.isArray(fresh.timeline) ? fresh.timeline : [];
 
       // Compare-and-swap: still Pending, or this run does nothing.
@@ -160,7 +163,7 @@ Deno.serve(async (req: Request) => {
         .from('bookings')
         .update({
           status: 'Cancelled',
-          notes: note ? (fresh.notes ? `${fresh.notes}\n[${note}]` : note) : fresh.notes,
+          notes: fresh.notes ? `${fresh.notes}\n[${NO_SHOW_NOTE}]` : NO_SHOW_NOTE,
           timeline: [
             ...timeline,
             {
@@ -169,7 +172,7 @@ Deno.serve(async (req: Request) => {
                 minute: '2-digit',
                 timeZone: 'Asia/Riyadh'
               }),
-              action: timelineAction(reason)
+              action: NO_SHOW_TIMELINE_ACTION
             }
           ],
           updated_at: new Date(nowMs).toISOString()
@@ -220,7 +223,7 @@ Deno.serve(async (req: Request) => {
         }
       }
 
-      const message = customerMessage(reason, booking);
+      const message = noShowMessage(booking);
 
       // In-app notification. Written with the service role, so unlike the
       // customer self-cancel path this is not refused by RLS.
@@ -229,7 +232,7 @@ Deno.serve(async (req: Request) => {
         id: `NOTIF-${nowMs}-${Math.floor(Math.random() * 1000)}`,
         type: 'customer',
         customer_phone: booking.customer_phone,
-        title: notificationTitle(reason),
+        title: NO_SHOW_NOTIFICATION_TITLE,
         message,
         timestamp: new Date(nowMs).toISOString(),
         is_read: false,
@@ -255,7 +258,7 @@ Deno.serve(async (req: Request) => {
         }
       }
 
-      cancelled.push({ bookingId: booking.id, reason, smsSent, notificationWritten });
+      cancelled.push({ bookingId: booking.id, reason: 'no_show', smsSent, notificationWritten });
     }
 
     return json({ success: true, scanned: candidates.length, cancelled }, 200);

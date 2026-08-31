@@ -8,19 +8,19 @@
  *
  *   npx tsx supabase/functions/auto-cancel-bookings/logic.test.ts
  *
- * The rules under test are the ones the client-side timers enforced before
- * this function replaced them, so these double as a regression net for that
- * move: a Called guest is a no-show, a Waiting one is not.
+ * The rule under test is the one the client-side timer enforced before this
+ * function replaced it, so these double as a regression net for that move:
+ * a Called guest is a no-show, a Waiting one is not.
  */
 
 import {
-  decideCancellation,
+  isNoShow,
   bookingStartMs,
   findQueueRow,
   normalizePhone,
-  customerMessage,
-  notificationTitle,
-  timelineAction,
+  noShowMessage,
+  NO_SHOW_NOTIFICATION_TITLE,
+  NO_SHOW_TIMELINE_ACTION,
   GRACE_MINUTES,
   type BookingRow,
   type QueueRow
@@ -45,10 +45,8 @@ const START_MS = Date.UTC(2026, 7, 31, 18, 0);
 const booking = (over: Partial<BookingRow> = {}): BookingRow => ({
   id: 'ART-99',
   status: 'Pending',
-  payment_status: 'Paid',
   date: '2026-08-31',
   time: '09:00 PM',
-  created_at: new Date(START_MS - 6 * 3600_000).toISOString(),
   customer_name: 'Enas Alqarni',
   customer_phone: '+966 50 456 39',
   workshop_title: 'Clay Pottery',
@@ -76,53 +74,21 @@ assertEqual(bookingStartMs('2026-08-31', 'noon'), null, 'unreadable time -> null
 assertEqual(bookingStartMs('', '21:00'), null, 'missing date -> null');
 
 console.log('\n--- no-show: only a Called guest ---');
-assertEqual(decideCancellation(booking(), [q('Called')], LATE), 'no_show', 'Called + 16 min late -> no_show');
-assertEqual(decideCancellation(booking(), [q('Waiting')], LATE), null, 'Waiting is protected');
-assertEqual(decideCancellation(booking(), [q('In Progress')], LATE), null, 'seated is protected');
-assertEqual(decideCancellation(booking(), [q('Completed')], LATE), null, 'completed is protected');
-assertEqual(decideCancellation(booking(), [q('Cancelled')], LATE), null, 'cancelled row is not a no-show');
-assertEqual(decideCancellation(booking(), [], LATE), null, 'no queue row -> protected');
-assertEqual(decideCancellation(booking(), [q('Called')], EARLY), null, 'Called but only 5 min late -> not yet');
+assertEqual(isNoShow(booking(), [q('Called')], LATE), true, 'Called + 16 min late -> cancelled as no-show');
+assertEqual(isNoShow(booking(), [q('Waiting')], LATE), false, 'Waiting is protected');
+assertEqual(isNoShow(booking(), [q('In Progress')], LATE), false, 'seated is protected');
+assertEqual(isNoShow(booking(), [q('Completed')], LATE), false, 'completed is protected');
+assertEqual(isNoShow(booking(), [q('Cancelled')], LATE), false, 'cancelled row is not a no-show');
+assertEqual(isNoShow(booking(), [], LATE), false, 'no queue row -> protected');
+assertEqual(isNoShow(booking(), [q('Called')], EARLY), false, 'Called but only 5 min late -> not yet');
 assertEqual(
-  decideCancellation(booking(), [q('Called')], START_MS + GRACE_MINUTES * 60_000),
-  'no_show',
+  isNoShow(booking(), [q('Called')], START_MS + GRACE_MINUTES * 60_000),
+  true,
   'exactly 15 min late -> fires'
 );
-assertEqual(decideCancellation(booking({ status: 'Checked In' }), [q('Called')], LATE), null, 'Checked In booking is never touched');
-assertEqual(decideCancellation(booking({ status: 'Cancelled' }), [q('Called')], LATE), null, 'already Cancelled is never re-cancelled');
-assertEqual(decideCancellation(booking({ status: 'Completed' }), [q('Called')], LATE), null, 'Completed booking is never touched');
-
-console.log('\n--- unpaid: independent of attendance ---');
-const unpaid = booking({ payment_status: 'Unpaid', created_at: new Date(START_MS - 20 * 60_000).toISOString() });
-assertEqual(decideCancellation(unpaid, [], START_MS), 'unpaid', 'Unpaid + 20 min since creation -> unpaid');
-assertEqual(decideCancellation(unpaid, [q('Waiting')], START_MS), 'unpaid', 'unpaid ignores queue state');
-assertEqual(
-  decideCancellation(booking({ payment_status: 'Unpaid', created_at: new Date(START_MS - 5 * 60_000).toISOString() }), [], START_MS),
-  null,
-  'Unpaid but only 5 min old -> not yet'
-);
-assertEqual(decideCancellation(booking({ payment_status: 'Paid' }), [], LATE), null, 'Paid never times out');
-assertEqual(
-  decideCancellation(booking({ payment_status: 'Unpaid', created_at: 'not-a-date' }), [], LATE),
-  null,
-  'unreadable created_at -> no unpaid cancel'
-);
-assertEqual(
-  decideCancellation(booking({ payment_status: 'Unpaid', date: '2027-01-01', created_at: new Date(START_MS - 60 * 60_000).toISOString() }), [], START_MS),
-  'unpaid',
-  'unpaid ignores a far-future session date'
-);
-
-console.log('\n--- precedence ---');
-assertEqual(
-  decideCancellation(
-    booking({ payment_status: 'Unpaid', created_at: new Date(START_MS - 60 * 60_000).toISOString() }),
-    [q('Called')],
-    LATE
-  ),
-  'no_show',
-  'both apply -> reported as no_show'
-);
+assertEqual(isNoShow(booking({ status: 'Checked In' }), [q('Called')], LATE), false, 'Checked In booking is never touched');
+assertEqual(isNoShow(booking({ status: 'Cancelled' }), [q('Called')], LATE), false, 'already Cancelled is never re-cancelled');
+assertEqual(isNoShow(booking({ status: 'Completed' }), [q('Called')], LATE), false, 'Completed booking is never touched');
 
 console.log('\n--- queue matching ---');
 assertEqual(normalizePhone('+966 50 456 39'), '5045639', 'strips +966 and spaces');
@@ -145,24 +111,19 @@ assertEqual(
   'no phone -> no false match'
 );
 assertEqual(
-  decideCancellation(booking(), [q('Called', { booking_id: null, date: '2026-08-30' })], LATE),
-  null,
+  isNoShow(booking(), [q('Called', { booking_id: null, date: '2026-08-30' })], LATE),
+  false,
   "yesterday's Called row does not cancel today's booking"
 );
 
-console.log('\n--- customer wording is reason-specific ---');
-const noShowMsg = customerMessage('no_show', booking());
-const unpaidMsg = customerMessage('unpaid', booking());
+console.log('\n--- customer wording ---');
+const noShowMsg = noShowMessage(booking());
 assertEqual(noShowMsg.includes('not refundable'), true, 'no-show states it is not refundable');
 assertEqual(noShowMsg.includes('called for you'), true, 'no-show explains it was called');
-assertEqual(unpaidMsg.includes('No payment was taken'), true, 'unpaid says no payment was taken');
-assertEqual(unpaidMsg.includes('refund'), false, 'unpaid never mentions a refund');
-assertEqual(noShowMsg === unpaidMsg, false, 'the two messages are distinct');
 assertEqual(noShowMsg.includes('31 August 2026'), true, 'message names the date');
-assertEqual(notificationTitle('no_show') !== notificationTitle('unpaid'), true, 'titles differ');
-assertEqual(timelineAction('no_show'), 'Did not show up — auto-cancelled (System Action)', 'no-show timeline text unchanged');
-assertEqual(timelineAction('unpaid'), 'Cancelled automatically due to 15-minute payment timeout', 'unpaid timeline text unchanged');
-assertEqual(customerMessage('no_show', booking({ date: 'bad' })).includes('undefined'), false, 'bad date never prints undefined');
+assertEqual(NO_SHOW_NOTIFICATION_TITLE.includes('Missed Session'), true, 'notification title names the reason');
+assertEqual(NO_SHOW_TIMELINE_ACTION, 'Did not show up — auto-cancelled (System Action)', 'no-show timeline text unchanged');
+assertEqual(noShowMessage(booking({ date: 'bad' })).includes('undefined'), false, 'bad date never prints undefined');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

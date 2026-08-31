@@ -9,24 +9,29 @@
  * provision-staff/logic.ts. index.ts does all the I/O; every rule about
  * *whether* to cancel and *what to say* lives here.
  *
- * These rules are a deliberate mirror of the two client-side timers this
- * replaces (AppContext.tsx). They are not a redesign: same 15-minute
- * thresholds, same statuses, same Called-only no-show gate. If either rule
- * changes, it changes here — the client timers are gone.
+ * The no-show rule is a deliberate mirror of the client-side timer this
+ * replaces (AppContext.tsx): same 15-minute threshold, same statuses, same
+ * Called-only gate. If it changes, it changes here — the client timer is gone.
+ *
+ * A second rule once lived here, cancelling Pending + Unpaid bookings 15
+ * minutes after creation. It was removed: every online booking in this system
+ * is paid at booking time, so it matched nothing, and it would have cancelled
+ * any future pay-at-counter booking a quarter of an hour after it was taken.
+ * A pay-later rule belongs with a pay-later payment model, not before one.
  */
 
-/** Minutes of grace before either timer acts. */
+/** Minutes of grace before a called guest is treated as absent. */
 export const GRACE_MINUTES = 15;
 
-export type CancelReason = 'no_show' | 'unpaid';
+/** Kept as a named union so the response shape can carry a reason, and so
+ *  a second rule can be added back without reshaping the contract. */
+export type CancelReason = 'no_show';
 
 export interface BookingRow {
   id: string;
   status: string | null;
-  payment_status: string | null;
   date: string | null;
   time: string | null;
-  created_at: string | null;
   customer_name: string | null;
   customer_phone: string | null;
   workshop_title: string | null;
@@ -123,78 +128,45 @@ export function findQueueRow(queue: QueueRow[], booking: BookingRow): QueueRow |
 }
 
 /**
- * Whether a booking should be auto-cancelled now, and why.
+ * Whether a booking should be auto-cancelled as a no-show.
  *
- * NO-SHOW — Pending, at least 15 minutes past the session start, and the
- * customer's queue row is in Called. Called is the one state meaning "we
- * asked for this person and they did not come". Waiting means we have not
- * asked yet; seated or checked in means they are here; no row at all means
- * they were never queued. All three are protected — the studio decides,
- * not the clock.
- *
- * UNPAID — Pending and Unpaid and at least 15 minutes past creation. A
- * payment timeout, unrelated to attendance: it deliberately ignores the
- * queue and the session time entirely.
- *
- * No-show is evaluated first. A booking that is both un-arrived and unpaid
- * is better explained to the customer as a no-show than as a payment
- * problem, and only one message is ever sent.
+ * Pending, at least 15 minutes past the session start, and the customer's
+ * queue row is in Called. Called is the one state meaning "we asked for this
+ * person and they did not come". Waiting means we have not asked yet; seated
+ * or checked in means they are here; no row at all means they were never
+ * queued. All three are protected — the studio decides, not the clock.
  */
-export function decideCancellation(
-  booking: BookingRow,
-  queue: QueueRow[],
-  nowMs: number
-): CancelReason | null {
-  if (String(booking.status ?? '') !== 'Pending') return null;
+export function isNoShow(booking: BookingRow, queue: QueueRow[], nowMs: number): boolean {
+  if (String(booking.status ?? '') !== 'Pending') return false;
 
   const startMs = bookingStartMs(booking.date, booking.time);
-  if (startMs !== null && nowMs - startMs >= GRACE_MINUTES * 60_000) {
-    if (findQueueRow(queue, booking)?.status === 'Called') return 'no_show';
-  }
+  if (startMs === null || nowMs - startMs < GRACE_MINUTES * 60_000) return false;
 
-  if (String(booking.payment_status ?? '') === 'Unpaid') {
-    const createdMs = Date.parse(String(booking.created_at ?? ''));
-    if (Number.isFinite(createdMs) && nowMs - createdMs >= GRACE_MINUTES * 60_000) return 'unpaid';
-  }
-
-  return null;
+  return findQueueRow(queue, booking)?.status === 'Called';
 }
 
-/** The timeline entry, matching the wording the client timers wrote. */
-export function timelineAction(reason: CancelReason): string {
-  return reason === 'no_show'
-    ? 'Did not show up — auto-cancelled (System Action)'
-    : 'Cancelled automatically due to 15-minute payment timeout';
-}
+/** The timeline entry, matching the wording the client timer wrote. */
+export const NO_SHOW_TIMELINE_ACTION = 'Did not show up — auto-cancelled (System Action)';
 
-/** The note appended to the booking. Only the no-show timer wrote one. */
-export function bookingNote(reason: CancelReason): string | null {
-  return reason === 'no_show' ? 'Did not show up — auto-cancelled' : null;
-}
+/** Appended to the booking's notes, as the client timer did. */
+export const NO_SHOW_NOTE = 'Did not show up — auto-cancelled';
+
+/** The in-app notification title. */
+export const NO_SHOW_NOTIFICATION_TITLE = 'Booking Cancelled — Missed Session';
 
 /**
  * What the customer is told.
  *
  * Deliberately not the refunded/not-refunded pair notifyBookingCancellation()
- * uses. Neither of these is a refund decision: a no-show is non-refundable by
- * the cancellation policy, and an unpaid booking never took a payment, so
- * telling that customer they are "not eligible for a refund" would be
- * misleading about money they never handed over.
+ * uses: this is not a refund decision. A no-show is non-refundable under the
+ * cancellation policy, and saying so plainly is more use to the customer than
+ * a generic "your booking was cancelled".
  */
-export function customerMessage(reason: CancelReason, booking: BookingRow): string {
+export function noShowMessage(booking: BookingRow): string {
   const title = booking.workshop_title || 'your workshop';
   const when = formatBookingDate(booking.date);
 
-  if (reason === 'no_show') {
-    return `Arty Café: your booking for "${title}"${when} has been cancelled. We called for you and you had not arrived, so the place has been released. Per our cancellation policy this booking is not refundable. Please contact the studio if you think this is a mistake.`;
-  }
-
-  return `Arty Café: your booking for "${title}"${when} has been cancelled because payment was not received within ${GRACE_MINUTES} minutes. No payment was taken. You are welcome to book again.`;
-}
-
-/** The in-app notification title, matching the message's reason. */
-export function notificationTitle(reason: CancelReason): string {
-  return reason === 'no_show' ? 'Booking Cancelled — Missed Session' : 'Booking Cancelled — Payment Not Received';
+  return `Arty Café: your booking for "${title}"${when} has been cancelled. We called for you and you had not arrived, so the place has been released. Per our cancellation policy this booking is not refundable. Please contact the studio if you think this is a mistake.`;
 }
 
 /** " on 31 August 2026", or empty when the date is unreadable. */
