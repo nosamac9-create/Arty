@@ -169,7 +169,7 @@ const TikTokIcon: React.FC<{ className?: string }> = ({ className = 'h-5 w-5' })
 );
 
 export const CustomerFooter: React.FC = () => {
-  const { currentStaff, returnToStaffConsole } = useApp();
+  const { goToStaffLogin, currentStaff, returnToStaffConsole } = useApp();
   const { t } = useLanguage();
 
   /* Hours, the address and the front-desk number are deliberately absent:
@@ -212,22 +212,30 @@ export const CustomerFooter: React.FC = () => {
           label: 'Facebook'
         }
       ]}
-      mainLinks={
-        /* Staff have their own dedicated URL now, so this footer no longer
-           advertises the staff console to public visitors. The one
-           exception: an already-authenticated staff session that's
-           currently viewing the customer site (local dev / a shared
-           origin) still gets a way back in. */
+      mainLinks={[
+        /* TEMPORARY — DEVELOPMENT CONVENIENCE. Reconsider before launch.
+           This restores the public "Staff Login" link that was removed with
+           the customer/staff site separation, which deliberately stopped the
+           customer site advertising the console's existence and location to
+           anonymous visitors. That reasoning still holds; the link is back
+           only so the console stays one click away while both sites are being
+           built. Removing this entry restores the separated behaviour.
+
+           goToStaffLogin() already handles both worlds — it navigates to
+           VITE_STAFF_SITE_URL when that is configured, and falls back to the
+           in-app setArea('staff') switch locally where it is not — so this
+           does not point at a route that no longer exists post-separation. */
         currentStaff
-          ? [
-              {
-                label: t('Back to Staff Console', 'العودة إلى لوحة الموظفين'),
-                onClick: () => returnToStaffConsole(),
-                emphasis: true
-              }
-            ]
-          : []
-      }
+          ? {
+              label: t('Back to Staff Console', 'العودة إلى لوحة الموظفين'),
+              onClick: () => returnToStaffConsole(),
+              emphasis: true
+            }
+          : {
+              label: t('Staff Login', 'دخول الموظفين'),
+              onClick: () => goToStaffLogin()
+            }
+      ]}
       copyright={{
         text: t('© 2026 Arty Café Jeddah.', '© ٢٠٢٦ آرتي كافيه جدة.'),
         license: t('All rights reserved.', 'جميع الحقوق محفوظة.')
