@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { useApp, getRiyadhNow } from '../context/AppContext';
+import { useApp, getRiyadhNow, parseBookingDateTimeToRiyadhDate } from '../context/AppContext';
 import { Calendar, Users, Clock, GraduationCap, AlertCircle, Trash2, CalendarX, Compass, HelpCircle } from 'lucide-react';
 import { Booking } from '../types';
 import { resolveBookingInstructor } from '../utils/queueUtils';
@@ -12,6 +12,46 @@ import { normalizeCustomerPhone } from '../utils/customerIdentity';
 import Reveal from './ui/Reveal';
 import { ScrollReveal } from './ui/ScrollReveal';
 import { AppImage } from './ui/AppImage';
+
+/**
+ * Hours of notice that make a cancellation refundable.
+ *
+ * Mirrors `cancel_own_booking`'s `hours_notice > 24` in migration 0017, which
+ * is the authority — this is only what the page shows. Both must agree, or the
+ * page promises a refund the backend then refuses.
+ */
+const REFUND_NOTICE_HOURS = 24;
+
+/**
+ * A booking's real start, in Riyadh wall-clock.
+ *
+ * Both the Upcoming/Past split and the cancellation window used to build this
+ * from a hardcoded hour — 11am for the exact string '11:00', 4pm for anything
+ * else in one place, and the inverse of that in the other. Neither read
+ * `booking.time`, so a 9pm session was treated as 4pm.
+ *
+ * `parseBookingDateTimeToRiyadhDate` is the same helper cancelBooking() uses,
+ * and handles '09:00 PM', '16:00' and the ' - ' range form.
+ */
+const bookingStart = (booking: Booking): Date => {
+  try {
+    const start = parseBookingDateTimeToRiyadhDate(
+      booking.date,
+      String(booking.time || '').split(' - ')[0].trim()
+    );
+    if (!Number.isNaN(start.getTime())) return start;
+  } catch {
+    /* fall through to the safe default below */
+  }
+  // An unparseable time falls back to the end of that day rather than to an
+  // invented hour: a booking is then never hidden from Upcoming, and never has
+  // its cancellation refused, on the strength of a time nobody could read.
+  return new Date(`${booking.date}T23:59:59`);
+};
+
+/** Hours between now and the booking's start. Negative once it has begun. */
+const hoursUntilStart = (booking: Booking, now: Date): number =>
+  (bookingStart(booking).getTime() - now.getTime()) / (1000 * 60 * 60);
 
 export const MyBookingsSection: React.FC = () => {
   const { bookings, cancelOwnBooking, setCustomerTab, workshops, currentUser, setAuthScreen, staff, workshopSessions } = useApp();
@@ -42,7 +82,10 @@ export const MyBookingsSection: React.FC = () => {
     );
 
     userBookings.forEach(b => {
-      const bDate = new Date(`${b.date}T${b.time === '11:00' ? '11:00:00' : '16:00:00'}`);
+      // The booking's real start. This used to hardcode 11am for the exact
+      // string '11:00' and 4pm for everything else, so a 9pm session counted
+      // as past from 4pm — five hours before it began.
+      const bDate = bookingStart(b);
       const isCancelled = b.status === 'Cancelled';
       
       // If cancelled, keep it in the tab where it originally belonged (mostly upcoming)
@@ -60,16 +103,17 @@ export const MyBookingsSection: React.FC = () => {
 
   const activeList = categorizedBookings[activeTab];
 
-  // Helper to determine if cancellation window is closed (< 24 hours before start)
+  // Whether the free-cancellation window has closed: the session is still to
+  // come, but with 24 hours' notice or less. Measured from the booking's real
+  // start, so this agrees with what cancel_own_booking decides server-side.
   const isCancellationClosed = (booking: Booking): boolean => {
-    const now = getRiyadhNow();
-    const start = new Date(`${booking.date}T${booking.time.includes('AM') || booking.time.includes('PM') ? '16:00:00' : '11:00:00'}`);
-    
-    const diffMs = start.getTime() - now.getTime();
-    const diffHours = diffMs / (1000 * 60 * 60);
-
-    return diffHours < 24 && diffHours > 0;
+    const hours = hoursUntilStart(booking, getRiyadhNow());
+    return hours < REFUND_NOTICE_HOURS && hours > 0;
   };
+
+  /** Whether cancelling right now would be refunded, by the same rule. */
+  const isRefundable = (booking: Booking): boolean =>
+    hoursUntilStart(booking, getRiyadhNow()) > REFUND_NOTICE_HOURS;
 
   const getStatusBadgeColor = (status: Booking['status']) => {
     switch (status) {
@@ -317,7 +361,14 @@ export const MyBookingsSection: React.FC = () => {
                         <button
                           disabled={cancellingId === b.id}
                           onClick={async () => {
-                            if (!window.confirm(`Are you sure you want to cancel your booking for ${b.workshopTitle}? Your payment of ${b.totalPrice} SAR will be refunded.`)) return;
+                            // Worded from the same rule the backend applies, so
+                            // the dialog cannot promise a refund the function
+                            // then declines to give.
+                            const willRefund = isRefundable(b);
+                            const consequence = willRefund
+                              ? `Your payment of ${b.totalPrice} SAR will be refunded.`
+                              : 'This booking is within 24 hours of its start, so it is not eligible for a refund.';
+                            if (!window.confirm(`Are you sure you want to cancel your booking for ${b.workshopTitle}? ${consequence}`)) return;
 
                             // The result is acted on rather than discarded: the
                             // old call could be refused server-side and the page

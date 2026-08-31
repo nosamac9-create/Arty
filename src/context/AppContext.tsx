@@ -1431,9 +1431,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           // Fresh query on each iteration to prevent race conditions within loop
           const currentQueue = await db.queue.toArray();
 
-          // Check if already in queue for today
-          const exists = currentQueue.some(q => 
-            q.date === todayRiyadh && 
+          // Check if already in queue for today.
+          //
+          // Terminal rows are excluded: a Cancelled or Completed entry is a
+          // finished visit, not someone already queued, and matching it blocked
+          // every later booking that person made the same day — silently, since
+          // a skip logs nothing. A cancelled booking's queue row is left in
+          // place rather than deleted, so this was reachable simply by
+          // cancelling and rebooking.
+          //
+          // The phone and name arms stay: they are what stops a walk-in who
+          // also holds a booking being queued twice under two rows.
+          const exists = currentQueue.some(q =>
+            q.date === todayRiyadh &&
+            q.status !== 'Cancelled' &&
+            q.status !== 'Completed' &&
             (q.bookingId === b.id || q.id === `Q-${b.id}` || (q.phone && q.phone === b.customerPhone) || (q.name && q.name === b.customerName))
           );
 
