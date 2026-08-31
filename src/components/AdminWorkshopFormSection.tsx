@@ -26,6 +26,7 @@ import {
   Search, ArrowUpDown, ChevronUp, ChevronDown, Layers, Calendar, User, Clock, RefreshCw
 } from 'lucide-react';
 import { DateInput } from './DateInput';
+import { MONTH_NAMES } from '../utils/calendarConfig';
 import { matchesQuery } from '../utils/search';
 
 export const AdminWorkshopFormSection: React.FC = () => {
@@ -119,6 +120,19 @@ export const AdminWorkshopFormSection: React.FC = () => {
 
   // Monthly Recurring Schedule Rules
   const [recurringSchedules, setRecurringSchedules] = useState<RecurringScheduleRule[]>([]);
+  /**
+   * Which month "Generate Monthly Sessions" targets. Defaults to the
+   * current Riyadh-local month, but is independently selectable —
+   * a rule's own Effective From/Until range is often for a future
+   * month (the whole point of scheduling ahead), and generation used
+   * to silently ignore that, always targeting today's real month
+   * regardless of what any rule actually covered.
+   */
+  const [genTargetYear, setGenTargetYear] = useState<number>(() => Number(todayDateStr.split('-')[0]));
+  const [genTargetMonth, setGenTargetMonth] = useState<number>(() => Number(todayDateStr.split('-')[1]));
+  /** Fixed to today's real year regardless of what's selected, so the
+   *  year dropdown's own option list doesn't shift under the admin. */
+  const genBaseYear = Number(todayDateStr.split('-')[0]);
 
   // Table states
   const [tableSearch, setTableSearch] = useState('');
@@ -1675,7 +1689,35 @@ export const AdminWorkshopFormSection: React.FC = () => {
             )}
 
             {/* Quick Auto-Generate button */}
-            <div className="pt-2">
+            <div className="pt-2 space-y-2">
+              {/* Which month to generate for — independent of today's real
+                  date, since a rule's own Effective From/Until is often for
+                  a future month. Previously this was silently always "the
+                  current real-world month," which produced nothing for a
+                  rule scoped to a later month, or an unrelated result from
+                  whichever other rule happened to cover today's month. */}
+              <div className="flex items-center gap-2">
+                <label className="text-[10px] font-bold text-brand-charcoal/70 shrink-0">Generate for</label>
+                <select
+                  value={genTargetMonth}
+                  onChange={e => setGenTargetMonth(Number(e.target.value))}
+                  className="bg-white border border-brand-clay rounded-lg p-1.5 font-semibold text-xs cursor-pointer"
+                >
+                  {MONTH_NAMES.map((name, i) => (
+                    <option key={name} value={i + 1}>{name}</option>
+                  ))}
+                </select>
+                <select
+                  value={genTargetYear}
+                  onChange={e => setGenTargetYear(Number(e.target.value))}
+                  className="bg-white border border-brand-clay rounded-lg p-1.5 font-semibold text-xs cursor-pointer"
+                >
+                  {[genBaseYear, genBaseYear + 1, genBaseYear + 2].map(y => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </div>
+
               <button
                 type="button"
                 onClick={() => {
@@ -1690,9 +1732,8 @@ export const AdminWorkshopFormSection: React.FC = () => {
                     return;
                   }
 
-                  const now = new Date();
-                  const year = now.getFullYear();
-                  const month = now.getMonth() + 1;
+                  const year = genTargetYear;
+                  const month = genTargetMonth;
                   const mockWorkshop = {
                     id: editingWorkshopId || 'temp-ws',
                     title: title || 'Workshop',
@@ -1727,7 +1768,32 @@ export const AdminWorkshopFormSection: React.FC = () => {
                     setSessions([...sessions, ...mappedNew]);
                     alert(`Generated ${generatedRecords.length} sessions from monthly recurring schedule for ${year}-${month < 10 ? '0' + month : month}!`);
                   } else {
-                    alert("No new sessions generated. Ensure rules are Active and valid.");
+                    // Distinguish "an active rule exists, but none of them
+                    // cover the month you picked" (the confusing case this
+                    // fix targets) from every other reason nothing came out
+                    // (no rules, none Active, or all duplicates of existing
+                    // sessions) — kept as the original generic message,
+                    // rather than trying to enumerate every possible cause.
+                    const monthStr = month < 10 ? `0${month}` : `${month}`;
+                    const daysInTargetMonth = new Date(year, month, 0).getDate();
+                    const monthStartStr = `${year}-${monthStr}-01`;
+                    const monthEndStr = `${year}-${monthStr}-${daysInTargetMonth}`;
+                    const hasActiveRule = recurringSchedules.some(r => r.status === 'Active');
+                    const hasRuleCoveringMonth = recurringSchedules.some(r => {
+                      if (r.status !== 'Active') return false;
+                      const startsInTimeOrBefore = !r.effectiveStartDate || r.effectiveStartDate <= monthEndStr;
+                      const endsInTimeOrAfter = !r.effectiveEndDate || r.effectiveEndDate >= monthStartStr;
+                      return startsInTimeOrBefore && endsInTimeOrAfter;
+                    });
+
+                    if (hasActiveRule && !hasRuleCoveringMonth) {
+                      alert(
+                        `No active rule's Effective From/Until range covers ${MONTH_NAMES[month - 1]} ${year}.\n\n` +
+                        `Adjust the rule's effective dates, or pick a different month above, then generate again.`
+                      );
+                    } else {
+                      alert("No new sessions generated. Ensure rules are Active and valid.");
+                    }
                   }
                 }}
                 className="w-full py-2 bg-brand-charcoal text-brand-cream hover:bg-black rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer"
