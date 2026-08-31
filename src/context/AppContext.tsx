@@ -1497,6 +1497,73 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     syncTodayBookingsToQueue();
   }, [todayDateStr, bookings.length]);
 
+  /**
+   * The queue row belonging to a booking, if there is one.
+   *
+   * `bookingId` first, since that is the real link the sync writes. The phone
+   * fallback is for rows created before that link, or by a walk-in check-in
+   * that was later matched to a booking — and it compares *normalized* phones,
+   * because the existing exact `===` misses '+966 50 …' against '05…' for the
+   * same person, which is how a seated customer could stay Pending.
+   *
+   * Date-scoped to the booking's own day, so last week's entry for the same
+   * person is never mistaken for today's.
+   */
+  const findQueueRowForBooking = async (booking: Booking): Promise<QueueItem | undefined> => {
+    const rows = await db.queue.toArray();
+
+    const byId = rows.find(q => q.bookingId && String(q.bookingId) === String(booking.id));
+    if (byId) return byId;
+
+    const wanted = normalizeCustomerPhone(booking.customerPhone);
+    if (!wanted) return undefined;
+
+    return rows.find(q =>
+      normalizeCustomerPhone(q.phone) === wanted &&
+      normalizeDateString(q.date) === normalizeDateString(booking.date)
+    );
+  };
+
+  /**
+   * Flips a booking to Checked In when its guest is seated.
+   *
+   * updateQueueStatus() does this when a row moves to In Progress, but
+   * seatQueueItem() writes that status directly and never went through it — so
+   * seating from the table picker left the booking Pending, and the no-show
+   * timer would then cancel a customer sitting at a table. Shared by both
+   * paths so the two cannot drift again.
+   */
+  const markBookingCheckedIn = async (queueItem: QueueItem) => {
+    try {
+      const bookings = await db.bookings.toArray();
+      const wanted = normalizeCustomerPhone(queueItem.phone);
+
+      const booking =
+        bookings.find(b => queueItem.bookingId && String(b.id) === String(queueItem.bookingId)) ||
+        (wanted
+          ? bookings.find(b =>
+              normalizeCustomerPhone(b.customerPhone) === wanted &&
+              normalizeDateString(b.date) === normalizeDateString(queueItem.date)
+            )
+          : undefined);
+
+      if (!booking || booking.status === 'Checked In' || booking.status === 'Completed' || booking.status === 'Cancelled') return;
+
+      await db.bookings.update(booking.id, {
+        status: 'Checked In',
+        timeline: [
+          ...(booking.timeline || []),
+          {
+            time: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+            action: 'Status updated to Checked In via Live Queue'
+          }
+        ]
+      });
+    } catch (err) {
+      console.error('Failed to mark booking checked in on seating:', err);
+    }
+  };
+
   /** Returns a cancelled booking's seats, clamped to capacity, in one statement. */
   const releaseSeats = async (bookingId: string) => {
     if (!supabase || !bookingId) return;
@@ -1591,9 +1658,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (b.status === 'Pending') {
             const scheduledTime = parseBookingDateTimeToRiyadhDate(b.date, b.time);
             const elapsedMs = nowRiyadh.getTime() - scheduledTime.getTime();
-            
+
+            // A no-show is now something the studio has actually observed, not
+            // something inferred from the clock alone.
+            //
+            // This used to fire on the elapsed time by itself, without ever
+            // consulting the queue — so a guest standing in the studio on the
+            // Waiting List, or already called to the desk, was cancelled as
+            // absent while present, their seats released underneath them.
+            //
+            // Called is the one state that means "we asked for this person and
+            // they did not come". Waiting means we have not asked yet; no row
+            // at all means they were never queued. Neither is evidence of a
+            // no-show, so both are left for staff to judge.
+            const queueRow = elapsedMs >= 15 * 60 * 1000 ? await findQueueRowForBooking(b) : undefined;
+            const wasCalledAndDidNotArrive = queueRow?.status === 'Called';
+
             // If check-in time has passed and we have exceeded 15 minutes (900,000 ms)
-            if (elapsedMs >= 15 * 60 * 1000) {
+            if (elapsedMs >= 15 * 60 * 1000 && wasCalledAndDidNotArrive) {
               const nowStr = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
               const nowIso = new Date().toISOString();
               
@@ -1607,21 +1689,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   ]
                 });
 
-                // Find linked queue entry by bookingId or fallback ID/phone matching
-                let queueEntry = await db.queue.where('bookingId').equals(b.id).first();
-                if (!queueEntry) {
-                  const allQueue = await db.queue.toArray();
-                  queueEntry = allQueue.find(q => 
-                    q.bookingId === b.id || 
-                    q.id === `Q-${b.id}` || 
-                    (q.phone && q.phone === b.customerPhone && q.date === b.date && q.name === b.customerName)
-                  );
-                }
-
-                if (queueEntry && queueEntry.status !== 'Completed' && queueEntry.status !== 'In Progress' && queueEntry.status !== 'Called') {
-                  await db.queue.update(queueEntry.id, {
+                // The row this decision was made on — already located above, and
+                // by construction it is the Called one.
+                //
+                // The old skip list excluded Called, which was right when any
+                // Pending booking could be cancelled from the clock: a called
+                // guest's row was worth preserving. Now that Called is the only
+                // trigger, keeping it would strand the row in Called forever —
+                // still occupying the Called column, and still blocking the
+                // queue sync from re-adding this person if they rebook, since
+                // Called is not a terminal status.
+                if (queueRow) {
+                  await db.queue.update(queueRow.id, {
                     status: 'Cancelled',
-                    history: [...(queueEntry.history || []), { status: 'Cancelled', timestamp: nowIso }]
+                    tableIds: [],
+                    history: [...(queueRow.history || []), { status: 'Cancelled', timestamp: nowIso }]
                   });
                 }
 
@@ -2349,6 +2431,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       seatedTime: new Date().toISOString(),
       history: [...(item.history || []), { status: 'In Progress', timestamp: new Date().toISOString() }]
     });
+
+    // Seating is a check-in. This path writes In Progress straight to the queue
+    // rather than going through updateQueueStatus(), so without this the
+    // booking stayed Pending and a guest sitting at a table was still exposed
+    // to the no-show timer.
+    await markBookingCheckedIn({ ...item, tableIds, status: 'In Progress' });
+
     return { success: true };
   };
 
@@ -2411,6 +2500,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       } catch (err) {
         console.error("Error syncing queue status to booking:", err);
+      }
+
+      // The matcher above compares raw phone strings and looks for a booking id
+      // equal to the queue id, which almost never holds — so it can silently
+      // miss. Seating is the case where a miss is harmful (the guest stays
+      // Pending and the no-show timer can cancel them), so it gets a second,
+      // reliable pass. Idempotent: it returns early if the booking is already
+      // Checked In.
+      if (status === 'In Progress') {
+        await markBookingCheckedIn({ ...item, status: 'In Progress' });
       }
     }
   };
