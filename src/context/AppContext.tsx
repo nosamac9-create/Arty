@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { 
   Workshop, Booking, QueueItem, PotteryPiece, TestResult, NotificationItem,
   PipelineStage, StaffMember, WorkshopOption, EventOption, AppSetting, AppEvent, Category,
@@ -2844,6 +2844,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // ================= ADMIN CONSOLE SESSION =================
   const [currentStaffId, setCurrentStaffId] = useState<string | null>(null);
   const [staffAuthChecked, setStaffAuthChecked] = useState(false);
+  /**
+   * Guards against a stale resolveSessions() call overwriting a fresher
+   * one. There are three independent triggers below (the mount-time
+   * Promise.all check, staffSub, customerSub) that can each kick off a
+   * resolveSessions() run; nothing about async ordering guarantees they
+   * finish in the order they started. A login could set currentUser
+   * correctly via customerSub, then a slower, already-in-flight
+   * mount-time check — carrying a stale "not signed in yet" snapshot —
+   * finishes afterward and wipes it back out. Bumped once per trigger,
+   * captured by that trigger's own resolveSessions() call as its
+   * "generation"; a write is only applied if its generation is still
+   * the current one by the time it's about to happen.
+   */
+  const sessionGenerationRef = useRef(0);
 
   /**
    * Restores the Supabase session on load and re-derives who is signed in.
@@ -2859,7 +2873,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const resolveSessions = async (
       staffAuthId: string | null,
       customerAuthId: string | null,
-      customerAuthEmail: string | null
+      customerAuthEmail: string | null,
+      generation: number
     ) => {
       if (cancelled) return;
 
@@ -2870,11 +2885,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (staffAuthId) {
         const staffRows = await fetchTable<StaffMember>('staff');
         if (cancelled) return;
-        const row = staffRows.find(m => m.userId === staffAuthId);
-        setCurrentStaffId(row ? row.id : null);
-        if (!row) setStaffSessionActive(false);
+        // A newer trigger has already started since this one did — its
+        // own resolution supersedes whatever this call is about to
+        // write, so skip applying a now-stale result.
+        if (generation === sessionGenerationRef.current) {
+          const row = staffRows.find(m => m.userId === staffAuthId);
+          setCurrentStaffId(row ? row.id : null);
+          if (!row) setStaffSessionActive(false);
+        }
       } else {
-        setCurrentStaffId(null);
+        if (generation === sessionGenerationRef.current) {
+          setCurrentStaffId(null);
+        }
       }
 
       if (customerAuthId) {
@@ -2920,13 +2942,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         }
 
-        setCurrentUser(row
-          ? { id: row.id, name: row.name, email: row.email, phone: row.phone }
-          : null);
+        if (generation === sessionGenerationRef.current) {
+          setCurrentUser(row
+            ? { id: row.id, name: row.name, email: row.email, phone: row.phone }
+            : null);
+        }
       } else {
-        setCurrentUser(null);
+        if (generation === sessionGenerationRef.current) {
+          setCurrentUser(null);
+        }
       }
 
+      // Monotonic and idempotent — never needs to be undone, so it's
+      // fine (and necessary) for this to run even from a superseded
+      // generation: whichever call reaches this line first is enough to
+      // clear the initial "checking your session…" state.
       setStaffAuthChecked(true);
     };
 
@@ -2946,18 +2976,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       staffId = staffSession.data.session?.user?.id ?? null;
       customerId = customerSession.data.session?.user?.id ?? null;
       customerEmail = customerSession.data.session?.user?.email ?? null;
-      resolveSessions(staffId, customerId, customerEmail);
+      sessionGenerationRef.current += 1;
+      resolveSessions(staffId, customerId, customerEmail, sessionGenerationRef.current);
     });
 
     const staffSub = supabaseStaff.auth.onAuthStateChange((_e, session) => {
       staffId = session?.user?.id ?? null;
-      resolveSessions(staffId, customerId, customerEmail);
+      sessionGenerationRef.current += 1;
+      resolveSessions(staffId, customerId, customerEmail, sessionGenerationRef.current);
     });
 
     const customerSub = supabase.auth.onAuthStateChange((_e, session) => {
       customerId = session?.user?.id ?? null;
       customerEmail = session?.user?.email ?? null;
-      resolveSessions(staffId, customerId, customerEmail);
+      sessionGenerationRef.current += 1;
+      resolveSessions(staffId, customerId, customerEmail, sessionGenerationRef.current);
     });
 
     return () => {
