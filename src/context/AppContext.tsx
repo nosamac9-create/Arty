@@ -2969,6 +2969,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let customerId: string | null = null;
     let customerEmail: string | null = null;
 
+    // Captured synchronously, right here — not inside the .then() below.
+    // getSession() reflects session state as of THIS moment (mount), so
+    // its generation must be assigned now too, or a login that completes
+    // before this promise happens to settle would be numbered LOWER than
+    // this stale call once it finally resolves late, letting a
+    // pre-login "not signed in" snapshot masquerade as the newest
+    // generation simply by finishing last. staffSub/customerSub don't
+    // have this problem: their callback fires synchronously exactly
+    // when their data becomes current, so incrementing inline there
+    // already captures the right moment.
+    const mountGeneration = ++sessionGenerationRef.current;
     Promise.all([
       supabaseStaff.auth.getSession(),
       supabase.auth.getSession()
@@ -2976,8 +2987,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       staffId = staffSession.data.session?.user?.id ?? null;
       customerId = customerSession.data.session?.user?.id ?? null;
       customerEmail = customerSession.data.session?.user?.email ?? null;
-      sessionGenerationRef.current += 1;
-      resolveSessions(staffId, customerId, customerEmail, sessionGenerationRef.current);
+      resolveSessions(staffId, customerId, customerEmail, mountGeneration);
     });
 
     const staffSub = supabaseStaff.auth.onAuthStateChange((_e, session) => {
