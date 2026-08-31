@@ -308,6 +308,13 @@ interface AppContextType {
   bookingError: string | null;
   clearBookingError: () => void;
   cancelBooking: (id: string, user?: string, paymentStatusUpdate?: 'Refunded' | 'Paid' | 'Unpaid') => void;
+  /**
+   * A customer cancelling their own booking. Separate from cancelBooking()
+   * because a customer session cannot write `bookings` — see cancel_own_booking
+   * in migration 0017. Resolves with the reason when it was refused, so the
+   * page can say why instead of appearing to succeed.
+   */
+  cancelOwnBooking: (id: string) => Promise<{ success: boolean; error?: string; refunded?: boolean }>;
   updateBookingStatus: (id: string, status: Booking['status'], paymentStatus?: Booking['paymentStatus'], user?: string) => void;
   /** A fresh read of the records an assignment conflict check needs. */
   getFreshAssignmentSources: () => Promise<{
@@ -2046,6 +2053,56 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       await notifyBookingCancellation(booking, finalPaymentStatus === 'Refunded');
     }
+  };
+
+  /**
+   * A customer cancelling their own booking.
+   *
+   * cancelBooking() above is a staff path: it writes `bookings` directly, which
+   * a customer session cannot do — RLS grants them SELECT only, and the blocked
+   * UPDATE returned an empty result that read as success, so the page confirmed
+   * a cancellation that never happened. This goes through cancel_own_booking
+   * (migration 0017), which proves ownership from auth.uid(), applies the same
+   * 24-hour refund rule, releases the seats through the same RPC, and appends
+   * the same kind of timeline entry.
+   *
+   * The notification and SMS stay here rather than in SQL, so a cancellation
+   * sends one message composed in one place whoever triggered it.
+   */
+  const cancelOwnBooking = async (id: string): Promise<{ success: boolean; error?: string; refunded?: boolean }> => {
+    if (!supabase) {
+      return { success: false, error: 'Cancellation is unavailable right now. Please contact the studio.' };
+    }
+
+    // Read before the write: the notification needs the workshop title, date,
+    // price and phone, and the row is a customer's own, so SELECT is permitted.
+    const booking = await db.bookings.get(id);
+
+    const { data, error } = await supabase.rpc('cancel_own_booking', { p_booking_id: id });
+
+    if (error) {
+      console.error(`cancelOwnBooking: booking ${id} failed:`, error.message);
+      return { success: false, error: 'We could not cancel that booking. Please try again or contact the studio.' };
+    }
+
+    // The function returns a single row; PostgREST hands back an array for a
+    // table-returning function.
+    const result = (Array.isArray(data) ? data[0] : data) as
+      | { success: boolean; code: string; reason: string | null; refunded: boolean }
+      | undefined;
+
+    if (!result?.success) {
+      return { success: false, error: result?.reason || 'That booking could not be cancelled.' };
+    }
+
+    // Same notification and SMS path every other cancellation uses. Awaited so
+    // a caller can report a genuine failure, though the helper swallows its own
+    // errors rather than undoing a cancellation that has already committed.
+    if (booking) {
+      await notifyBookingCancellation(booking, result.refunded);
+    }
+
+    return { success: true, refunded: result.refunded };
   };
 
   /**
@@ -3941,7 +3998,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       birthdayFormFields, updateBirthdayFormFields,
       addWorkshop, updateWorkshop,
       addBooking, bookingError, clearBookingError: () => setBookingError(null),
-      cancelBooking, updateBookingStatus,
+      cancelBooking, cancelOwnBooking, updateBookingStatus,
       addCategoryIfMissing, assignBookingStaff, updateWorkshopSession, appendBookingTimeline,
       getFreshAssignmentSources, getFreshStaff,
       addQueueItem, addStaffNotification, updateQueueStatus, updateQueueItem, reorderQueue, returnQueueItemToWaiting,

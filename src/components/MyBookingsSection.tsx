@@ -14,7 +14,9 @@ import { ScrollReveal } from './ui/ScrollReveal';
 import { AppImage } from './ui/AppImage';
 
 export const MyBookingsSection: React.FC = () => {
-  const { bookings, cancelBooking, setCustomerTab, workshops, currentUser, setAuthScreen, staff, workshopSessions } = useApp();
+  const { bookings, cancelOwnBooking, setCustomerTab, workshops, currentUser, setAuthScreen, staff, workshopSessions } = useApp();
+  /** The booking currently being cancelled, so its button can be disabled. */
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'Upcoming' | 'Past'>('Upcoming');
   const [hoveredTooltipId, setHoveredTooltipId] = useState<string | null>(null);
 
@@ -313,9 +315,18 @@ export const MyBookingsSection: React.FC = () => {
                       ) : (
                         /* Normal Cancel Button */
                         <button
-                          onClick={() => {
-                            if (window.confirm(`Are you sure you want to cancel your booking for ${b.workshopTitle}? Your payment of ${b.totalPrice} SAR will be refunded.`)) {
-                              cancelBooking(b.id);
+                          disabled={cancellingId === b.id}
+                          onClick={async () => {
+                            if (!window.confirm(`Are you sure you want to cancel your booking for ${b.workshopTitle}? Your payment of ${b.totalPrice} SAR will be refunded.`)) return;
+
+                            // The result is acted on rather than discarded: the
+                            // old call could be refused server-side and the page
+                            // would still look as though it had worked.
+                            setCancellingId(b.id);
+                            const result = await cancelOwnBooking(b.id);
+                            setCancellingId(null);
+                            if (!result.success) {
+                              window.alert(result.error || 'That booking could not be cancelled.');
                             }
                           }}
                           className="text-xs font-semibold text-brand-terracotta hover:text-brand-terracotta-hover hover:underline py-1.5 px-3 rounded-lg border border-transparent hover:border-brand-clay flex items-center gap-1.5 cursor-pointer"
