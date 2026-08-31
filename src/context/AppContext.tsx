@@ -750,7 +750,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { route: 'password' };
   };
 
+  /**
+   * The single place a successful customer sign-in actually gets
+   * written — called by loginCustomer() (both its normal path and the
+   * claim_email retry), registerCustomer(), and claimCustomerAccount().
+   *
+   * The same sign-in that leads here also fires Supabase's SIGNED_IN
+   * event, which independently triggers customerSub -> resolveSessions()
+   * — a second, concurrent, speculative re-derivation of the same
+   * state from its own separate lookup. Unlike that lookup, this call
+   * fires synchronously with data already fully resolved and verified
+   * (Supabase Auth has already checked the credential) — there's no
+   * async gap during which it could go stale. So this write is treated
+   * as unconditionally authoritative: it bumps the shared generation
+   * counter itself (never subject to its own guard check, the same way
+   * logoutCustomer()'s sign-out is never questioned), which means any
+   * resolveSessions() call finishing afterward — even one that
+   * independently came back with "not found" on its own speculative
+   * lookup — will see its own captured generation as stale and
+   * correctly skip overwriting this result.
+   */
   const signInCustomerRecord = (customer: CustomerAccount) => {
+    sessionGenerationRef.current += 1;
     setCurrentUser({
       id: customer.id, name: customer.name, email: customer.email, phone: customer.phone
     });
