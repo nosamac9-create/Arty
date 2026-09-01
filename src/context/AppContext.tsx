@@ -3454,6 +3454,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
    * History is never deleted: relationships are re-pointed at the canonical
    * record and the duplicate is removed only once nothing references it.
    */
+  /**
+   * Moves every piece from one customer id to another, regardless of the
+   * caller's pieces-admin permission — via reassign_customer_pieces()
+   * (migration 0018). The consolidation effect below runs unattended for any
+   * staff session that can see duplicate customers; a direct db.pieces write
+   * would be silently dropped by pieces_staff_all's staff_can('pieces-admin')
+   * check (0014) for a session without that permission, and the duplicate
+   * customer would then be deleted anyway — Postgres's `on delete set null`
+   * would sever those pieces from their customer permanently. See migration
+   * 0018 for the full trace.
+   */
+  const reassignCustomerPieces = async (oldCustomerId: string, newCustomerId: string): Promise<number> => {
+    const client = getDataClient();
+    if (!client) return 0;
+    const { data, error } = await client.rpc('reassign_customer_pieces', {
+      p_old_customer_id: oldCustomerId,
+      p_new_customer_id: newCustomerId
+    });
+    if (error) {
+      console.error('reassign_customer_pieces failed:', error.message);
+      return 0;
+    }
+    return data ?? 0;
+  };
+
   useEffect(() => {
     const consolidate = async () => {
       try {
@@ -3476,10 +3501,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           for (const duplicate of group.duplicates) {
             const canonicalId = group.canonical.id;
 
-            const [bookingRows, queueRows, pieceRows] = await Promise.all([
+            const [bookingRows, queueRows] = await Promise.all([
               db.bookings.toArray(),
-              db.queue.toArray(),
-              db.pieces.toArray()
+              db.queue.toArray()
             ]);
 
             await Promise.all([
@@ -3489,9 +3513,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               ...queueRows
                 .filter(q => q.customerId === duplicate.id)
                 .map(q => db.queue.update(q.id, { customerId: canonicalId })),
-              ...pieceRows
-                .filter(p => p.customerId === duplicate.id)
-                .map(p => db.pieces.update(p.id, { customerId: canonicalId }))
+              // Via reassign_customer_pieces() (0018), not a direct db.pieces
+              // read/write — see that migration for why the direct form
+              // silently dropped this step for a caller without pieces-admin.
+              reassignCustomerPieces(duplicate.id, canonicalId)
             ]);
 
             // Keep any detail the duplicate had that the canonical record lacks.
