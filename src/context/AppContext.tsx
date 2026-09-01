@@ -2799,14 +2799,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deletePipelineStage = async (id: string) => {
     const stage = await db.pipelineStages.get(id);
     if (!stage) return { success: false, message: 'Stage not found' };
-    
+
     // A stage referenced by any piece — current status or past history — is
     // disabled rather than deleted, so historical records stay readable.
-    const allPieces = await db.pieces.toArray();
-    const piecesInStage = allPieces.filter(p => p.status === stage.name).length;
-    const piecesInHistory = allPieces.filter(
-      p => (p.history || []).some(h => h.status === stage.name)
-    ).length;
+    //
+    // Via count_pieces_in_stage() (migration 0019), not a direct
+    // db.pieces.toArray() read: that read is subject to pieces_staff_all's
+    // staff_can('pieces-admin') check (0014), which returns [] for a caller
+    // without that permission — reached from Settings ('settings'
+    // permission), not the Pieces page, so this must work regardless.
+    // A blocked read silently computed 0 for both counts and always took the
+    // hard-delete branch below, even when real pieces referenced the stage.
+    // A failed or unavailable check refuses the delete rather than defaulting
+    // to "0 pieces" — this function's whole purpose is to keep a hard delete
+    // from running when it can't actually be verified safe, so an unreadable
+    // count must not fall through to the delete branch below.
+    const client = getDataClient();
+    if (!client) {
+      return { success: false, message: 'Could not verify whether pieces reference this stage. Please try again.' };
+    }
+    const { data, error } = await client.rpc('count_pieces_in_stage', { p_stage_name: stage.name });
+    if (error) {
+      console.error('count_pieces_in_stage failed:', error.message);
+      return { success: false, message: 'Could not verify whether pieces reference this stage. Please try again.' };
+    }
+    const row = Array.isArray(data) ? data[0] : data;
+    const piecesInStage = row?.current_count ?? 0;
+    const piecesInHistory = row?.history_count ?? 0;
 
     if (piecesInStage > 0 || piecesInHistory > 0) {
       await db.pipelineStages.update(id, { enabled: false });
@@ -3627,11 +3646,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const workshopsAssigned = await db.workshops
       .filter(w => w.staffId === id || (!w.staffId && w.instructor === member.name))
       .toArray();
-    // check assignments in pieces (assignedStaff string match)
-    const piecesAssigned = await db.pieces.filter(p => p.assignedStaff === member.name).toArray();
+
+    // Via count_pieces_assigned_to_staff() (migration 0019), not a direct
+    // db.pieces read: that read is subject to pieces_staff_all's
+    // staff_can('pieces-admin') check (0014), which returns [] for a caller
+    // without that permission — reached from Staff Management ('staff'
+    // permission), not the Pieces page, so this must work regardless. A
+    // failed or unavailable check refuses the delete rather than defaulting
+    // to "0 pieces assigned", since that default would silently let a staff
+    // member with real piece assignments be deleted.
+    const client = getDataClient();
+    if (!client) {
+      return { success: false, message: 'Could not verify whether pieces are assigned to this staff member. Please try again.' };
+    }
+    const { data: piecesAssignedCount, error } = await client.rpc('count_pieces_assigned_to_staff', { p_staff_name: member.name });
+    if (error) {
+      console.error('count_pieces_assigned_to_staff failed:', error.message);
+      return { success: false, message: 'Could not verify whether pieces are assigned to this staff member. Please try again.' };
+    }
 
     const totalWorkshops = workshopsAssigned.length;
-    const totalPieces = piecesAssigned.length;
+    const totalPieces = piecesAssignedCount ?? 0;
 
     if (totalWorkshops > 0 || totalPieces > 0) {
       return {
