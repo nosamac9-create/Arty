@@ -460,7 +460,7 @@ export const AdminSettingsSection: React.FC = () => {
                   <span>Wipe All Website Data</span>
                 </div>
                 <p className="text-xs text-brand-charcoal/70 leading-relaxed">
-                  Permanently deletes all customer accounts, bookings, queue entries, pottery pieces, events, workshops, staff profiles, and studio configuration records.
+                  Permanently deletes all customer accounts, bookings, queue entries, pottery pieces, workshops, and events. Staff profiles and studio configuration (pipeline stages, birthday packages, option lists) are preserved.
                 </p>
                 <button
                   onClick={async () => {
