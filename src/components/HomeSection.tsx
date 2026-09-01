@@ -629,8 +629,8 @@ export const HomeSection: React.FC = () => {
                 variants={{ hidden: { opacity: 0, y: 18 }, visible: { opacity: 1, y: 0 } }}
               >
                 <p className="mt-5 max-w-md text-[15px] text-brand-ink leading-[1.75]">
-                  Adult pottery parties, corporate team-building, bridal showers, or anything outside our
-                  fixed packages — connect directly with our owner to design something custom.
+                  Adult pottery parties, corporate team-building, birthday celebrations, or anything
+                  outside our fixed packages — talk to us directly and we will design something custom.
                 </p>
               </ScrollReveal>
 
@@ -708,10 +708,10 @@ export const HomeSection: React.FC = () => {
                     <UserCheck className="h-6 w-6" />
                   </div>
                   <h3 className="mt-5 font-display text-[28px] leading-tight font-semibold text-brand-charcoal md:text-[34px]">
-                    Owner &amp; Event Host Contact
+                    Talk to Our Events Team
                   </h3>
                   <p className="mt-4 max-w-md text-[15px] leading-[1.75] text-brand-ink">
-                    Connect directly with our owner to craft custom events, corporate gatherings, or private parties.
+                    Talk to our team directly and we will craft custom events, corporate gatherings, or private parties with you.
                   </p>
 
                   {/* Reverses the swap — the pitch, button and photograph wipe
@@ -738,8 +738,17 @@ export const HomeSection: React.FC = () => {
                       <Phone className="h-5 w-5 text-brand-terracotta shrink-0 mt-0.5" />
                       <div className="min-w-0">
                         <span className="text-[10px] font-semibold text-brand-muted uppercase block">Direct Phone &amp; WhatsApp</span>
-                        <a href="tel:+966501234567" className="mt-1 block font-semibold text-brand-charcoal hover:text-brand-terracotta font-mono ltr-numerals">
-                          +966 50 123 4567
+                        {/* wa.me rather than tel:, because the label offers WhatsApp
+                            and that is how these enquiries actually arrive. The href
+                            needs the bare international digits; the visible number
+                            stays formatted. */}
+                        <a
+                          href="https://wa.me/966548182404"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-1 block font-semibold text-brand-charcoal hover:text-brand-terracotta font-mono ltr-numerals"
+                        >
+                          +966 54 818 2404
                         </a>
                       </div>
                     </div>
@@ -747,9 +756,9 @@ export const HomeSection: React.FC = () => {
                     <div className="bg-brand-cream p-5 rounded-2xl border border-brand-clay flex items-start gap-3">
                       <Mail className="h-5 w-5 text-brand-terracotta shrink-0 mt-0.5" />
                       <div className="min-w-0">
-                        <span className="text-[10px] font-semibold text-brand-muted uppercase block">Owner Email</span>
-                        <a href="mailto:events@artycafe.sa" className="mt-1 block break-words font-semibold text-brand-charcoal hover:text-brand-terracotta">
-                          events@artycafe.sa
+                        <span className="text-[10px] font-semibold text-brand-muted uppercase block">Email Us</span>
+                        <a href="mailto:arty.cafe85@gmail.com" className="mt-1 block break-words font-semibold text-brand-charcoal hover:text-brand-terracotta">
+                          arty.cafe85@gmail.com
                         </a>
                       </div>
                     </div>
@@ -761,7 +770,7 @@ export const HomeSection: React.FC = () => {
                       Bespoke Custom Event Planning
                     </p>
                     <p className="leading-[1.7]">
-                      Have a unique theme, adult pottery party, corporate team-building, or bridal shower in mind? Reach out via WhatsApp or email for custom quotes, private venue buyout availability, and tailored artist arrangements!
+                      Have a unique theme, adult pottery party, corporate team-building, or birthday celebration in mind? Reach out via WhatsApp or email for custom quotes, private venue buyout availability, and tailored artist arrangements!
                     </p>
                   </div>
                 </div>
