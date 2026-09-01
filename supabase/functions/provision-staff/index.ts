@@ -310,7 +310,19 @@ Deno.serve(async (req: Request) => {
       }
 
       // a. Create + send Supabase's built-in invite email in one call.
-      const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(targetStaff.email);
+      //
+      // redirectTo is explicit rather than left to fall back to the
+      // project's Auth "Site URL" default: that default lives only in the
+      // Dashboard (this repo has no supabase/config.toml to declare it),
+      // so it silently drifted to a leftover local-dev address and every
+      // invite link pointed at a dead localhost URL in production. A named
+      // secret makes the staff invite target independent of whatever the
+      // shared Site URL happens to be set to.
+      const staffSiteUrl = Deno.env.get('STAFF_SITE_URL');
+      const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(
+        targetStaff.email,
+        staffSiteUrl ? { redirectTo: staffSiteUrl } : undefined
+      );
       if (inviteError || !invited?.user) {
         console.error('provision-staff: inviteUserByEmail failed:', inviteError?.message);
         return json({ success: false, staffId, code: 'internal_error', message: 'Could not create the account. Safe to retry.' }, 500);
