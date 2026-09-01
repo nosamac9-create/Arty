@@ -157,12 +157,22 @@ export interface CustomerActivitySummary {
   lastVisit?: string;
 }
 
-/** Activity counts for a customer, matched by id first and phone second. */
+/**
+ * Activity counts for a customer, matched by id first and phone second.
+ *
+ * `piecesCount`, when given, replaces filtering the `pieces` array entirely
+ * — pieces (unlike bookings/queue) is gated on the pieces-admin permission
+ * (0014), so the global pieces context value a caller without that
+ * permission sees is always empty. Pass a count already fetched via
+ * count_pieces_for_customer() (migration 0020) instead of `sources.pieces`
+ * in that case. `sources.pieces` stays as a fallback for a caller that
+ * genuinely has the full array (e.g. a pieces-admin session).
+ */
 export function summarizeCustomerActivity(
   customer: CustomerAccount,
-  sources: { bookings?: Booking[]; queue?: QueueItem[]; pieces?: PotteryPiece[] }
+  sources: { bookings?: Booking[]; queue?: QueueItem[]; pieces?: PotteryPiece[]; piecesCount?: number }
 ): CustomerActivitySummary {
-  const { bookings = [], queue = [], pieces = [] } = sources;
+  const { bookings = [], queue = [], pieces = [], piecesCount } = sources;
   const key = customerPhoneKey(customer);
 
   const belongs = (customerId?: string, phone?: string) =>
@@ -171,7 +181,9 @@ export function summarizeCustomerActivity(
 
   const theirQueue = queue.filter(q => belongs(q.customerId, q.phone));
   const theirBookings = bookings.filter(b => belongs(b.customerId, b.customerPhone));
-  const theirPieces = pieces.filter(p => belongs(p.customerId, p.customerPhone));
+  const theirPiecesCount = typeof piecesCount === 'number'
+    ? piecesCount
+    : pieces.filter(p => belongs(p.customerId, p.customerPhone)).length;
 
   const dates = [...theirQueue.map(q => q.date), ...theirBookings.map(b => b.date)]
     .filter(Boolean)
@@ -180,7 +192,7 @@ export function summarizeCustomerActivity(
   return {
     visits: theirQueue.length,
     bookings: theirBookings.length,
-    pieces: theirPieces.length,
+    pieces: theirPiecesCount,
     hasAccount: hasWebsiteAccount(customer),
     lastVisit: dates[dates.length - 1]
   };

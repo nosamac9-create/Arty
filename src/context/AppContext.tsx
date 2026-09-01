@@ -328,6 +328,8 @@ interface AppContextType {
   }>;
   /** Staff read straight from the database, bypassing the cached list. */
   getFreshStaff: () => Promise<StaffMember[]>;
+  /** A customer's piece count, regardless of the caller's pieces-admin permission. */
+  getCustomerPieceCount: (customerId?: string, phone?: string) => Promise<number>;
   /** Assigns or clears the staff member hosting a birthday/event booking. */
   assignBookingStaff: (bookingId: string, staffId: string | null) =>
     Promise<{ success: boolean; error?: string }>;
@@ -3498,6 +3500,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return data ?? 0;
   };
 
+  /**
+   * A customer's piece count, regardless of the caller's pieces-admin
+   * permission — via count_pieces_for_customer() (migration 0020). The
+   * global `pieces` context value is empty for a caller without that
+   * permission (0014), so a direct filter over it — as
+   * summarizeCustomerActivity() used to do for Live Queue's customer-detail
+   * panel — silently undercounted. Not currently rendered anywhere the
+   * result would be visible, but the value was wrong regardless.
+   */
+  const getCustomerPieceCount = async (customerId?: string, phone?: string): Promise<number> => {
+    const client = getDataClient();
+    if (!client) return 0;
+    const { data, error } = await client.rpc('count_pieces_for_customer', {
+      p_customer_id: customerId ?? null,
+      p_customer_phone: phone ?? null
+    });
+    if (error) {
+      console.error('count_pieces_for_customer failed:', error.message);
+      return 0;
+    }
+    return data ?? 0;
+  };
+
   useEffect(() => {
     const consolidate = async () => {
       try {
@@ -4020,7 +4045,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       addBooking, bookingError, clearBookingError: () => setBookingError(null),
       cancelBooking, cancelOwnBooking, updateBookingStatus,
       addCategoryIfMissing, assignBookingStaff, updateWorkshopSession, appendBookingTimeline,
-      getFreshAssignmentSources, getFreshStaff,
+      getFreshAssignmentSources, getFreshStaff, getCustomerPieceCount,
       addQueueItem, addStaffNotification, updateQueueStatus, updateQueueItem, reorderQueue, returnQueueItemToWaiting,
       assignQueueTables, seatQueueItem, changeQueueItemTables,
       updatePieceStatus, addPiece, updatePiece, markNotificationAsRead, clearAllNotifications,

@@ -935,7 +935,7 @@ export const LiveQueueSection: React.FC = () => {
     assignQueueTables, seatQueueItem, changeQueueItemTables,
     todayDateStr, formattedTodayDate, appSettings,
     staff, workshops, workshopSessions, bookings, events,
-    customers, pieces, resolveCustomer, updateCustomer, addStaffNotification,
+    customers, getCustomerPieceCount, resolveCustomer, updateCustomer, addStaffNotification,
     updateWorkshopSession, appendBookingTimeline,
     birthdayPackages,
 } = useApp();
@@ -1172,6 +1172,30 @@ export const LiveQueueSection: React.FC = () => {
     if (query === '+966 5' || query === '+966') return [];
     return searchCustomers(customers, query, 5);
   }, [customers, customerQuery, newName, newPhone, linkedCustomer]);
+
+  /**
+   * Piece counts for the linked customer and any matching customers,
+   * keyed by customer id — via getCustomerPieceCount() (migration 0020),
+   * not the global `pieces` context value, which is empty here for any
+   * staff session without pieces-admin (0014). Bounded: at most 1 linked
+   * customer or up to 5 matches (searchCustomers' own cap) at a time.
+   */
+  const [customerPieceCounts, setCustomerPieceCounts] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    const targets = linkedCustomer ? [linkedCustomer] : customerMatches.map(m => m.customer);
+    if (targets.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const entries = await Promise.all(
+        targets.map(async c => [c.id, await getCustomerPieceCount(c.id, c.phone)] as const)
+      );
+      if (!cancelled) {
+        setCustomerPieceCounts(prev => ({ ...prev, ...Object.fromEntries(entries) }));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [linkedCustomer, customerMatches]);
 
   /** Populates the form from an existing customer and links the visit to them. */
   const handleSelectExistingCustomer = (customer: CustomerAccount) => {
@@ -2100,7 +2124,7 @@ export const LiveQueueSection: React.FC = () => {
                       {linkedCustomer.email ? ` · ${linkedCustomer.email}` : ''}
                     </p>
                     {(() => {
-                      const summary = summarizeCustomerActivity(linkedCustomer, { bookings, queue, pieces });
+                      const summary = summarizeCustomerActivity(linkedCustomer, { bookings, queue, piecesCount: customerPieceCounts[linkedCustomer.id] });
                       return (
                         <p className="text-[10px] font-semibold text-brand-charcoal/55 mt-0.5">
                           {summary.visits} previous visit{summary.visits === 1 ? '' : 's'} ·{' '}
@@ -2130,7 +2154,7 @@ export const LiveQueueSection: React.FC = () => {
                       several customers shared a name. */}
                   <div className="max-h-40 overflow-y-auto always-scrollbar space-y-1 pe-1">
                   {customerMatches.map(({ customer }) => {
-                    const summary = summarizeCustomerActivity(customer, { bookings, queue, pieces });
+                    const summary = summarizeCustomerActivity(customer, { bookings, queue, piecesCount: customerPieceCounts[customer.id] });
                     return (
                       <button
                         key={customer.id}
