@@ -488,6 +488,14 @@ export interface WorkshopInput {
   ageRange?: string;
   /** Sessions or dates attached to this workshop/event. */
   sessions?: unknown[];
+  /**
+   * Photographs attached to this workshop.
+   *
+   * Only checked when the workshop is being published — see
+   * validateWorkshopForm. Left undefined by callers saving a draft, and by
+   * events, which have no such rule.
+   */
+  images?: unknown[];
 }
 
 export function validatePrice(price?: number | string): ValidationResult {
@@ -508,7 +516,18 @@ export function validateCapacity(capacity?: number | string): ValidationResult {
   return value >= 1 ? OK : fail('Capacity must be at least 1.');
 }
 
+/**
+ * Photographs a workshop needs before it can go on the customer site.
+ *
+ * A published workshop is a shop window; one photograph is not enough to show
+ * what an afternoon there is actually like. Drafts are exempt so half-finished
+ * work can still be saved.
+ */
+export const MIN_WORKSHOP_PHOTOS = 3;
+
 export function validateWorkshopForm(input: WorkshopInput): Record<string, string> {
+  const photoCount = (input.images || []).length;
+
   return collectErrors({
     title: validateRequired(input.title, 'Workshop title'),
     category: validateRequired(input.category, 'Category'),
@@ -517,7 +536,15 @@ export function validateWorkshopForm(input: WorkshopInput): Record<string, strin
     ageRange: validateRequired(input.ageRange, 'Age range'),
     sessions: (input.sessions || []).length > 0
       ? OK
-      : fail('Add at least one session date before publishing.')
+      : fail('Add at least one session date before publishing.'),
+    // Only enforced when the caller passes a list — publishing does, saving a
+    // draft does not.
+    images: input.images === undefined || photoCount >= MIN_WORKSHOP_PHOTOS
+      ? OK
+      : fail(
+          `Add at least ${MIN_WORKSHOP_PHOTOS} photos before publishing — this workshop has ` +
+          `${photoCount === 0 ? 'none' : photoCount}.`
+        )
   });
 }
 

@@ -1093,14 +1093,16 @@ export const SYSTEM_TESTS: SystemTestDefinition[] = [
     category: 'Workshops',
     kind: 'scenario',
     run: async () => {
-      const good = { title: 'Wheel', category: 'Pottery', price: 250, capacity: 8, ageRange: '12+', sessions: [{}] };
+      const good = { title: 'Wheel', category: 'Pottery', price: 250, capacity: 8, ageRange: '12+', sessions: [{}], images: ['a', 'b', 'c'] };
       const variants: Array<[string, any]> = [
         ['no title', { ...good, title: '' }],
         ['no category', { ...good, category: '' }],
         ['negative price', { ...good, price: -1 }],
         ['zero capacity', { ...good, capacity: 0 }],
         ['no age range', { ...good, ageRange: '' }],
-        ['no sessions', { ...good, sessions: [] }]
+        ['no sessions', { ...good, sessions: [] }],
+        ['too few photos', { ...good, images: ['a'] }],
+        ['no photos', { ...good, images: [] }]
       ];
       const notBlocked = variants.filter(([, v]) => Object.keys(validateWorkshopForm(v)).length === 0);
       const goodBlocked = Object.keys(validateWorkshopForm(good)).length > 0;

@@ -1017,8 +1017,15 @@ export const AdminWorkshopFormSection: React.FC = () => {
     try {
       // Shared rules first: title, category, price, capacity, age range and at
       // least one session.
+      // The photo minimum is keyed on the status being saved, not on which
+      // button was pressed: this handler also saves a workshop left as Draft or
+      // Archived in the status selector, and only a workshop actually going on
+      // the customer site needs its photographs.
+      const willBePublished = (status || 'Published') === 'Published';
+
       const baseErrors = validateWorkshopForm({
-        title, category: category || categoryInput, price, capacity, ageRange, sessions
+        title, category: category || categoryInput, price, capacity, ageRange, sessions,
+        ...(willBePublished ? { images } : {})
       });
       setWorkshopErrors(baseErrors);
       if (Object.keys(baseErrors).length > 0) {
