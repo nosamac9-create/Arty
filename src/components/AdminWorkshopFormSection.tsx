@@ -304,8 +304,69 @@ export const AdminWorkshopFormSection: React.FC = () => {
     formTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
-  // Load data for editing
+  /**
+   * Which workshop the form has actually been populated from.
+   *
+   * `undefined` means nothing has been loaded yet, which is distinct from
+   * `null` (a new workshop, deliberately blank). The effect below re-runs
+   * whenever `workshops` or `staff` change — both are live tables — so it needs
+   * to tell "the selection changed" from "some unrelated row changed".
+   */
+  const loadedWorkshopIdRef = useRef<string | null | undefined>(undefined);
+
+  /**
+   * The selection as of the previous run, so an explicit change can be told
+   * from a re-run caused by an unrelated table refresh. Choosing a different
+   * workshop is a deliberate act and always loads it, even over unsaved work.
+   */
+  const lastSeenWorkshopIdRef = useRef<string | null | undefined>(undefined);
+
+  /** Mirrors isFormDirty for the effect, which must not re-run when it flips. */
+  const isFormDirtyRef = useRef(false);
+  isFormDirtyRef.current = isFormDirty;
+
+  /*
+   * Load the selected workshop into the form.
+   *
+   * This effect depends on `workshops` and `staff`, and it must: the selection
+   * can be made before either list has arrived, and the form can only be filled
+   * once the record exists. But both are live tables, so the effect also re-runs
+   * on every unrelated refresh of them — and it used to reload or reset the form
+   * every time.
+   *
+   * That was destructive in two ways. On a new workshop it fell to `resetForm()`,
+   * blanking half-entered work and, because the baseline was recaptured from the
+   * now-empty form, hiding the action bar with it. On an existing one it
+   * overwrote in-progress edits with the stored values.
+   *
+   * Neither needed a rare race to happen. `useLiveTable` sets a table to `[]`
+   * when a read fails, so a single failing `workshops` request — the 500s that
+   * this table's multi-megabyte rows produce — was enough to wipe the form
+   * mid-edit. A photo upload simply widened the window for one to land.
+   *
+   * So the form is only touched when the selection itself changed, or when the
+   * record it is waiting for finally arrives and there is no unsaved work to
+   * lose.
+   */
   useEffect(() => {
+    const userChangedSelection = lastSeenWorkshopIdRef.current !== editingWorkshopId;
+    lastSeenWorkshopIdRef.current = editingWorkshopId;
+    const alreadyLoaded = loadedWorkshopIdRef.current === editingWorkshopId;
+
+    // Someone picking a different workshop — or clearing the selection — is an
+    // explicit act, so it always takes effect. Everything below concerns
+    // re-runs where the selection did not change.
+    if (!userChangedSelection) {
+      // Already showing this selection: an unrelated refresh of workshops or
+      // staff. Re-running here is what blanked the form mid-edit.
+      if (alreadyLoaded) return;
+
+      // Not loaded yet — the record had not arrived when it was selected, so
+      // this branch stays live to pick it up. That retry must not overwrite
+      // anything typed while waiting: unsaved work outranks a reload.
+      if (editingWorkshopId && isFormDirtyRef.current) return;
+    }
+
     if (editingWorkshopId) {
       const ws = workshops.find(w => w.id === editingWorkshopId);
       if (ws) {
@@ -354,9 +415,14 @@ export const AdminWorkshopFormSection: React.FC = () => {
         // workshop without moving left staff staring at the list they just
         // clicked in, with no sign anything had happened.
         scrollFormIntoView();
+        // Only now is the form actually showing this workshop. Leaving the ref
+        // alone when the record was not found lets a later run retry once the
+        // table arrives.
+        loadedWorkshopIdRef.current = editingWorkshopId;
       }
     } else {
       resetForm();
+      loadedWorkshopIdRef.current = null;
     }
   }, [editingWorkshopId, workshops, staff]);
 
