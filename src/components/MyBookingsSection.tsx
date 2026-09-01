@@ -138,9 +138,16 @@ export const MyBookingsSection: React.FC = () => {
     return ws?.duration || '';
   };
 
+  /**
+   * The booked workshop's photo, or nothing.
+   *
+   * A stock photograph used to stand in when the workshop could not be found.
+   * That is worse than an empty frame: it shows the customer a picture of
+   * something they did not book, and it hides a missing record from us.
+   */
   const getWorkshopImage = (workshopId: string) => {
     const ws = workshops.find(w => w.id === workshopId);
-    return ws ? ws.image : 'https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?auto=format&fit=crop&w=150&h=150&q=80';
+    return ws?.image || '';
   };
 
   if (!currentUser) {

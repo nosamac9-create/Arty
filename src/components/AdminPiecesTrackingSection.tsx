@@ -92,7 +92,6 @@ export const AdminPiecesTrackingSection: React.FC = () => {
   const [pieceCodeInput, setPieceCodeInput] = useState(() => suggestPieceCode(pieces));
   const [pieceNameInput, setPieceNameInput] = useState('Custom Clay Vessel');
   const [customPhotoUrl, setCustomPhotoUrl] = useState('');
-  const [selectedPresetPhoto, setSelectedPresetPhoto] = useState('Mug');
   const [dateCreatedInput, setDateCreatedInput] = useState(() => new Date().toISOString().split('T')[0]);
   const [assignedStaffInput, setAssignedStaffInput] = useState('');
   const [initialStatus, setInitialStatus] = useState<PotteryPiece['status']>('Created');
@@ -119,16 +118,6 @@ export const AdminPiecesTrackingSection: React.FC = () => {
   const [backwardMoveTarget, setBackwardMoveTarget] = useState<{ pieceId: string; currentStatus: PotteryPiece['status']; targetStatus: PotteryPiece['status'] } | null>(null);
   const [backwardPerformer, setBackwardPerformer] = useState('');
   const [backwardReason, setBackwardReason] = useState('');
-
-  // Preset design photos mapping
-  const PHOTO_PRESETS: Record<string, string> = {
-    Mug: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=400&q=80',
-    Bowl: 'https://images.unsplash.com/photo-1578749556568-bc2c40e68b61?auto=format&fit=crop&w=400&q=80',
-    Plate: 'https://images.unsplash.com/photo-1535401991746-da3d9055713e?auto=format&fit=crop&w=400&q=80',
-    Vase: 'https://images.unsplash.com/photo-1578500494198-246f612d3b3d?auto=format&fit=crop&w=400&q=80',
-    Sculpture: 'https://images.unsplash.com/photo-1576016770956-debb63d900ee?auto=format&fit=crop&w=400&q=80',
-    Other: 'https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=400&q=80'
-  };
 
   // Helper to trigger animated on-screen toasts for staff
   const triggerToast = (title: string, message: string, highlighted?: boolean) => {
@@ -1360,7 +1349,6 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                     value={pieceType}
                     onChange={e => {
                       setPieceType(e.target.value);
-                      setSelectedPresetPhoto(e.target.value);
                     }}
                     className="w-full bg-white border border-brand-clay rounded-xl p-2.5 font-bold text-brand-charcoal cursor-pointer"
                   >
@@ -1416,12 +1404,20 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                   
                   <div className="grid grid-cols-2 gap-3 items-center">
                     <div className="aspect-video rounded-xl bg-brand-sand overflow-hidden border border-brand-clay relative">
-                      <img 
-                        src={customPhotoUrl || PHOTO_PRESETS[selectedPresetPhoto] || PHOTO_PRESETS.Other} 
-                        alt="Preview" 
-                        className="h-full w-full object-cover" 
-                        referrerPolicy="no-referrer"
-                      />
+                      {customPhotoUrl ? (
+                        <img
+                          src={customPhotoUrl}
+                          alt="Preview"
+                          className="h-full w-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        // The sand frame with nothing in it: honest about there
+                        // being no photograph of this piece yet.
+                        <div className="flex h-full w-full items-center justify-center text-[10px] font-semibold text-brand-charcoal/40">
+                          No photo yet
+                        </div>
+                      )}
                     </div>
 
                     <div className="space-y-2">
@@ -1559,7 +1555,12 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                     customerName: manualName.trim(),
                     customerPhone: manualPhone.trim(),
                     dateCreated: dateCreatedInput,
-                    image: customPhotoUrl || PHOTO_PRESETS[selectedPresetPhoto] || PHOTO_PRESETS.Other,
+                    // No stand-in photograph. This used to fall back to a stock
+                    // photo of the selected piece type, so a piece nobody
+                    // photographed was stored carrying a picture of someone
+                    // else's mug — which the customer then reads as their own
+                    // pottery on My Pieces.
+                    image: customPhotoUrl || '',
                     status: initialStatus,
                     assignedStaff: assignedStaffInput,
                     storageLocation: storageLocationInput,

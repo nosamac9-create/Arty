@@ -79,8 +79,12 @@ export const MyPiecesSection: React.FC = () => {
    * the piece: that upload is a working record for the shelf, taken mid-process
    * and never meant for the customer.
    */
-  const PIECE_PLACEHOLDER =
-    'https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261?auto=format&fit=crop&w=600&q=80';
+  /**
+   * No stand-in photograph. A stock pottery shot used to fill this space, which
+   * showed the customer someone else's work in place of their own; an empty
+   * frame is honest about having no picture to show.
+   */
+  const PIECE_PLACEHOLDER = '';
 
   const customerImageFor = (piece: PotteryPiece): string => {
     const byId = piece.workshopId
