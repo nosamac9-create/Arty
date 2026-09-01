@@ -20,6 +20,7 @@ import {
 import { findRuleConflict, getRuleSlots, formatSlotDate, RuleConflict } from '../utils/recurringConflicts';
 import { validateWorkshopForm } from '../utils/validation';
 import { getSessionSeatUsage } from '../utils/queueUtils';
+import { uploadImages, removeImages } from '../lib/mediaUpload';
 import { 
   Upload, Trash2, Plus, AlertCircle, Sparkles, Image as ImageIcon, 
   Settings, FolderKanban, Check, Save, Eye, Bold, Italic, Link, AlignLeft, X,
@@ -101,7 +102,11 @@ export const AdminWorkshopFormSection: React.FC = () => {
    * always had — so nothing about the schema changes. The form just works in
    * one list and splits it again on save.
    */
-  const [images, setImages] = useState<string[]>(['https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?auto=format&fit=crop&w=800&q=80']);
+  const [images, setImages] = useState<string[]>([]);
+  /** An upload is in flight. Indeterminate on purpose: supabase-js's
+   *  upload() reports no progress, so claiming a percentage would be a
+   *  fiction. Saving is blocked while it is true. */
+  const [uploadingPhotos, setUploadingPhotos] = useState(false);
   
   // Tag input list
   const [materialInput, setMaterialInput] = useState('');
@@ -145,58 +150,56 @@ export const AdminWorkshopFormSection: React.FC = () => {
    * Adds the chosen photos to the list — it never replaces what is already
    * there. Several may be picked at once, and more added later.
    */
-  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  /**
+   * Uploads the chosen photographs and keeps their URLs.
+   *
+   * These used to be read with FileReader into base64 and stored inline in the
+   * workshop row — megabytes per row, pulled by every read of the table, and
+   * past the size Realtime will deliver. They go to Storage now; the row holds
+   * a URL.
+   *
+   * Validation lives in mediaUpload so every upload in the app applies the same
+   * rules. Uploads are awaited rather than fired and forgotten: staff need to
+   * know a photo did not make it before they save, not after.
+   */
+  const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
+    // Cleared straight away so the same file can be picked again after removal,
+    // and so the value does not survive the awaits below.
+    e.target.value = '';
     if (files.length === 0) return;
 
-    const rejected: string[] = [];
-    const accepted = files.filter(file => {
-      if (!file.type.startsWith('image/')) {
-        rejected.push(`${file.name} is not an image`);
-        return false;
-      }
-      if (file.size > 5 * 1024 * 1024) {
-        rejected.push(`${file.name} is over 5MB`);
-        return false;
-      }
-      return true;
-    });
+    setUploadingPhotos(true);
+    try {
+      const { urls, errors } = await uploadImages(files, { folder: 'workshops' });
 
-    if (rejected.length > 0) {
-      alert(`These files were skipped:\n\n${rejected.join('\n')}`);
+      if (urls.length > 0) {
+        // Appended and de-duplicated, so the same photo added twice does not
+        // give the slider two identical frames.
+        setImages(prev => Array.from(new Set([...prev, ...urls])));
+      }
+
+      if (errors.length > 0) {
+        alert(
+          `${errors.length === files.length ? 'No photos were added.' : 'Some photos were not added.'}\n\n${errors.join('\n')}`
+        );
+      }
+    } finally {
+      setUploadingPhotos(false);
     }
-    if (accepted.length === 0) {
-      e.target.value = '';
-      return;
-    }
-
-    Promise.all(
-      accepted.map(
-        file =>
-          new Promise<string | null>(resolve => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.onerror = () => resolve(null);
-            reader.readAsDataURL(file);
-          })
-      )
-    ).then(results => {
-      const added = results.filter((src): src is string => !!src);
-      if (added.length < accepted.length) {
-        alert('Some photos could not be read. Please try adding them again.');
-      }
-      // Appended, and de-duplicated so the same photo picked twice does not
-      // give the slider two identical frames.
-      setImages(prev => Array.from(new Set([...prev, ...added])));
-    });
-
-    // Lets the same file be chosen again after being removed.
-    e.target.value = '';
   };
 
-  /** Removes one photo. If it was the cover, the next one becomes the cover. */
+  /**
+   * Removes one photo. If it was the cover, the next one becomes the cover.
+   *
+   * The stored object goes too, or the bucket fills with files nothing points
+   * at. Best effort and unawaited: cleanup failing must never stop someone
+   * removing a photo, and removeImages ignores anything that is not one of
+   * ours — a workshop still holding base64 has nothing to delete.
+   */
   const handleRemoveImage = (src: string) => {
     setImages(prev => prev.filter(item => item !== src));
+    void removeImages([src]);
   };
 
   /** Promotes a photo to cover — the cover is simply the first in the list. */
@@ -219,7 +222,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
     setRoomId('');
     setStatus('Published');
     setSkillLevel('Beginner');
-    setImages(['https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?auto=format&fit=crop&w=800&q=80']);
+    setImages([]);
     setMaterials(['Terracotta Clay', 'Trimming tools', 'Kiln firing']);
     setAgeRange('');
     setSessions([]);
@@ -1062,7 +1065,10 @@ export const AdminWorkshopFormSection: React.FC = () => {
         price: Number(price) || 200,
         capacity: Number(capacity) || 10,
         spotsLeft: Number(capacity) || 10,
-        image: images[0] || 'https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?auto=format&fit=crop&w=800&q=80',
+        // No substitution: a workshop with no photograph is saved with none.
+        // The stock photo that used to stand in here is what made a row whose
+        // images had been lost look like a row that simply had a photo.
+        image: images[0] || '',
         additionalImages: images.slice(1),
         // Name is denormalized for display only; staffId is the assignment record.
         instructor: assignedStaffMember ? assignedStaffMember.name : '',
@@ -1160,7 +1166,10 @@ export const AdminWorkshopFormSection: React.FC = () => {
         price: Number(price) || 200,
         capacity: Number(capacity) || 10,
         spotsLeft: Number(capacity) || 10,
-        image: images[0] || 'https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?auto=format&fit=crop&w=800&q=80',
+        // No substitution: a workshop with no photograph is saved with none.
+        // The stock photo that used to stand in here is what made a row whose
+        // images had been lost look like a row that simply had a photo.
+        image: images[0] || '',
         additionalImages: images.slice(1),
         // Name is denormalized for display only; staffId is the assignment record.
         instructor: assignedStaffMember ? assignedStaffMember.name : '',
@@ -1420,12 +1429,17 @@ export const AdminWorkshopFormSection: React.FC = () => {
                 accept="image/*"
                 multiple
                 onChange={handleImageFileChange}
+                disabled={uploadingPhotos}
                 className="hidden"
               />
-              <Upload className="h-7 w-7 text-brand-terracotta mb-2 shrink-0 pulse-accent" />
-              <p className="text-xs font-bold text-brand-charcoal">Click or drag &amp; drop photos here</p>
+              <Upload className={`h-7 w-7 text-brand-terracotta mb-2 shrink-0 ${uploadingPhotos ? 'animate-pulse' : 'pulse-accent'}`} />
+              <p className="text-xs font-bold text-brand-charcoal">
+                {uploadingPhotos ? 'Uploading photos…' : 'Click or drag & drop photos here'}
+              </p>
               <p className="text-[10px] text-brand-charcoal/50 mt-0.5">
-                JPEG, PNG, WEBP (Max 5MB each) — pick several at once, or add more later
+                {uploadingPhotos
+                  ? 'Please wait — do not close this form.'
+                  : 'JPEG, PNG, WEBP (Max 5MB each) — pick several at once, or add more later'}
               </p>
             </label>
 
@@ -1476,7 +1490,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
               </>
             ) : (
               <p className="text-[10px] text-brand-charcoal/50 font-semibold italic">
-                No photos yet — the workshop will fall back to a placeholder image.
+                No photos yet — the workshop will show an empty photo frame until one is added.
               </p>
             )}
           </div>
@@ -2193,7 +2207,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-2 text-left">
                           <img 
-                            src={ws.image || 'https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?auto=format&fit=crop&w=150&h=150&q=80'} 
+                            src={ws.image} 
                             alt={ws.title} 
                             className="h-9 w-12 object-cover rounded-lg shrink-0 border border-brand-clay/40"
                           />
@@ -2392,11 +2406,13 @@ export const AdminWorkshopFormSection: React.FC = () => {
         <button
           type="button"
           onClick={handleSaveDraft}
-          disabled={isSaving}
+          // Blocked mid-upload: saving now would store the photos that happen
+          // to have finished and silently drop the rest.
+          disabled={isSaving || uploadingPhotos}
           className="cursor-pointer px-5 py-3 rounded-xl border border-brand-clay bg-white text-xs font-bold text-brand-charcoal hover:bg-brand-sand transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Save className="h-4 w-4" />
-          <span>{isSaving ? 'Saving...' : 'Save Draft'}</span>
+          <span>{uploadingPhotos ? 'Uploading…' : isSaving ? 'Saving...' : 'Save Draft'}</span>
         </button>
 
         <div className="flex gap-3">
@@ -2418,11 +2434,11 @@ export const AdminWorkshopFormSection: React.FC = () => {
           <button
             type="submit"
             onClick={handlePublish}
-            disabled={isSaving}
+            disabled={isSaving || uploadingPhotos}
             className="cursor-pointer rounded-xl bg-brand-terracotta px-6 py-3 text-xs font-bold text-brand-cream hover:bg-brand-terracotta-hover transition-all flex items-center gap-1.5 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Check className="h-4 w-4 stroke-[3]" />
-            <span>{isSaving ? 'Saving...' : (editingWorkshopId ? 'Update Workshop' : 'Publish Workshop')}</span>
+            <span>{uploadingPhotos ? 'Uploading…' : isSaving ? 'Saving...' : (editingWorkshopId ? 'Update Workshop' : 'Publish Workshop')}</span>
           </button>
         </div>
       </div>,
