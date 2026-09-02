@@ -6,7 +6,7 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
-  Cake, CalendarRange, CheckCircle2, ChevronRight, Clock, Compass,
+  Cake, CalendarRange, CheckCircle2, Clock, Compass,
   Paintbrush, Sparkles, Users, ArrowLeft, ScrollText
 } from 'lucide-react';
 import { BirthdayPackage } from '../types';
@@ -34,6 +34,41 @@ interface Props {
  * focused state would skip it, which is what made the old page feel like it
  * had simply loaded with an accordion already open.
  */
+/**
+ * The three ticket colourways: one brand green, three depths of it.
+ *
+ * Built on the sage token family rather than on hexes of their own —
+ * `--color-brand-sage` (#7C8F80) is the green in the hero headline, and
+ * `--color-brand-sage-line` (#C8D2C6) is its existing light sibling. The middle
+ * tint sits between them. Assigned by position in the list, cycling beyond the
+ * third, so three packages stay tellable apart while reading as one family.
+ *
+ * ONE INK, THREE TIERS. Every text tier uses the same near-black; the hierarchy
+ * comes from size, weight and letter-spacing instead. That is not a stylistic
+ * preference — a lighter "muted" colour cannot survive all three tints. On
+ * #7C8F80 a muted label measures 2.30:1 against a 4.5 minimum, and the
+ * secondary tier 3.33:1. Type hierarchy holds at every depth; colour hierarchy
+ * would degrade ticket by ticket.
+ *
+ * Measured against #1B241E: 10.24:1, 7.61:1 and 4.63:1 respectively — AA or
+ * better on all three. (The terracotta and clay-rose colourways this replaces
+ * were never checked and shipped with muted labels at 2.52:1 and 3.28:1.)
+ *
+ * `photo` is ~12% darker than `card` so the image panel reads as part of the
+ * ticket, and stands alone as a plain panel when a package has no photograph.
+ */
+const TICKET_INK = '#1B241E';
+
+const TICKET_COLOURWAYS = [
+  { name: 'sage light', card: '#C8D2C6', photo: '#B0BCAE' },
+  { name: 'sage mid',   card: '#A8B7AB', photo: '#93A395' },
+  { name: 'sage',       card: '#7C8F80', photo: '#6D7E71' }
+] as const;
+
+/** A light warm wash used for the tags and the perforation, over any tint. */
+const TICKET_WASH = 'rgba(255, 250, 240, 0.42)';
+const TICKET_PERFORATION = 'rgba(255, 250, 240, 0.55)';
+
 export const BirthdayPackagesShowcase: React.FC<Props> = ({
   packages, initialPackageId, onChoose, onFocusChange
 }) => {
@@ -184,7 +219,7 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
             initial={prefersReducedMotion ? false : { opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, ease }}
-            className="relative max-w-xl"
+            className="relative mx-auto max-w-[900px]"
           >
             <h2 className="font-display text-[22px] sm:text-2xl font-semibold text-brand-charcoal">
               Choose your celebration
@@ -194,99 +229,191 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
             </p>
           </motion.div>
 
-          {/* items-stretch + h-full on the panels: the price rows line up
-              across the pair even when one description runs a line longer. */}
-          <div className="relative mt-7 grid grid-cols-1 gap-6 lg:mt-9 lg:grid-cols-2 lg:gap-8 items-stretch">
-            {packages.map((pkg, index) => (
-              <motion.button
-                key={pkg.id}
-                type="button"
-                onClick={() => focus(pkg.id)}
-                initial={prefersReducedMotion ? false : { opacity: 0, y: 28 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: prefersReducedMotion ? 0 : index * 0.14, duration: 0.55, ease }}
-                className="group flex h-full w-full flex-col overflow-hidden rounded-[32px] bg-white text-start shadow-card ring-1 ring-brand-clay/70 transition-all duration-300 hover:shadow-2xl hover:shadow-brand-terracotta/10 hover:ring-brand-clay motion-safe:hover:-translate-y-1 cursor-pointer"
-              >
-                <motion.div
-                  layoutId={`bday-media-${pkg.id}`}
-                  transition={spring}
-                  className="relative h-64 w-full shrink-0 overflow-hidden bg-brand-sand sm:h-72 lg:h-[21rem]"
+          {/* A stacked list of tear-off tickets, not a grid of cards. Packages
+              are a private event you configure, not a class you take a seat in,
+              and sharing the workshop card pattern made the two read as
+              interchangeable. One full-width ticket per row: photo, content,
+              stub. */}
+          {/* Capped and centred: at full page width a ticket stretched past
+              5:1 and the middle column became dead space. ~900px puts each
+              ticket near 3:1, which is a ticket's proportion rather than a
+              banner's. The heading above shares this container so the two
+              align to the same edge. */}
+          <ul className="relative mx-auto mt-7 max-w-[900px] list-none space-y-5 lg:mt-9 lg:space-y-6">
+            {packages.map((pkg, index) => {
+              const colour = TICKET_COLOURWAYS[index % TICKET_COLOURWAYS.length];
+
+              // Straight from the field that feeds the detail page's "What's
+              // included" list — nothing invented, nothing hardcoded.
+              const tags = (pkg.includedItems || [])
+                .map(item => String(item || '').trim())
+                .filter(Boolean)
+                .slice(0, 4);
+
+              // Built by filtering, so a package missing one of these loses that
+              // pair rather than leaving an empty column or a ragged pill.
+              const specs = [
+                pkg.duration ? { label: 'Duration', value: pkg.duration } : null,
+                pkg.minGuests || pkg.maxGuests
+                  ? { label: 'Guests', value: `${pkg.minGuests}–${pkg.maxGuests}` }
+                  : null,
+                pkg.ageInformation ? { label: 'Ages', value: pkg.ageInformation } : null
+              ].filter((spec): spec is { label: string; value: string } => spec !== null);
+
+              return (
+                <motion.li
+                  key={pkg.id}
+                  initial={prefersReducedMotion ? false : { opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: prefersReducedMotion ? 0 : index * 0.1, duration: 0.5, ease }}
                 >
-                  {pkg.image && (
-                    <AppImage
-                      src={pkg.image}
-                      alt=""
-                      className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]"
-                      referrerPolicy="no-referrer"
-                    />
-                  )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-brand-charcoal/75 via-brand-charcoal/10 to-transparent" />
-
-                  <div className="absolute inset-x-0 bottom-0 p-6 sm:p-7">
-                    <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-cream/70">
-                      Package {String(index + 1).padStart(2, '0')}
-                    </span>
-                    <motion.h3
-                      layoutId={`bday-title-${pkg.id}`}
+                  {/* A div, not a button: the stub carries a real button, and a
+                      button inside a button is invalid. The whole ticket stays
+                      clickable and reachable by keyboard. */}
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => focus(pkg.id)}
+                    onKeyDown={event => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        focus(pkg.id);
+                      }
+                    }}
+                    aria-label={`${pkg.name} — see what's included`}
+                    className="package-ticket group relative flex w-full cursor-pointer flex-col overflow-hidden rounded-[4px] text-start transition-transform duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-charcoal motion-safe:hover:-translate-y-0.5 sm:min-h-[240px] sm:flex-row lg:min-h-[300px]"
+                    style={{
+                      backgroundColor: colour.card,
+                      color: TICKET_INK,
+                      ['--ticket-perf-color' as string]: TICKET_PERFORATION
+                    }}
+                  >
+                    {/* PHOTO — flush to the edge, the ticket's own darker shade.
+                        With no photograph it stays exactly that: a colour panel,
+                        never a stock image of somebody else's party. */}
+                    <motion.div
+                      layoutId={`bday-media-${pkg.id}`}
                       transition={spring}
-                      className="mt-1.5 font-display text-[28px] font-semibold leading-tight text-brand-cream sm:text-[32px]"
+                      className="relative h-[168px] w-full shrink-0 overflow-hidden sm:h-auto sm:w-[170px] lg:w-[240px]"
+                      style={{ backgroundColor: colour.photo }}
                     >
-                      {pkg.name}
-                    </motion.h3>
-                  </div>
-                </motion.div>
+                      {pkg.image && (
+                        <AppImage
+                          src={pkg.image}
+                          alt=""
+                          className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]"
+                          referrerPolicy="no-referrer"
+                        />
+                      )}
+                    </motion.div>
 
-                <div className="flex flex-1 flex-col p-6 sm:p-7">
-                  {pkg.shortDescription && (
-                    <p className="text-[15px] leading-[1.7] text-brand-ink">{pkg.shortDescription}</p>
-                  )}
-
-                  {/* Icons at the site's meta treatment — lucide at h-4 w-4 in
-                      sage, 1.5 gap — the same pairing the focused view and the
-                      workshop cards use. Plain rows, not pills: the site has no
-                      badge pattern for facts like these. */}
-                  <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-[13px] text-brand-ink">
-                    {pkg.duration && (
-                      <span className="inline-flex items-center gap-1.5">
-                        <Clock className="h-4 w-4 shrink-0 text-brand-sage" />
-                        <span className="ltr-numerals">{pkg.duration}</span>
+                    {/* CONTENT */}
+                    <div className="flex min-w-0 flex-1 flex-col justify-center px-5 py-5 sm:px-6">
+                      <span
+                        className="block text-[10px] font-semibold uppercase tracking-[0.18em]"
+                        style={{ color: TICKET_INK }}
+                      >
+                        Package {String(index + 1).padStart(2, '0')}
                       </span>
-                    )}
-                    <span className="inline-flex items-center gap-1.5">
-                      <Users className="h-4 w-4 shrink-0 text-brand-sage" />
-                      <span className="ltr-numerals">{pkg.minGuests}–{pkg.maxGuests} Guests</span>
-                    </span>
-                    {pkg.ageInformation && (
-                      <span className="inline-flex items-center gap-1.5">
-                        <Sparkles className="h-4 w-4 shrink-0 text-brand-sage" />
-                        <span className="ltr-numerals">{pkg.ageInformation}</span>
-                      </span>
-                    )}
-                  </div>
 
-                  {/* mt-auto is what anchors the price to the foot of the
-                      panel, so the two prices sit on the same line. */}
-                  <div className="mt-auto flex items-end justify-between gap-4 border-t border-brand-clay pt-5 sm:pt-6">
-                    <div>
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="font-display text-[34px] font-semibold leading-none text-brand-charcoal ltr-numerals">
-                          {pkg.price}
+                      <motion.h3
+                        layoutId={`bday-title-${pkg.id}`}
+                        transition={spring}
+                        className="mt-1.5 font-display text-[22px] font-semibold leading-tight lg:text-[26px]"
+                      >
+                        {pkg.name}
+                      </motion.h3>
+
+                      {pkg.shortDescription && (
+                        <p
+                          className="mt-2 line-clamp-3 text-[13px] leading-[1.6] sm:line-clamp-2 lg:line-clamp-3"
+                          style={{ color: TICKET_INK, opacity: 0.82 }}
+                        >
+                          {pkg.shortDescription}
+                        </p>
+                      )}
+
+                      {tags.length > 0 && (
+                        <ul className="mt-3 flex list-none flex-wrap gap-1.5">
+                          {tags.map(tag => (
+                            <li
+                              key={tag}
+                              className="rounded-full px-2.5 py-1 text-[11px] font-medium"
+                              style={{ backgroundColor: TICKET_WASH, color: TICKET_INK }}
+                            >
+                              {tag}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+
+                      {/* The divider belongs to the specs. With none to show it
+                          goes too, rather than hanging under nothing. */}
+                      {specs.length > 0 && (
+                        <>
+                          <div
+                            className="mt-4 h-px w-full"
+                            style={{ backgroundColor: TICKET_INK, opacity: 0.22 }}
+                          />
+                          <dl className="mt-3 flex flex-wrap gap-x-7 gap-y-2">
+                            {specs.map(spec => (
+                              <div key={spec.label}>
+                                <dt
+                                  className="text-[10px] font-semibold uppercase tracking-[0.14em]"
+                                  style={{ color: TICKET_INK }}
+                                >
+                                  {spec.label}
+                                </dt>
+                                <dd className="mt-0.5 text-[13px] font-semibold ltr-numerals">
+                                  {spec.value}
+                                </dd>
+                              </div>
+                            ))}
+                          </dl>
+                        </>
+                      )}
+                    </div>
+
+                    {/* STUB — the tear-off. Centred on wide screens; on a phone
+                        the price and the button sit side by side instead, which
+                        keeps the band short. */}
+                    <div className="flex h-[5.5rem] w-full shrink-0 flex-row items-center justify-between gap-3 px-5 py-3 sm:h-auto sm:w-[130px] sm:flex-col sm:justify-center sm:gap-0 sm:px-4 sm:py-5 sm:text-center lg:w-[148px]">
+                      <div className="sm:w-full">
+                        <span
+                          className="block text-[10px] font-semibold uppercase tracking-[0.16em]"
+                          style={{ color: TICKET_INK }}
+                        >
+                          {priceLine(pkg)}
                         </span>
-                        <span className="text-sm font-medium text-brand-charcoal">SAR</span>
+                        <p className="mt-0.5 flex items-baseline gap-1 sm:justify-center">
+                          <span className="font-display text-[28px] font-semibold leading-none ltr-numerals lg:text-[32px]">
+                            {pkg.price}
+                          </span>
+                          <span className="text-[12px] font-semibold">SAR</span>
+                        </p>
+                        {/* Only when the package actually carries one. */}
+                        {pkg.depositAmount ? (
+                          <span
+                            className="mt-1 block text-[10px] leading-snug ltr-numerals"
+                            style={{ color: TICKET_INK, opacity: 0.82 }}
+                          >
+                            {pkg.depositAmount} SAR deposit
+                          </span>
+                        ) : null}
                       </div>
-                      <span className="mt-1.5 block text-xs font-medium text-brand-muted">
-                        {priceLine(pkg)}
+
+                      <span
+                        className="inline-flex min-h-[44px] shrink-0 items-center justify-center rounded-[3px] px-3 text-center text-[11px] font-semibold leading-tight transition-opacity group-hover:opacity-90 sm:mt-3 sm:min-h-0 sm:w-full sm:py-2.5"
+                        style={{ backgroundColor: TICKET_INK, color: '#F0F3EE' }}
+                      >
+                        See what&rsquo;s included
                       </span>
                     </div>
-                    <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-terracotta">
-                      Explore package
-                      <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-1 flip-rtl" />
-                    </span>
                   </div>
-                </div>
-              </motion.button>
-            ))}
-          </div>
+                </motion.li>
+              );
+            })}
+          </ul>
         </div>
       )}
 

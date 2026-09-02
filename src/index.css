@@ -204,6 +204,93 @@ balloons {
 }
 
 /* =============================================================================
+   BIRTHDAY PACKAGE LIST TICKETS
+   The stacked package rows, cut into a tear-off ticket.
+
+   Every notch is a hole cut with a mask, not a circle painted in the section's
+   colour. That is not a preference here: the section behind these sits on
+   bg-brand-sand/25 — a 25% tint, not a flat fill — so a painted circle would
+   read as an opaque dot on a translucent ground, and would have to be changed
+   in a second place the day that background changes. A mask has no colour to
+   keep in sync and works over anything.
+
+   Six gradients: one per corner, plus two on the perforation. Each is
+   transparent inside its circle and opaque outside, and `intersect` composites
+   them so each subtracts only its own bite. `source-in` is WebKit's spelling of
+   the same thing.
+
+   The two perforation notches move with the perforation itself: vertical beside
+   the stub on wide screens, horizontal above it on a phone. Both read from the
+   same --stub-w / --stub-h the layout uses, so the notch cannot drift away from
+   the line it belongs to.
+   ============================================================================= */
+
+.package-ticket {
+  --ticket-corner: 7px;
+  --ticket-perf: 10px;
+  --stub-w: 148px;
+  /* The phone stub's height is fixed, and the stub element is pinned to the
+     same value, so the perforation and its two notches always land on the
+     boundary between content and stub rather than near it. */
+  --stub-h: 5.5rem;
+
+  /* Wide: the perforation runs down beside the stub. */
+  --notch-a: calc(100% - var(--stub-w)) 0;
+  --notch-b: calc(100% - var(--stub-w)) 100%;
+
+  -webkit-mask-image:
+    radial-gradient(circle var(--ticket-corner) at 0 0, transparent 99%, #000 100%),
+    radial-gradient(circle var(--ticket-corner) at 100% 0, transparent 99%, #000 100%),
+    radial-gradient(circle var(--ticket-corner) at 0 100%, transparent 99%, #000 100%),
+    radial-gradient(circle var(--ticket-corner) at 100% 100%, transparent 99%, #000 100%),
+    radial-gradient(circle var(--ticket-perf) at var(--notch-a), transparent 99%, #000 100%),
+    radial-gradient(circle var(--ticket-perf) at var(--notch-b), transparent 99%, #000 100%);
+  mask-image:
+    radial-gradient(circle var(--ticket-corner) at 0 0, transparent 99%, #000 100%),
+    radial-gradient(circle var(--ticket-corner) at 100% 0, transparent 99%, #000 100%),
+    radial-gradient(circle var(--ticket-corner) at 0 100%, transparent 99%, #000 100%),
+    radial-gradient(circle var(--ticket-corner) at 100% 100%, transparent 99%, #000 100%),
+    radial-gradient(circle var(--ticket-perf) at var(--notch-a), transparent 99%, #000 100%),
+    radial-gradient(circle var(--ticket-perf) at var(--notch-b), transparent 99%, #000 100%);
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+}
+
+/* The line itself. Inset from both ends so it reads as a perforation rather
+   than a border, and drawn on a pseudo-element so the markup carries no
+   presentational div. */
+.package-ticket::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+  inset-block: 14px;
+  inset-inline-end: var(--stub-w);
+  border-inline-start: 2px dotted var(--ticket-perf-color, rgba(255, 250, 240, 0.55));
+}
+
+/* Narrower, but still three columns: the stub gives up width first. */
+@media (max-width: 1023px) {
+  .package-ticket { --stub-w: 130px; }
+}
+
+/* Phone: the ticket tears off at the foot instead of the side, so the
+   perforation and its two notches rotate with it. */
+@media (max-width: 639px) {
+  .package-ticket {
+    --notch-a: 0 calc(100% - var(--stub-h));
+    --notch-b: 100% calc(100% - var(--stub-h));
+  }
+
+  .package-ticket::after {
+    inset-block: auto;
+    inset-inline: 14px;
+    bottom: var(--stub-h);
+    border-inline-start: 0;
+    border-top: 2px dotted var(--ticket-perf-color, rgba(255, 250, 240, 0.55));
+  }
+}
+
+/* =============================================================================
    CONSOLE MODAL
    Two declarations each: the vh line is the fallback, the dvh line wins where
    it is supported. dvh tracks Safari's collapsing toolbars, so the card cannot
