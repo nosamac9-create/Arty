@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { BirthdayPackage } from '../types';
 import { AppImage } from './ui/AppImage';
+import { PackageBalloonBackdrop } from './ui/PackageBalloonBackdrop';
 
 interface Props {
   packages: BirthdayPackage[];
@@ -173,47 +174,11 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
       {!focused && (
         <div className="relative pb-6 lg:pb-14">
 
-          {/* Studio marks, the same line-art idiom the Custom Events slab uses:
-              currentColor at 1.25 stroke in clay, oversized and very faint.
-              The layer carries its own overflow-hidden — putting it on the
-              container instead would clip the panels' hover shadow. Sits first
-              in the DOM and the content below is positioned, so the panels
-              always paint over it. */}
-          <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
-            {/* Pottery: a wheel, its concentric rings and the curve of a rim —
-                behind the intro's open end, which is where the copy stops. */}
-            <svg
-              className="absolute -top-8 end-0 h-72 w-72 text-brand-clay/45 lg:h-96 lg:w-96"
-              viewBox="0 0 200 200" fill="none" aria-hidden="true"
-            >
-              <circle cx="118" cy="82" r="70" stroke="currentColor" strokeWidth="1.25" />
-              <circle cx="118" cy="82" r="48" stroke="currentColor" strokeWidth="1.25" />
-              <circle cx="118" cy="82" r="26" stroke="currentColor" strokeWidth="1.25" />
-              <path d="M30 150c26-34 58-52 96-54" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
-            </svg>
-
-            {/* Canvas: a stretched frame and the arc of a loaded brush. */}
-            <svg
-              className="absolute bottom-0 start-0 h-64 w-64 text-brand-clay/40 lg:h-80 lg:w-80"
-              viewBox="0 0 200 200" fill="none" aria-hidden="true"
-            >
-              <rect x="34" y="30" width="112" height="88" rx="6" stroke="currentColor" strokeWidth="1.25" />
-              <path d="M34 96c22-26 44-38 66-36s38 16 46 42" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
-              <path d="M96 118v52" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
-              <path d="M70 170h52" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
-            </svg>
-
-            {/* Editorial numerals, one under each column, half below the fold of
-                the layer so they read as background type rather than a badge.
-                Hidden below lg, where the panels stack and there is no column
-                for a numeral to belong to. */}
-            <span className="absolute bottom-0 start-0 hidden translate-y-1/3 font-display text-[9rem] font-semibold leading-none text-brand-clay/35 ltr-numerals lg:block">
-              01
-            </span>
-            <span className="absolute bottom-0 end-0 hidden translate-y-1/3 font-display text-[9rem] font-semibold leading-none text-brand-clay/35 ltr-numerals lg:block">
-              02
-            </span>
-          </div>
+          {/* A faint scatter of the site's own balloon behind the tickets.
+              This replaces the pottery/canvas line art and the oversized 01/02
+              numerals, which were positioned for the two-column grid the ticket
+              stack replaced and had been orphaned by it. */}
+          <PackageBalloonBackdrop />
 
           <motion.div
             initial={prefersReducedMotion ? false : { opacity: 0, y: 16 }}
