@@ -204,7 +204,11 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
               ticket near 3:1, which is a ticket's proportion rather than a
               banner's. The heading above shares this container so the two
               align to the same edge. */}
-          <ul className="relative mx-auto mt-7 max-w-[900px] list-none space-y-5 lg:mt-9 lg:space-y-6">
+          {/* px-4 below 640px only: the ticket used to run edge to edge, which read
+              as oversized rather than as an object sitting on the page. With the
+              section's own px-4 that leaves 32px of sand either side. From 640px
+              up the card is already inset by the 900px cap. */}
+          <ul className="relative mx-auto mt-7 max-w-[900px] list-none space-y-5 px-4 sm:px-0 lg:mt-9 lg:space-y-6">
             {packages.map((pkg, index) => {
               const colour = TICKET_COLOURWAYS[index % TICKET_COLOURWAYS.length];
 
