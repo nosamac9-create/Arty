@@ -10,7 +10,8 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "create-super-admin": "node scripts/create-super-admin.mjs",
-    "migrate-workshop-photos": "node scripts/migrate-workshop-photos.mjs"
+    "migrate-workshop-photos": "node scripts/migrate-workshop-photos.mjs",
+    "dedupe-workshop-sessions": "node scripts/dedupe-workshop-sessions.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
