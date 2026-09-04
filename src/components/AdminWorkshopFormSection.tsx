@@ -1833,10 +1833,30 @@ export const AdminWorkshopFormSection: React.FC = () => {
                     recurringSchedules
                   } as any;
 
-                  const generatedRecords = generateSessionsForMonth(mockWorkshop, year, month, []);
+                  // The generator dedupes against the sessions it is handed. It was
+                  // handed an empty array, so every re-run produced a full second
+                  // copy of the month — the source of the duplicate sessions in
+                  // production. Pass the rows actually on the form, shaped the way
+                  // the generator compares them: it reads `workshopId`, `date` and
+                  // `startTime`, while the form rows carry the start time as `time`.
+                  const existingForDedup = sessions.map(s => ({
+                    ...s,
+                    workshopId: mockWorkshop.id,
+                    startTime: String((s as any).startTime ?? s.time ?? '')
+                  })) as any[];
+
+                  const generatedRecords = generateSessionsForMonth(mockWorkshop, year, month, existingForDedup);
                   if (generatedRecords.length > 0) {
                     const mappedNew = generatedRecords.map((g, i) => ({
-                      id: `sess-gen-${Date.now()}-${i}`,
+                      // Keep the generator's deterministic id (workshop + date +
+                      // time) when editing a saved workshop: sessions are written
+                      // with bulkPut, so a re-run that slips past the dedup above
+                      // overwrites its own earlier row instead of inserting a
+                      // second one. A workshop being created has no id yet — a
+                      // deterministic key would be `sess-temp-ws-...` and would
+                      // collide with the NEXT new workshop, so those keep a
+                      // unique id and rely on the in-form dedup alone.
+                      id: editingWorkshopId ? g.id : `sess-gen-${Date.now()}-${i}`,
                       date: g.date,
                       time: g.startTime,
                       endTime: g.endTime,
