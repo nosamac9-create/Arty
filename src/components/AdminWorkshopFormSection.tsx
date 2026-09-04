@@ -29,6 +29,7 @@ import {
 import { DateInput } from './DateInput';
 import { MONTH_NAMES } from '../utils/calendarConfig';
 import { matchesQuery } from '../utils/search';
+import { getRiyadhNow } from '../utils/dateUtils';
 
 export const AdminWorkshopFormSection: React.FC = () => {
   const { 
@@ -1821,6 +1822,22 @@ export const AdminWorkshopFormSection: React.FC = () => {
 
                   const year = genTargetYear;
                   const month = genTargetMonth;
+
+                  // The generator silently drops slots that have already passed,
+                  // so asking it for a month that is entirely over returns
+                  // nothing and looks like a broken button. Say so first.
+                  const nowRiyadh = getRiyadhNow();
+                  const monthIsPast =
+                    year < nowRiyadh.getFullYear() ||
+                    (year === nowRiyadh.getFullYear() && month < nowRiyadh.getMonth() + 1);
+                  if (monthIsPast) {
+                    alert(
+                      `${MONTH_NAMES[month - 1]} ${year} has already passed.\n\n` +
+                      `Sessions are not generated for dates in the past. Pick the current month or a later one.`
+                    );
+                    return;
+                  }
+
                   const mockWorkshop = {
                     id: editingWorkshopId || 'temp-ws',
                     title: title || 'Workshop',

@@ -4,7 +4,7 @@
  */
 
 import { Workshop, RecurringScheduleRule, WorkshopSessionRecord, SessionException } from '../types';
-import { getRiyadhNow, getRiyadhDateString } from './dateUtils';
+import { getRiyadhNow, getRiyadhDateString, parseBookingDateTimeToRiyadhDate } from './dateUtils';
 import { WEEKDAY_NAMES } from './calendarConfig';
 
 // Shared English Gregorian weekday names.
@@ -78,6 +78,21 @@ export function generateSessionsForMonth(
 
       // Deterministic key for duplicate prevention: workshopId + date + startTime
       const normalizedTime = startTime.trim().toUpperCase();
+      // A slot whose start has already passed is never generated. Running the
+      // generator for the current month used to produce sessions for earlier
+      // today, and running it for a month already over produced a whole
+      // calendar of them — staff-side clutter that can only ever be deleted
+      // by hand.
+      let slotStart: Date | null = null;
+      try {
+        slotStart = parseBookingDateTimeToRiyadhDate(dateStr, startTime);
+      } catch {
+        slotStart = null;
+      }
+      if (slotStart && !Number.isNaN(slotStart.getTime()) && slotStart.getTime() <= getRiyadhNow().getTime()) {
+        return;
+      }
+
       const duplicateInExisting = existingSessions.some(
         s => s.workshopId === workshop.id && s.date === dateStr && s.startTime.trim().toUpperCase() === normalizedTime
       );
