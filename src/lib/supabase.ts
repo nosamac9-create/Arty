@@ -114,6 +114,21 @@ export function getDataClient(): SupabaseClient | null {
   return staffSessionActive ? supabaseStaff : supabase;
 }
 
+/**
+ * Whether a staff member is signed in.
+ *
+ * The same flag getDataClient() switches on, exposed so callers can also choose
+ * WHICH RELATION to read, not only which client to read it with. Some tables
+ * are staff-only by policy and have a customer-facing view beside them; picking
+ * between the two has to follow the session, exactly as the client does.
+ *
+ * Deliberately not derived from the current page: a customer must never reach a
+ * staff-only relation because some other screen happened to set a tab.
+ */
+export function isStaffSessionActive(): boolean {
+  return staffSessionActive;
+}
+
 export const SUPABASE_NOT_CONFIGURED =
   'Sign-in is not configured yet. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.';
 

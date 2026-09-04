@@ -16,7 +16,7 @@ import {
   DraftBooking, DEFAULT_LOGGING_FIELDS, LoggingConsoleField
 } from '../types';
 import { useLiveTable, fetchTable, fetchRow } from '../lib/supabaseData';
-import { getDataClient } from '../lib/supabase';
+import { getDataClient, isStaffSessionActive, onDataClientChange } from '../lib/supabase';
 import { toRow, rowsToModels } from '../lib/mappers';
 // Stage 2: the data layer is Supabase. `db` is the Dexie-shaped façade over it
 // (lib/supabaseDb), so each mutator keeps its exact logic and invariants while
@@ -1269,8 +1269,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const rawEvents = useLiveTable<AppEvent>('events');
   const rawBookings = useLiveTable<Booking>('bookings');
   const rawQueue = useLiveTable<QueueItem>('queue');
-  const rawPieces = useLiveTable<PotteryPiece>('pieces');
-  const rawPieceHistory = useLiveTable<any>('piece_history', { orderBy: 'timestamp' });
+  /**
+   * Pottery is read from a different relation depending on who is asking.
+   *
+   * `pieces` and `piece_history` are staff-only by policy — 0001_init made them
+   * so deliberately, and 0014 narrowed the staff policy further to require the
+   * pieces-admin permission. Neither ever granted customers access, and neither
+   * should: `damage_note` is an internal handling note that customers must not
+   * be able to select.
+   *
+   * The customer-facing relations are the views built for exactly this in
+   * 0001_init: `customer_pieces` and `customer_piece_history`. They scope
+   * themselves to `current_customer_id()` and simply do not list `damage_note`
+   * among their columns, so there is no SQL path by which a customer session can
+   * read it. That is stronger than filtering it out in the client, and it is why
+   * the fix here is to read the right relation rather than to add a SELECT
+   * policy to the base table — a policy would hand customers the whole row and
+   * leave every future reader responsible for hiding one column.
+   *
+   * Reading the base table from a customer session returned nothing at all,
+   * which is why My Pieces showed "no pieces registered" for every customer who
+   * had them.
+   *
+   * The switch follows the SESSION, not the page: a customer cannot end up on
+   * the staff relation because some screen set a tab.
+   */
+  const [staffSession, setStaffSession] = useState(isStaffSessionActive());
+  useEffect(() => onDataClientChange(() => setStaffSession(isStaffSessionActive())), []);
+
+  const rawPieces = useLiveTable<PotteryPiece>(staffSession ? 'pieces' : 'customer_pieces');
+  const rawPieceHistory = useLiveTable<any>(
+    staffSession ? 'piece_history' : 'customer_piece_history',
+    { orderBy: 'timestamp' }
+  );
   const rawCustomers = useLiveTable<CustomerAccount>('customers');
   const rawStaff = useLiveTable<StaffMember>('staff');
   const rawSessions = useLiveTable<WorkshopSessionRecord>('workshop_sessions');
