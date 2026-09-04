@@ -11,19 +11,52 @@ import { WEEKDAY_NAMES } from './calendarConfig';
 const DAY_NAMES = WEEKDAY_NAMES;
 
 /**
- * Generate sessions for a specific workshop and given month/year based on its recurring rules.
+ * What a generation run actually did.
+ *
+ * A run that adds nothing has two completely different meanings, and collapsing
+ * them into one message sent staff hunting for a broken rule when the rules
+ * were fine: either the rules produced slots and every one of them was already
+ * on the calendar (nothing is wrong — the dedup did its job), or the rules
+ * produced no slots at all (that one really is worth checking). The counters
+ * below are what lets a caller tell those apart, and report a partial run
+ * honestly — "3 added, 2 already existed" rather than just the 3.
  */
-export function generateSessionsForMonth(
+export interface SessionGenerationResult {
+  /** The new sessions. Empty is not an error. */
+  sessions: WorkshopSessionRecord[];
+  /** Slots skipped because the session already exists. */
+  skippedExisting: number;
+  /** Slots skipped because their start time has already passed. */
+  skippedPast: number;
+  /** Slots skipped because another rule in the same run already covered them. */
+  skippedOverlappingRule: number;
+  /** Every slot the rules produced for this month, before any skipping. */
+  slotsConsidered: number;
+}
+
+/**
+ * Generate sessions for a specific workshop and given month/year based on its
+ * recurring rules, reporting what was skipped and why.
+ */
+export function generateSessionsForMonthDetailed(
   workshop: Workshop,
   year: number,
   month: number, // 1-12
   existingSessions: WorkshopSessionRecord[]
-): WorkshopSessionRecord[] {
+): SessionGenerationResult {
+  const generated: WorkshopSessionRecord[] = [];
+  const result: SessionGenerationResult = {
+    sessions: generated,
+    skippedExisting: 0,
+    skippedPast: 0,
+    skippedOverlappingRule: 0,
+    slotsConsidered: 0
+  };
+
   if (!workshop.recurringSchedules || workshop.recurringSchedules.length === 0) {
-    return [];
+    return result;
   }
 
-  const generated: WorkshopSessionRecord[] = [];
   const daysInMonth = new Date(year, month, 0).getDate();
 
   for (let day = 1; day <= daysInMonth; day++) {
@@ -89,7 +122,14 @@ export function generateSessionsForMonth(
       } catch {
         slotStart = null;
       }
+      // Counted here rather than at the top of the callback: everything above
+      // this point is a rule declining to produce a slot at all (wrong weekday,
+      // outside its date range, cancelled by an exception), which is not a slot
+      // that was considered and skipped.
+      result.slotsConsidered++;
+
       if (slotStart && !Number.isNaN(slotStart.getTime()) && slotStart.getTime() <= getRiyadhNow().getTime()) {
+        result.skippedPast++;
         return;
       }
 
@@ -100,6 +140,9 @@ export function generateSessionsForMonth(
       const duplicateInGenerated = generated.some(
         s => s.workshopId === workshop.id && s.date === dateStr && s.startTime.trim().toUpperCase() === normalizedTime
       );
+
+      if (duplicateInExisting) result.skippedExisting++;
+      else if (duplicateInGenerated) result.skippedOverlappingRule++;
 
       if (!duplicateInExisting && !duplicateInGenerated) {
         const cleanTimeKey = startTime.replace(/[^a-zA-Z0-9]/g, '');
@@ -124,7 +167,19 @@ export function generateSessionsForMonth(
     });
   }
 
-  return generated;
+  return result;
+}
+
+/**
+ * The sessions alone, for callers that do not need the breakdown.
+ */
+export function generateSessionsForMonth(
+  workshop: Workshop,
+  year: number,
+  month: number, // 1-12
+  existingSessions: WorkshopSessionRecord[]
+): WorkshopSessionRecord[] {
+  return generateSessionsForMonthDetailed(workshop, year, month, existingSessions).sessions;
 }
 
 /**

@@ -10,7 +10,7 @@ import {
   RecurringScheduleRule, isWorkshopOptionEnabled,
   WorkshopFieldConfig, fieldsForCard, fieldSpansFullRow, coerceFieldValue
 } from '../types';
-import { generateSessionsForMonth } from '../utils/scheduleGenerator';
+import { generateSessionsForMonthDetailed } from '../utils/scheduleGenerator';
 import { checkStaffMemberAvailability } from '../utils/staffAvailabilityUtils';
 import { resolveStaffId, resolveStaffName, AssignmentSources } from '../utils/staffAssignments';
 import {
@@ -1862,7 +1862,26 @@ export const AdminWorkshopFormSection: React.FC = () => {
                     startTime: String((s as any).startTime ?? s.time ?? '')
                   })) as any[];
 
-                  const generatedRecords = generateSessionsForMonth(mockWorkshop, year, month, existingForDedup);
+                  const genResult = generateSessionsForMonthDetailed(mockWorkshop, year, month, existingForDedup);
+                  const generatedRecords = genResult.sessions;
+                  const monthLabel = `${MONTH_NAMES[month - 1]} ${year}`;
+                  const plural = (n: number) => (n === 1 ? '' : 's');
+
+                  // Skipping is normal and is reported alongside whatever else
+                  // happened, so a partial run reads honestly: staff who asked
+                  // for a month and got three sessions should be told the other
+                  // two were already there, not left to wonder.
+                  const skippedNotes: string[] = [];
+                  if (genResult.skippedExisting > 0) {
+                    skippedNotes.push(`${genResult.skippedExisting} already existed`);
+                  }
+                  if (genResult.skippedPast > 0) {
+                    skippedNotes.push(`${genResult.skippedPast} ${genResult.skippedPast === 1 ? 'has' : 'have'} already passed`);
+                  }
+                  if (genResult.skippedOverlappingRule > 0) {
+                    skippedNotes.push(`${genResult.skippedOverlappingRule} duplicated another rule in this run`);
+                  }
+
                   if (generatedRecords.length > 0) {
                     const mappedNew = generatedRecords.map((g, i) => ({
                       // Keep the generator's deterministic id (workshop + date +
@@ -1890,14 +1909,33 @@ export const AdminWorkshopFormSection: React.FC = () => {
                       ruleId: g.ruleId
                     }));
                     setSessions([...sessions, ...mappedNew]);
-                    alert(`Generated ${generatedRecords.length} sessions from monthly recurring schedule for ${year}-${month < 10 ? '0' + month : month}!`);
+                    alert(
+                      `${generatedRecords.length} session${plural(generatedRecords.length)} added for ${monthLabel}.` +
+                      (skippedNotes.length > 0 ? `\n\nSkipped: ${skippedNotes.join(', ')}.` : '')
+                    );
+                  } else if (genResult.slotsConsidered > 0) {
+                    // The rules DID produce slots for this month — every one was
+                    // skipped. Nothing is wrong, so this must not read like a
+                    // fault: the old message sent staff looking for a broken
+                    // rule when the dedup was simply doing its job.
+                    const n = genResult.slotsConsidered;
+                    if (genResult.skippedExisting === n) {
+                      alert(`All ${n} session${plural(n)} for ${monthLabel} already exist — nothing new to add.`);
+                    } else if (genResult.skippedPast === n) {
+                      alert(
+                        `Every session the rules would produce for ${monthLabel} has already started.\n\n` +
+                        `Sessions are not generated for times that have passed. Generate next month instead.`
+                      );
+                    } else {
+                      alert(
+                        `Nothing new to add for ${monthLabel}.\n\n` +
+                        `All ${n} session${plural(n)} the rules produced were skipped: ${skippedNotes.join(', ')}.`
+                      );
+                    }
                   } else {
-                    // Distinguish "an active rule exists, but none of them
-                    // cover the month you picked" (the confusing case this
-                    // fix targets) from every other reason nothing came out
-                    // (no rules, none Active, or all duplicates of existing
-                    // sessions) — kept as the original generic message,
-                    // rather than trying to enumerate every possible cause.
+                    // The rules produced no slot at all for this month. This is
+                    // the case that genuinely does mean staff should go and look
+                    // at the rules, so it keeps the diagnostic wording.
                     const monthStr = month < 10 ? `0${month}` : `${month}`;
                     const daysInTargetMonth = new Date(year, month, 0).getDate();
                     const monthStartStr = `${year}-${monthStr}-01`;
