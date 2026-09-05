@@ -25,7 +25,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { checkMigrations } from '../lib/migrationCheck';
 import {
   checkDuplicateCustomerPhone, checkDuplicateCustomerEmail, validatePasswordRule,
-  validateBookingForm, canonicalPhone, customerStorageFields, ValidationDb
+  validateBookingForm, makeLocalSeatReader, canonicalPhone, customerStorageFields, ValidationDb
 } from './validation';
 import { getSessionSeatUsage } from './queueUtils';
 import { getRiyadhDateString } from './dateUtils';
@@ -398,9 +398,14 @@ export const SYSTEM_TESTS: SystemTestDefinition[] = [
         participants: 5, status: 'Pending', customerName: 'Fixture'
       } as any);
 
+      // The fixture session exists only in this temporary database, so the
+      // production seat reader (which asks the real database) would find no row
+      // and the guard would refuse for the wrong reason. Counting locally over
+      // the temp db is what makes this test exercise the capacity rule itself.
       const errors = await validateBookingForm(
         { sessionId: FIXTURE_SESSION.id, participants: 3 },
-        scoped
+        scoped,
+        makeLocalSeatReader(scoped)
       );
       const message = errors.participants || errors.sessionId;
       return check(

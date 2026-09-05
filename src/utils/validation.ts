@@ -22,6 +22,7 @@ import { sdb } from '../lib/supabaseDb';
 import { CustomerAccount, StaffMember, WorkshopSessionRecord } from '../types';
 import { normalizeCustomerPhone, customerPhoneKey } from './customerIdentity';
 import { getSessionSeatUsage, minBirthdayNoticeDays, isBirthdayDateFull, isBirthdaySlotFull } from './queueUtils';
+import { fetchSessionSeats, SessionSeats } from '../lib/sessionSeats';
 import { parseArabicDigits } from './phoneUtils';
 import { getMinBirthdayBookingDateStr } from './dateUtils';
 
@@ -348,12 +349,62 @@ export interface SessionAvailability {
 }
 
 /**
- * Reads the session and its bookings back out of Dexie and returns what is
- * genuinely left right now.
+ * How the guard learns how many seats are left.
+ *
+ * Injectable so the fixture-driven system tests can supply seats for sessions
+ * that exist only in their temporary database. Production always uses the
+ * database function.
+ */
+export type SeatReader = (sessionId: string) => Promise<SessionSeats | null>;
+
+/**
+ * A seat reader that counts from an injected ValidationDb.
+ *
+ * FOR TESTS ONLY. This is the counting strategy that made the guard useless in
+ * the browser — see getSessionAvailability — and it is correct here only
+ * because a test's temporary database is unscoped and complete.
+ */
+export function makeLocalSeatReader(source: ValidationDb): SeatReader {
+  return async (sessionId: string) => {
+    const session = await source.workshopSessions.get(sessionId);
+    if (!session) return null;
+    const [workshops, bookings, queue] = await Promise.all([
+      source.workshops.toArray(),
+      source.bookings.toArray(),
+      source.queue.toArray()
+    ]);
+    const usage = getSessionSeatUsage(session, { workshops, bookings, queue });
+    return {
+      capacity: usage.capacity,
+      seatsTaken: usage.seatsTaken,
+      seatsRemaining: usage.remainingCapacity
+    };
+  };
+}
+
+/**
+ * What is genuinely left on a session right now.
+ *
+ * THIS GUARD NEVER WORKED FOR CUSTOMERS. It used to count seats by summing the
+ * `bookings` and `queue` tables read through the caller's own connection. Both
+ * are RLS-scoped: a signed-in customer sees only their own rows and a signed-out
+ * visitor sees none. The sum was therefore almost always zero, `remaining` came
+ * back as the full capacity of the session, and the check waved through every
+ * booking it was asked about — including bookings for sessions with no seats at
+ * all. It read as protection while providing none.
+ *
+ * Seats now come from `session_seats_summary` (migration 0023), which is
+ * SECURITY DEFINER and counts every booking and walk-in regardless of who is
+ * asking.
+ *
+ * It fails CLOSED. If the count cannot be established the booking is refused
+ * rather than allowed: this runs at submit time, when the cost of a wrong
+ * "yes" is an oversold class and a customer who has already paid.
  */
 export async function getSessionAvailability(
   sessionId?: string,
-  source: ValidationDb = db
+  source: ValidationDb = db,
+  readSeats: SeatReader = fetchSessionSeats
 ): Promise<SessionAvailability> {
   if (!sessionId) {
     return { remaining: 0, error: 'Select a date and time for this booking.' };
@@ -367,15 +418,16 @@ export async function getSessionAvailability(
     return { session, remaining: 0, error: 'That session is no longer open for booking. Please choose another date or time.' };
   }
 
-  // Seats are counted by the one shared helper, so this agrees exactly with
-  // what the Live Queue and the workshop pages show.
-  const [workshops, bookings, queue] = await Promise.all([
-    source.workshops.toArray(),
-    source.bookings.toArray(),
-    source.queue.toArray()
-  ]);
-  const usage = getSessionSeatUsage(session, { workshops, bookings, queue });
-  return { session, remaining: usage.remainingCapacity };
+  const seats = await readSeats(String(sessionId));
+  if (!seats) {
+    return {
+      session,
+      remaining: 0,
+      error: 'We could not confirm how many seats are left. Please try again in a moment.'
+    };
+  }
+
+  return { session, remaining: seats.seatsRemaining };
 }
 
 export interface BookingInput {
@@ -389,7 +441,8 @@ export interface BookingInput {
  */
 export async function validateBookingForm(
   input: BookingInput,
-  source: ValidationDb = db
+  source: ValidationDb = db,
+  readSeats: SeatReader = fetchSessionSeats
 ): Promise<Record<string, string>> {
   const fields: Record<string, ValidationResult> = {};
 
@@ -398,7 +451,7 @@ export async function validateBookingForm(
     fields.participants = fail('Enter at least 1 participant.');
   }
 
-  const availability = await getSessionAvailability(input.sessionId, source);
+  const availability = await getSessionAvailability(input.sessionId, source, readSeats);
   if (availability.error) {
     fields.sessionId = fail(availability.error);
     return collectErrors(fields);
