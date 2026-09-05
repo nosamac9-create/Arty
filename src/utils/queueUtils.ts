@@ -402,10 +402,19 @@ export function validateHoursAndGuests(hours: unknown, guests: unknown): Record<
  */
 export function isWorkshopFullyBooked(
   workshopId: string,
-  sources: { workshopSessions: WorkshopSessionRecord[]; workshops: Workshop[]; bookings: Booking[]; queue?: QueueItem[] },
-  todayDateStr: string
+  sources: { workshopSessions: WorkshopSessionRecord[] },
+  todayDateStr: string,
+  /**
+   * Seats for one session, or undefined when the count is not known.
+   *
+   * Seats are no longer counted from a bookings array here. On the public site
+   * that array is RLS-scoped to the caller, so it was almost always empty and
+   * this function could only ever answer "not full". The caller supplies a
+   * lookup backed by session_seats_summary instead.
+   */
+  getSeats: (sessionId: string) => { seatsRemaining: number } | undefined
 ): boolean {
-  const { workshopSessions, workshops, bookings, queue = [] } = sources;
+  const { workshopSessions } = sources;
   const today = normalizeDateString(todayDateStr);
 
   const futureSessions = workshopSessions.filter(
@@ -413,9 +422,14 @@ export function isWorkshopFullyBooked(
   );
   if (futureSessions.length === 0) return false;
 
-  return futureSessions.every(
-    s => getSessionSeatUsage(s, { workshops, bookings, queue }).remainingCapacity <= 0
-  );
+  // Claiming "fully booked" requires knowing that EVERY upcoming session is
+  // full. One session whose count has not arrived is enough to withhold the
+  // badge — an unknown is not a zero, and a wrong "Class Full" turns a customer
+  // away from a class they could have joined.
+  return futureSessions.every(s => {
+    const seats = getSeats(String(s.id));
+    return seats !== undefined && seats.seatsRemaining <= 0;
+  });
 }
 
 // ==========================================================

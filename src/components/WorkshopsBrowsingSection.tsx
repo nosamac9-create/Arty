@@ -13,6 +13,7 @@ import { WorkshopCardSlideshow, workshopGalleryImages } from './ui/WorkshopCardS
 import { Workshop } from '../types';
 import { BirthdayPackagesShowcase } from './BirthdayPackagesShowcase';
 import { isWorkshopFullyBooked } from '../utils/queueUtils';
+import { useSessionSeats } from '../lib/sessionSeats';
 
 /** Pseudo-category: not a real DB category, it swaps the whole grid to birthday packages. */
 const BIRTHDAY_CATEGORY = 'Birthday Packages';
@@ -23,6 +24,21 @@ export const WorkshopsBrowsingSection: React.FC = () => {
     publishedBirthdayPackages, selectedBirthdayPackage, setSelectedBirthdayPackage,
     workshopsInitialCategory, workshopSessions, bookings, queue, todayDateStr
   } = useApp();
+
+  /**
+   * Seats for every published upcoming session on the grid, in one call.
+   *
+   * The "Class Full" badge used to be decided by summing the RLS-scoped
+   * `bookings` array, which on the public site is empty, so the badge could
+   * effectively never appear.
+   */
+  const gridSeatSessionIds = useMemo(
+    () => workshopSessions
+      .filter(s => s.status === 'Published' && s.date >= todayDateStr)
+      .map(s => String(s.id)),
+    [workshopSessions, todayDateStr]
+  );
+  const gridSeats = useSessionSeats(gridSeatSessionIds);
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -313,7 +329,7 @@ export const WorkshopsBrowsingSection: React.FC = () => {
               // Fully booked considers every published, upcoming session for
               // this workshop — not just the one date most recently looked at
               // — so a workshop with other open dates is never shown as full.
-              const isFull = isWorkshopFullyBooked(ws.id, { workshopSessions, workshops, bookings, queue }, todayDateStr);
+              const isFull = isWorkshopFullyBooked(ws.id, { workshopSessions }, todayDateStr, gridSeats.get);
               return (
                 <ScrollReveal
                   key={ws.id}

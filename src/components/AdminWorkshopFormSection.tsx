@@ -2120,30 +2120,48 @@ export const AdminWorkshopFormSection: React.FC = () => {
                             if (s.id !== sess.id) return s;
                             // Seats already booked are preserved; chairs left is
                             // derived from the new capacity, never hand-typed.
-                            const booked = Math.max(0, (Number(s.capacity) || 0) - (Number(s.spotsLeft) || 0));
-                            const left = Math.max(0, cap - booked);
-                            return { ...s, capacity: cap, spotsLeft: left, isFull: left === 0 };
+                            // Only the capacity is edited here. Seats taken are
+                            // counted from the bookings themselves and shown
+                            // below, so there is no derived copy to keep in step.
+                            return { ...s, capacity: cap };
                           }));
                         }}
                         className="bg-brand-cream border border-brand-clay p-0.5 rounded font-bold text-xs text-brand-charcoal w-12 text-center"
                       />
                       <span className="font-bold text-brand-charcoal">chairs</span>
 
-                      {/* Read-only: chairs left follows capacity and bookings. */}
-                      <span className="text-[10px] font-bold text-brand-charcoal/50 ml-2">Left:</span>
-                      <span className="bg-brand-sand/40 border border-brand-clay/60 p-0.5 rounded font-bold text-xs text-brand-charcoal w-12 text-center">
-                        {sess.spotsLeft}
-                      </span>
-                    
-                      {sess.isFull ? (
-                        <span className="text-[9px] bg-red-100 text-red-800 border border-red-200 px-1.5 py-0.5 rounded font-extrabold uppercase">
-                          Fully Booked
-                        </span>
-                      ) : (
-                        <span className="text-[9px] bg-brand-sage/10 text-brand-sage px-1.5 py-0.5 rounded font-bold">
-                          {sess.spotsLeft} open seats
-                        </span>
-                      )}
+                      {/*
+                        Seats left, counted from the live bookings — the same
+                        source as the panel further down this form. These two
+                        used to disagree: this one rendered `spotsLeft` held in
+                        form state, which nothing kept in step with the bookings
+                        and which was never persisted (workshop_sessions has no
+                        such column), so a session with five bookings could read
+                        as empty here and full there. Two numbers for one thing,
+                        side by side, is how staff stop trusting the console.
+                      */}
+                      {(() => {
+                        const usage = getSessionSeatUsage(sess as any, { workshops, bookings, queue });
+                        const left = usage.remainingCapacity;
+                        return (
+                          <>
+                            <span className="text-[10px] font-bold text-brand-charcoal/50 ml-2">Left:</span>
+                            <span className="bg-brand-sand/40 border border-brand-clay/60 p-0.5 rounded font-bold text-xs text-brand-charcoal w-12 text-center">
+                              {left}
+                            </span>
+
+                            {left <= 0 ? (
+                              <span className="text-[9px] bg-red-100 text-red-800 border border-red-200 px-1.5 py-0.5 rounded font-extrabold uppercase">
+                                Fully Booked
+                              </span>
+                            ) : (
+                              <span className="text-[9px] bg-brand-sage/10 text-brand-sage px-1.5 py-0.5 rounded font-bold">
+                                {left} open seats
+                              </span>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
 

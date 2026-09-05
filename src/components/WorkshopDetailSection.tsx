@@ -10,7 +10,7 @@ import Reveal from './ui/Reveal';
 import { ScrollReveal } from './ui/ScrollReveal';
 import { getRiyadhNow, parseBookingDateTimeToRiyadhDate, getRiyadhDateString } from '../utils/dateUtils';
 import { resolveStaffName } from '../utils/staffAssignments';
-import { getSessionSeatUsage } from '../utils/queueUtils';
+import { useSessionSeats } from '../lib/sessionSeats';
 import { validateBookingForm } from '../utils/validation';
 import { MONTH_NAMES, WEEKDAY_NAMES_SHORT } from '../utils/calendarConfig';
 import { 
@@ -23,7 +23,7 @@ export const WorkshopDetailSection: React.FC = () => {
     workshops, selectedWorkshopId, setCustomerTab, setPendingBooking, currentUser, todayDateStr, staff, queue,
     workshopFields,
     // Shared records, narrowed to this workshop below.
-    workshopSessions, bookings
+    workshopSessions
   } = useApp();
 
   const workshop = useMemo(() => {
@@ -44,16 +44,26 @@ export const WorkshopDetailSection: React.FC = () => {
     [workshop]
   );
 
-  // This workshop's sessions and bookings, taken from the shared data layer.
+  // This workshop's sessions, taken from the shared data layer. Seat counts
+  // come from the database — see `seats` below.
   const dbSessions = useMemo(
     () => workshopSessions.filter(s => s.workshopId === (workshop?.id || '')),
     [workshopSessions, workshop?.id]
   );
 
-  const dbBookings = useMemo(
-    () => bookings.filter(b => b.workshopId === (workshop?.id || '')),
-    [bookings, workshop?.id]
+
+  /**
+   * Seats for every published session of this workshop, counted by the database.
+   *
+   * This page used to sum the `bookings` array from context. That array is
+   * RLS-scoped — a signed-out visitor has none of it and a signed-in customer
+   * has only their own rows — so every session read as completely empty.
+   */
+  const seatSessionIds = useMemo(
+    () => dbSessions.filter(s => s.status === 'Published').map(s => String(s.id)),
+    [dbSessions]
   );
+  const seats = useSessionSeats(seatSessionIds);
 
   // Identify dates with available published sessions
   const datesWithPublishedSessions = useMemo(() => {
@@ -65,11 +75,12 @@ export const WorkshopDetailSection: React.FC = () => {
       if (sess.status !== 'Published') continue;
       if (sess.date < todayStr) continue;
 
-      // Same shared calculation the studio console uses: bookings AND walk-ins.
-      const { remainingCapacity: spotsLeft } = getSessionSeatUsage(sess, {
-        workshops, bookings: dbBookings, queue
-      });
-      if (spotsLeft <= 0) continue;
+      // Only a session KNOWN to be full is hidden. While its count is still in
+      // flight the date stays offered: the session list behind it reports its
+      // own state, so a date is never wrongly removed on the strength of a
+      // number that has not arrived.
+      const sessSeats = seats.get(sess.id);
+      if (sessSeats && sessSeats.seatsRemaining <= 0) continue;
 
       const sessDateObj = parseBookingDateTimeToRiyadhDate(sess.date, sess.startTime);
       const isPastCutoff = sess.date === todayStr && sessDateObj.getTime() < riyadhNow.getTime() + 30 * 60 * 1000;
@@ -78,7 +89,7 @@ export const WorkshopDetailSection: React.FC = () => {
       }
     }
     return setOfDates;
-  }, [dbSessions, dbBookings, queue, workshops]);
+  }, [dbSessions, seats]);
 
   // Dynamic Date Strip Generation (Starting from TODAY i = 0 for same-day booking)
   const dateStrip = useMemo(() => {
@@ -172,9 +183,10 @@ export const WorkshopDetailSection: React.FC = () => {
     const todayStr = getRiyadhDateString();
 
     return matchingSessions.map(sess => {
-      const { remainingCapacity: spotsLeft } = getSessionSeatUsage(sess, {
-        workshops, bookings: dbBookings, queue
-      });
+      // undefined until the real figure arrives. Never defaulted: 0 would show
+      // a bookable session as full, and capacity would invite a customer into
+      // checkout for a seat that does not exist.
+      const sessSeats = seats.get(sess.id);
 
       const sessDateObj = parseBookingDateTimeToRiyadhDate(selectedDate, sess.startTime);
       const isPastCutoff = selectedDate < todayStr || (selectedDate === todayStr && sessDateObj.getTime() < riyadhNow.getTime() + 30 * 60 * 1000);
@@ -182,15 +194,16 @@ export const WorkshopDetailSection: React.FC = () => {
       return {
         id: sess.id,
         time: sess.startTime,
-        spots: spotsLeft,
+        spots: sessSeats?.seatsRemaining,
         capacity: sess.capacity,
-        isFull: spotsLeft <= 0,
+        seatsKnown: sessSeats !== undefined,
+        isFull: sessSeats !== undefined && sessSeats.seatsRemaining <= 0,
         isPastCutoff,
         // Resolve the tutor from the assignment's staff ID so renames show through.
         instructor: resolveStaffName(staff, sess.staffId || workshop.staffId, sess.instructor || workshop.instructor)
       };
     });
-  }, [dbSessions, dbBookings, selectedDate, workshop, staff, queue, workshops]);
+  }, [dbSessions, selectedDate, workshop, staff, seats]);
 
   const workshopTutorName = resolveStaffName(staff, workshop?.staffId, workshop?.instructor);
 
@@ -540,6 +553,22 @@ export const WorkshopDetailSection: React.FC = () => {
                         >
                           <span>{s.time}</span>
                           <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-700/60 bg-amber-50 px-2 py-0.5 rounded">PASSED / CLOSED</span>
+                        </button>
+                      );
+                    }
+
+                    // Count not in yet. The slot is shown but not selectable:
+                    // offering it with no number is honest, offering it with a
+                    // guessed one is not.
+                    if (!s.seatsKnown) {
+                      return (
+                        <button
+                          key={s.id || s.time}
+                          disabled
+                          className="px-4 py-3 rounded-[22px] border border-brand-clay/20 text-brand-charcoal/40 font-semibold text-sm flex justify-between items-center cursor-wait"
+                        >
+                          <span>{s.time}</span>
+                          <span className="text-[10px] font-semibold uppercase tracking-wider text-brand-muted bg-brand-clay/10 px-2 py-0.5 rounded">CHECKING…</span>
                         </button>
                       );
                     }

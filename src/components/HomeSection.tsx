@@ -20,6 +20,7 @@ import {
 } from './ui/CtaSectionWithGallery';
 import { formatDate } from '../utils/calendarConfig';
 import { selectFeaturedWorkshops } from '../utils/featuredWorkshops';
+import { useSessionSeats } from '../lib/sessionSeats';
 import { Calendar, Sparkles, ChevronRight, Paintbrush, MousePointerClick, CalendarRange, Gift, Coffee, ChevronDown, Phone, Mail, UserCheck, Star, ArrowLeft, Clock }  from 'lucide-react';
 
 /**
@@ -91,9 +92,20 @@ export const HomeSection: React.FC = () => {
    * walks every session and booking, so it is memoised on the records it reads
    * — the carousel re-renders on every settle and must not re-run this.
    */
+  const featuredSeatSessionIds = useMemo(
+    () => workshopSessions.filter(s => (s.status || 'Published') === 'Published').map(s => String(s.id)),
+    [workshopSessions]
+  );
+  const featuredSeats = useSessionSeats(featuredSeatSessionIds);
+
   const featuredWorkshops = useMemo(
-    () => selectFeaturedWorkshops({ workshops, workshopSessions, bookings, queue }, todayDateStr),
-    [workshops, workshopSessions, bookings, queue, todayDateStr]
+    () => selectFeaturedWorkshops(
+      { workshops, workshopSessions, bookings, queue },
+      todayDateStr,
+      undefined,
+      featuredSeats.get
+    ),
+    [workshops, workshopSessions, bookings, queue, todayDateStr, featuredSeats]
   );
 
   /** Images only — the carousel renders cards, the details sit below it. */

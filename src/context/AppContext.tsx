@@ -17,6 +17,7 @@ import {
 } from '../types';
 import { useLiveTable, fetchTable, fetchRow } from '../lib/supabaseData';
 import { getDataClient, isStaffSessionActive, onDataClientChange } from '../lib/supabase';
+import { notifySeatsChanged } from '../lib/sessionSeats';
 import { toRow, rowsToModels } from '../lib/mappers';
 // Stage 2: the data layer is Supabase. `db` is the Dexie-shaped façade over it
 // (lib/supabaseDb), so each mutator keeps its exact logic and invariants while
@@ -1575,6 +1576,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!supabase || !bookingId) return;
     const { error } = await supabase.rpc('release_booking_seats', { p_booking_id: bookingId });
     if (error) console.error('Failed to release seats:', error.message);
+    else notifySeatsChanged();
   };
 
   /**
@@ -1826,6 +1828,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         p_session_id: newBooking.sessionId || null
       });
       if (error) throw new Error(error.message);
+      // Seat counts come from an RPC, which is not a realtime subscription, so
+      // nothing else would tell the pages showing availability that a seat has
+      // just gone.
+      notifySeatsChanged();
     })().catch(err => {
       console.error("Failed to add booking:", err);
       setBookingError(err?.message || 'The booking could not be saved.');
@@ -2060,6 +2066,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.error(`cancelOwnBooking: booking ${id} failed:`, error.message);
       return { success: false, error: 'We could not cancel that booking. Please try again or contact the studio.' };
     }
+    notifySeatsChanged();
 
     // The function returns a single row; PostgREST hands back an array for a
     // table-returning function.

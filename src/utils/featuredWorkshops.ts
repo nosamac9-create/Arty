@@ -6,7 +6,8 @@
  *
  * Everything here is derived from records that already exist — workshops,
  * workshop sessions and bookings. No new table, no stored popularity column,
- * no second availability system: eligibility reuses `getSessionSeatUsage`,
+ * no second availability system: eligibility uses the seat counts supplied by
+ * the caller, from the same database function every other page reads,
  * the same seat maths the workshop cards and the walk-in queue run on, and
  * "still counts" reuses `isActiveBookingRecord`.
  *
@@ -15,7 +16,7 @@
  */
 
 import { Workshop, WorkshopSessionRecord, Booking, QueueItem } from '../types';
-import { getSessionSeatUsage, isActiveBookingRecord } from './queueUtils';
+import { isActiveBookingRecord } from './queueUtils';
 import { normalizeDateString, timeToMinutes } from './timeUtils';
 import { getRiyadhDateString } from './dateUtils';
 
@@ -97,7 +98,17 @@ interface Ranked {
 export function selectFeaturedWorkshops(
   sources: FeaturedWorkshopsSources,
   todayDateStr: string,
-  limit: number = FEATURED_WORKSHOPS_MAX
+  limit: number = FEATURED_WORKSHOPS_MAX,
+  /**
+   * Seats for one session, or undefined when the count is not known.
+   *
+   * Eligibility must not be decided by summing the caller's own bookings: on
+   * the public site that array is RLS-scoped, so every session looked empty and
+   * a fully-booked workshop could be featured. Backed by
+   * session_seats_summary. Omitted only by tests that supply no seat source, in
+   * which case sessions are treated as available.
+   */
+  getSeats: (sessionId: string) => { seatsRemaining: number } | undefined = () => undefined
 ): Workshop[] {
   const { workshops, workshopSessions, bookings, queue = [] } = sources;
 
@@ -126,7 +137,12 @@ export function selectFeaturedWorkshops(
       const date = normalizeDateString(session.date);
       if (date < today || date > weekEnd) continue;
 
-      if (getSessionSeatUsage(session, { workshops, bookings, queue }).remainingCapacity <= 0) continue;
+      // Skipped only when the session is KNOWN to be full. An unknown count
+      // leaves the workshop eligible: withholding a workshop from the carousel
+      // on the strength of a number that has not arrived hides a class that has
+      // seats, which is the more costly mistake here.
+      const seats = getSeats(String(session.id));
+      if (seats && seats.seatsRemaining <= 0) continue;
 
       // Sort key rather than a real timestamp: same-day sessions still order by
       // start time, and a session with no time sorts after ones that have it.
