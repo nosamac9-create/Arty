@@ -17,7 +17,8 @@ import {
 } from '../types';
 import { DateInput } from './DateInput';
 import { validatePhoneRule, canonicalPhone } from '../utils/validation';
-import { minBirthdayNoticeDays, isBirthdayDateFull, isBirthdaySlotFull } from '../utils/queueUtils';
+import { minBirthdayNoticeDays, BIRTHDAY_DAILY_MAX, BIRTHDAY_SAME_SLOT_MAX } from '../utils/queueUtils';
+import { useBirthdayCounts } from '../lib/sessionSeats';
 import { BackButton } from './ui/BackButton';
 
 const FALLBACK_TIMES = ['10:00 AM', '01:00 PM', '04:00 PM', '07:00 PM'];
@@ -68,8 +69,7 @@ export const BirthdayBookingSection: React.FC = () => {
     currentUser,
     appSettings,
     publishedBirthdayPackages,
-    birthdayFormFields,
-    bookings
+    birthdayFormFields
   } = useApp();
 
   const prefersReducedMotion = useReducedMotion();
@@ -163,16 +163,31 @@ export const BirthdayBookingSection: React.FC = () => {
     }
   }, [timeOptions, bookingTime]);
 
+  /**
+   * Parties already booked on the selected date, counted by the database.
+   *
+   * These maxima used to be checked against the `bookings` array from context,
+   * which is RLS-scoped — a customer saw only their own parties, so a date was
+   * never full and no slot was ever disabled. Unlike a workshop booking there
+   * is no server-side check behind this, so this is the enforcement.
+   */
+  const birthdayCounts = useBirthdayCounts(bookingDate ? [bookingDate] : []);
+  const countsForDate = birthdayCounts.get(bookingDate);
+  // Undefined until the real counts arrive — never assumed to be free.
+  const dateIsFull = countsForDate ? countsForDate.onDate >= BIRTHDAY_DAILY_MAX : false;
+  const slotIsFull = (time: string) =>
+    countsForDate ? (countsForDate.byTime.get(time) || 0) >= BIRTHDAY_SAME_SLOT_MAX : false;
+
   useEffect(() => {
     // Changing the date can land the previously chosen time on a slot that is
     // now full (or a date that is full outright) for the new date.
     if (
       bookingDate && bookingTime &&
-      (isBirthdayDateFull(bookings, bookingDate) || isBirthdaySlotFull(bookings, bookingDate, bookingTime))
+      (dateIsFull || slotIsFull(bookingTime))
     ) {
       setBookingTime('');
     }
-  }, [bookingDate, bookings]);
+  }, [bookingDate, countsForDate]);
 
   const [balloonColorCustom, setBalloonColorCustom] = useState<string>('');
   const [birthdayPersonName, setBirthdayPersonName] = useState<string>('');
@@ -291,7 +306,7 @@ export const BirthdayBookingSection: React.FC = () => {
         errs.bookingDate = 'Please select a date';
       } else if (numberOfPeople && bookingDate < currentMinDate) {
         errs.bookingDate = `Birthday bookings for ${numberOfPeople} guests need at least ${noticeForCount} day${noticeForCount === 1 ? '' : 's'} notice.`;
-      } else if (bookingDate && isBirthdayDateFull(bookings, bookingDate)) {
+      } else if (bookingDate && dateIsFull) {
         errs.bookingDate = 'This date is fully booked for birthday celebrations. Please choose another date.';
       }
     }
@@ -299,7 +314,7 @@ export const BirthdayBookingSection: React.FC = () => {
     if (isActive('bookingTime')) {
       if (!bookingTime) {
         errs.bookingTime = 'Please select a time slot';
-      } else if (bookingDate && !errs.bookingDate && isBirthdaySlotFull(bookings, bookingDate, bookingTime)) {
+      } else if (bookingDate && !errs.bookingDate && slotIsFull(bookingTime)) {
         errs.bookingTime = 'This time slot is fully booked for birthday celebrations. Please choose another time.';
       }
     }
@@ -660,10 +675,8 @@ export const BirthdayBookingSection: React.FC = () => {
         // A slot at BIRTHDAY_SAME_SLOT_MAX is disabled here — the same rule
         // collectErrors() and the submit-time re-check both enforce — even
         // when the day overall still has room.
-        const fullTimes = bookingDate
-          ? timeOptions.filter(t => isBirthdaySlotFull(bookings, bookingDate, t))
-          : [];
-        const dateFull = bookingDate ? isBirthdayDateFull(bookings, bookingDate) : false;
+        const fullTimes = bookingDate ? timeOptions.filter(slotIsFull) : [];
+        const dateFull = dateIsFull;
         return (
           <div key={field.id} className="sm:col-span-2">
             {label}

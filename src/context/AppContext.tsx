@@ -1823,10 +1823,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       newBooking.customerId = customerId;
 
-      const { error } = await client.rpc('book_session_seats', {
-        p_booking: toRow('bookings', { ...newBooking, customerId }),
-        p_session_id: newBooking.sessionId || null
-      });
+      const bookingRow = toRow('bookings', { ...newBooking, customerId });
+
+      // Birthday parties are capped by date and by time slot rather than by
+      // session capacity, so they take a different atomic path. Both do the
+      // count and the insert in one statement.
+      const isBirthdayBooking =
+        newBooking.workshopId === 'birthday-party-event' ||
+        String(newBooking.workshopTitle || '').toLowerCase().includes('birthday');
+
+      const { error } = isBirthdayBooking
+        ? await client.rpc('book_birthday_slot', {
+            p_booking: bookingRow,
+            // Staff may deliberately exceed the maxima — a private buyout, or a
+            // party the studio has agreed to take on. The database honours this
+            // only for a caller that passes is_staff(), so setting it here can
+            // never let a customer through.
+            p_allow_override: newBooking.source === 'Admin' || newBooking.source === 'Walk-in'
+          })
+        : await client.rpc('book_session_seats', {
+            p_booking: bookingRow,
+            p_session_id: newBooking.sessionId || null
+          });
       if (error) throw new Error(error.message);
       // Seat counts come from an RPC, which is not a realtime subscription, so
       // nothing else would tell the pages showing availability that a seat has

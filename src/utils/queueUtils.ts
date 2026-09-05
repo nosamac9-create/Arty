@@ -443,6 +443,16 @@ export function isWorkshopFullyBooked(
 /** The shared placeholder workshop id every birthday booking is saved under. */
 export const BIRTHDAY_WORKSHOP_ID = 'birthday-party-event';
 
+/*
+ * The two birthday maxima.
+ *
+ * DUPLICATED IN SQL. book_birthday_slot (migration 0027) declares the same two
+ * numbers, because it is what actually enforces them and it cannot read these.
+ * Changing one without the other means the form and the database disagree: the
+ * picker would offer a slot the insert then rejects, or refuse one it would
+ * have accepted. Change both.
+ */
+
 /** Combined across every birthday package: no more than this many parties a day. */
 export const BIRTHDAY_DAILY_MAX = 5;
 
@@ -464,40 +474,18 @@ export function minBirthdayNoticeDays(totalPeople: number): number {
   return totalPeople >= 5 ? 4 : 1;
 }
 
-/** Active (non-cancelled) birthday bookings, across every package, for one date. */
-export function activeBirthdayBookingsOnDate(
-  bookings: Booking[],
-  date: string,
-  excludeBookingId?: string
-): Booking[] {
-  const target = normalizeDateString(date);
-  return bookings.filter(b =>
-    isBirthdayBookingRecord(b) &&
-    isActiveBookingRecord(b) &&
-    normalizeDateString(b.date) === target &&
-    String(b.id) !== String(excludeBookingId || '')
-  );
-}
-
-/** Active birthday bookings for one exact date + time slot. */
-export function activeBirthdayBookingsAtSlot(
-  bookings: Booking[],
-  date: string,
-  time: string,
-  excludeBookingId?: string
-): Booking[] {
-  return activeBirthdayBookingsOnDate(bookings, date, excludeBookingId).filter(b => b.time === time);
-}
-
-export function isBirthdayDateFull(bookings: Booking[], date: string, excludeBookingId?: string): boolean {
-  return activeBirthdayBookingsOnDate(bookings, date, excludeBookingId).length >= BIRTHDAY_DAILY_MAX;
-}
-
-export function isBirthdaySlotFull(
-  bookings: Booking[],
-  date: string,
-  time: string,
-  excludeBookingId?: string
-): boolean {
-  return activeBirthdayBookingsAtSlot(bookings, date, time, excludeBookingId).length >= BIRTHDAY_SAME_SLOT_MAX;
-}
+/*
+ * The four helpers that used to live here — activeBirthdayBookingsOnDate,
+ * activeBirthdayBookingsAtSlot, isBirthdayDateFull and isBirthdaySlotFull —
+ * have been removed rather than left in place unused.
+ *
+ * Each took a `bookings` array and counted parties across every customer. On
+ * the public site that array is RLS-scoped to the caller, so they could only
+ * ever count the caller's own parties, and both maxima went unenforced. Counts
+ * now come from birthday_booking_counts (migration 0026), which is
+ * SECURITY DEFINER and sees every booking.
+ *
+ * Deleted rather than deprecated, because the signature is the trap: taking a
+ * bookings array looks correct, and IS correct on the staff side, so the next
+ * person needing this would reach for it and reintroduce the bug.
+ */

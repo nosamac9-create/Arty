@@ -21,8 +21,14 @@
 import { sdb } from '../lib/supabaseDb';
 import { CustomerAccount, StaffMember, WorkshopSessionRecord } from '../types';
 import { normalizeCustomerPhone, customerPhoneKey } from './customerIdentity';
-import { getSessionSeatUsage, minBirthdayNoticeDays, isBirthdayDateFull, isBirthdaySlotFull } from './queueUtils';
-import { fetchSessionSeats, SessionSeats } from '../lib/sessionSeats';
+import {
+  getSessionSeatUsage, minBirthdayNoticeDays,
+  BIRTHDAY_DAILY_MAX, BIRTHDAY_SAME_SLOT_MAX
+} from './queueUtils';
+import {
+  fetchSessionSeats, SessionSeats,
+  fetchBirthdayCounts, BirthdayCounts
+} from '../lib/sessionSeats';
 import { parseArabicDigits } from './phoneUtils';
 import { getMinBirthdayBookingDateStr } from './dateUtils';
 
@@ -471,11 +477,17 @@ export async function validateBookingForm(
 // ==========================================================
 // BIRTHDAY PACKAGE BOOKING
 //
-// A birthday reservation has no workshop session, so it is re-checked
-// against the bookings table directly rather than through
-// getSessionAvailability. The same rule runs here (submit time, against a
-// fresh read) and in the booking form (as the customer picks a date/time),
-// so a slot that fills up in between is still caught.
+// A birthday reservation has no workshop session, so it is checked against
+// birthday_booking_counts (migration 0026) rather than through
+// getSessionAvailability. The same rule runs here (submit time) and in the
+// booking form (as the customer picks a date/time), so a slot that fills up in
+// between is still caught.
+//
+// This is a pre-check, not the guarantee. book_birthday_slot (migration 0027)
+// re-counts under an advisory lock on the date and does the insert in the same
+// statement, so two customers submitting the last slot at the same instant
+// cannot both succeed. This runs first only so the customer gets a clear
+// message against the field rather than a raw database error.
 // ==========================================================
 
 export interface BirthdayBookingInput {
@@ -487,9 +499,15 @@ export interface BirthdayBookingInput {
   excludeBookingId?: string;
 }
 
+export type BirthdayCountsReader = (
+  date: string,
+  excludeBookingId?: string
+) => Promise<BirthdayCounts | null>;
+
 export async function validateBirthdayBookingForm(
   input: BirthdayBookingInput,
-  source: ValidationDb = db
+  source: ValidationDb = db,
+  readBirthdayCounts: BirthdayCountsReader = fetchBirthdayCounts
 ): Promise<Record<string, string>> {
   const fields: Record<string, ValidationResult> = {};
 
@@ -515,14 +533,27 @@ export async function validateBirthdayBookingForm(
     return collectErrors(fields);
   }
 
-  const bookings = await source.bookings.toArray();
+  // Counts come from the database. Reading them from `source.bookings` counted
+  // only the caller's own parties — see below — and unlike a workshop booking
+  // there is no server-side check behind this one to catch what slipped past.
+  const counts = await readBirthdayCounts(input.date!, input.excludeBookingId);
 
-  if (isBirthdayDateFull(bookings, input.date!, input.excludeBookingId)) {
+  if (!counts) {
+    // Fails CLOSED. A maximum that cannot be evaluated must not be treated as
+    // satisfied: allowing the booking here is precisely the behaviour being
+    // fixed, and nothing downstream would catch it.
+    fields.bookingDate = fail(
+      'We could not confirm availability for that date. Please try again in a moment.'
+    );
+    return collectErrors(fields);
+  }
+
+  if (counts.onDate >= BIRTHDAY_DAILY_MAX) {
     fields.bookingDate = fail('This date is fully booked for birthday celebrations. Please choose another date.');
     return collectErrors(fields);
   }
 
-  if (isBirthdaySlotFull(bookings, input.date!, input.time!, input.excludeBookingId)) {
+  if ((counts.byTime.get(input.time!) || 0) >= BIRTHDAY_SAME_SLOT_MAX) {
     fields.bookingTime = fail('This time slot is fully booked for birthday celebrations. Please choose another time.');
   }
 
