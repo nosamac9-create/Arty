@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { CreditCard, Smartphone, ShieldCheck, Check, Lock } from 'lucide-react';
 import { PhoneInput } from './PhoneInput';
@@ -27,6 +27,39 @@ export const CheckoutPaymentSection: React.FC = () => {
   const [showPopup, setShowPopup] = useState(false);
   // Capacity/session message from the shared validation layer.
   const [bookingError, setBookingError] = useState<string | null>(null);
+  /**
+   * A failure from the booking WRITE, as opposed to the pre-check above it.
+   *
+   * Kept separate because the two have opposite recoveries. A pre-check failure
+   * means the seat is gone and retrying cannot help, so it disables the button.
+   * A write failure may be transient — a dropped connection, a stale PostgREST
+   * schema cache — and the customer must be able to press the button again
+   * without rebuilding the whole booking.
+   */
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  /**
+   * One reference code for every attempt at THIS booking.
+   *
+   * A retry after a timeout must not mint a new id. The write may have
+   * committed server-side with the reply lost on the way back, and a second id
+   * would then give the customer two bookings and consume two seats. Reusing
+   * the code lets the RPCs recognise the retry and return the existing booking
+   * instead of writing another (migration 0028).
+   *
+   * Reset when the pending booking changes, so a genuinely new booking gets a
+   * genuinely new code.
+   */
+  const refCodeRef = useRef<string | null>(null);
+  const pendingKey = `${pendingBooking?.sessionId || ''}|${pendingBooking?.date || ''}|${pendingBooking?.time || ''}`;
+  const lastPendingKeyRef = useRef(pendingKey);
+  if (lastPendingKeyRef.current !== pendingKey) {
+    lastPendingKeyRef.current = pendingKey;
+    refCodeRef.current = null;
+  }
+  if (!refCodeRef.current) {
+    refCodeRef.current = `ART-${Math.floor(10000 + Math.random() * 90000)}`;
+  }
 
   const [paymentMethod, setPaymentMethod] = useState<'card' | 'applepay' | 'stcpay'>('card');
   const [cardNumber, setCardNumber] = useState('');
@@ -56,6 +89,7 @@ export const CheckoutPaymentSection: React.FC = () => {
   const handlePay = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isProcessing) return;
+    setSubmitError(null);
 
     // Capacity is re-read from the database here, at submit time. The number
     // shown when the page loaded may be stale — someone else can take the last
@@ -107,9 +141,13 @@ export const CheckoutPaymentSection: React.FC = () => {
     const email = pendingBooking.customerEmail || currentUser?.email || 'guest@artycafe.sa';
     const phone = pendingBooking.customerPhone || currentUser?.phone || '';
 
-    setTimeout(() => {
-      // Create official booking in Dexie database
-      const newBooking = addBooking({
+    // The 800ms stands in for payment processing. The booking write happens
+    // AFTER it and is awaited: the confirmation screen must never appear for a
+    // booking the database has not accepted.
+    setTimeout(async () => {
+      let newBooking;
+      try {
+        newBooking = await addBooking({
         customerName: name,
         customerEmail: email,
         customerPhone: phone,
@@ -124,9 +162,32 @@ export const CheckoutPaymentSection: React.FC = () => {
         source: 'Website',
         status: 'Pending',
         paymentStatus: 'Paid',
-        // The full birthday submission travels onto the one shared booking record.
-        birthdayDetails: pendingBooking.birthdayDetails
-      });
+          // The full birthday submission travels onto the one shared booking record.
+          birthdayDetails: pendingBooking.birthdayDetails
+        }, refCodeRef.current!);
+      } catch (err: any) {
+        // Stay on the payment step with the customer's details intact — never
+        // advance to the confirmation for a booking the database refused.
+        const raw = String(err?.message || '');
+        // The RPCs raise check_violation for a seat or slot that has just gone.
+        // Those messages are written for a developer; the customer gets the
+        // reason in their own terms.
+        const isCapacity = /seat\(s\) left|fully booked/i.test(raw);
+        // An aborted request is the one case where we genuinely do not know
+        // whether the booking landed, so the wording must not claim it failed.
+        // Pressing the button again is safe: the same reference code is reused,
+        // and the RPC returns the existing booking rather than writing a second.
+        const isTimeout = /abort/i.test(raw) || err?.name === 'AbortError';
+        setSubmitError(
+          isCapacity
+            ? 'That session filled up while you were paying. Nothing has been charged — please choose another date or time.'
+            : isTimeout
+              ? 'That took too long and we could not confirm your booking. Nothing extra will be charged — please press the button again to check and finish.'
+              : 'We could not complete your booking, and nothing has been charged. Please try again.'
+        );
+        setIsProcessing(false);
+        return;
+      }
 
       // Bookings for today are placed on the Live Queue by the shared booking→queue
       // sync, which resolves the tutor from the booked session. Adding one here too
@@ -325,6 +386,10 @@ export const CheckoutPaymentSection: React.FC = () => {
 
             {bookingError && (
               <p className="text-xs text-red-500 font-semibold text-center">{bookingError}</p>
+            )}
+
+            {submitError && (
+              <p className="text-xs text-red-500 font-semibold text-center">{submitError}</p>
             )}
 
             <button

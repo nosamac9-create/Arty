@@ -18,6 +18,27 @@ import {
 import { useLiveTable, fetchTable, fetchRow } from '../lib/supabaseData';
 import { getDataClient, isStaffSessionActive, onDataClientChange } from '../lib/supabase';
 import { notifySeatsChanged } from '../lib/sessionSeats';
+
+/**
+ * How long a booking write may take before the client gives up on it.
+ *
+ * A normal call resolves in well under a second. Supabase applies its own
+ * statement timeout (8s by default) to anything running too long, so a request
+ * still alive at 20s is not waiting on the database — it is a connection that
+ * has stalled or died without telling us, and no amount of further waiting
+ * resolves it.
+ *
+ * Generous rather than tight, deliberately: cutting off a slow-but-working
+ * request on a poor mobile connection would produce exactly the confusion this
+ * exists to prevent. Twenty seconds is comfortably above both the server's own
+ * limit and any plausible round trip, while being short enough that a customer
+ * staring at "Processing Payment..." gets an answer rather than a dead page.
+ *
+ * Abandoning the request does not abandon the booking: it may still commit
+ * server-side, which is why every attempt reuses one reference code and both
+ * RPCs treat a repeat of an existing id as success (migration 0028).
+ */
+const BOOKING_WRITE_TIMEOUT_MS = 20_000;
 import { toRow, rowsToModels } from '../lib/mappers';
 // Stage 2: the data layer is Supabase. `db` is the Dexie-shaped façade over it
 // (lib/supabaseDb), so each mutator keeps its exact logic and invariants while
@@ -304,7 +325,10 @@ interface AppContextType {
   // Mutators
   addWorkshop: (ws: Omit<Workshop, 'id' | 'slug'>) => void;
   updateWorkshop: (id: string, updates: Partial<Workshop>) => void;
-  addBooking: (booking: Omit<Booking, 'id' | 'createdAt' | 'timeline'>) => Booking;
+  addBooking: (
+    booking: Omit<Booking, 'id' | 'createdAt' | 'timeline'>,
+    existingRefCode?: string
+  ) => Promise<Booking>;
   /** Set when the last booking write failed, so the UI never claims success. */
   bookingError: string | null;
   clearBookingError: () => void;
@@ -1776,9 +1800,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true };
   };
 
-  const addBooking = (newBookingData: Omit<Booking, 'id' | 'createdAt' | 'timeline'>): Booking => {
+  /**
+   * Creates a booking, resolving only once the database has accepted it.
+   *
+   * This used to return the locally-built Booking object immediately and write
+   * in the background. The checkout screen took that object as success and
+   * rendered the confirmation — confetti and all — while the insert was still
+   * in flight, so a customer could be congratulated and THEN shown an error for
+   * a booking that never existed. Anything that fails server-side (no seats
+   * left, a full birthday slot, a network drop) hit the customer in that order.
+   *
+   * It now rejects if the write fails, so the caller cannot show success for a
+   * booking that did not happen.
+   */
+  const addBooking = async (
+    newBookingData: Omit<Booking, 'id' | 'createdAt' | 'timeline'>,
+    /**
+     * Reference code to write under. Supplied by a caller that may retry, so
+     * every attempt at the same booking carries the same id — which is what
+     * makes the RPCs' idempotency check (migration 0028) able to tell a retry
+     * from a second booking. Omitted, a fresh one is generated.
+     */
+    existingRefCode?: string
+  ): Promise<Booking> => {
     setBookingError(null);
-    const refCode = `ART-${Math.floor(10000 + Math.random() * 90000)}`;
+    const refCode = existingRefCode || `ART-${Math.floor(10000 + Math.random() * 90000)}`;
     const nowStr = new Date().toISOString();
     
     let pStatus: Booking['paymentStatus'] = newBookingData.paymentStatus || 'Paid';
@@ -1803,9 +1849,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // The insert and the seat check happen in one Postgres statement, with the
     // session row locked: two people taking the last seat cannot both succeed.
     // Never read capacity here and write it back.
-    (async () => {
+    {
       const client = getDataClient();
-      if (!client) throw new Error(SUPABASE_NOT_CONFIGURED);
+      if (!client) {
+        setBookingError(SUPABASE_NOT_CONFIGURED);
+        throw new Error(SUPABASE_NOT_CONFIGURED);
+      }
 
       // The customer record is resolved FIRST, so the booking carries
       // customer_id. Without it the booking is invisible to the person who
@@ -1827,33 +1876,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // Birthday parties are capped by date and by time slot rather than by
       // session capacity, so they take a different atomic path. Both do the
-      // count and the insert in one statement.
+      // count and the insert in one statement — the client-side checks give a
+      // good message early, this is what actually holds when two people submit
+      // the last slot at the same instant.
       const isBirthdayBooking =
         newBooking.workshopId === 'birthday-party-event' ||
         String(newBooking.workshopTitle || '').toLowerCase().includes('birthday');
 
-      const { error } = isBirthdayBooking
-        ? await client.rpc('book_birthday_slot', {
-            p_booking: bookingRow,
-            // Staff may deliberately exceed the maxima — a private buyout, or a
-            // party the studio has agreed to take on. The database honours this
-            // only for a caller that passes is_staff(), so setting it here can
-            // never let a customer through.
-            p_allow_override: newBooking.source === 'Admin' || newBooking.source === 'Walk-in'
-          })
-        : await client.rpc('book_session_seats', {
-            p_booking: bookingRow,
-            p_session_id: newBooking.sessionId || null
-          });
-      if (error) throw new Error(error.message);
-      // Seat counts come from an RPC, which is not a realtime subscription, so
-      // nothing else would tell the pages showing availability that a seat has
-      // just gone.
-      notifySeatsChanged();
-    })().catch(err => {
-      console.error("Failed to add booking:", err);
-      setBookingError(err?.message || 'The booking could not be saved.');
-    });
+      // A request that never resolves is worse on a payment step than one that
+      // fails: the customer cannot tell whether they were charged, cannot
+      // retry, and can only force-quit the page. Nothing in the stack below
+      // imposes an upper bound, so this does.
+      const abort = new AbortController();
+      const timer = setTimeout(() => abort.abort(), BOOKING_WRITE_TIMEOUT_MS);
+      try {
+        const { error } = isBirthdayBooking
+          ? await client.rpc('book_birthday_slot', {
+              p_booking: bookingRow,
+              // Staff may deliberately exceed the maxima — a private buyout, or a
+              // party the studio has agreed to take on. The database honours this
+              // only for a caller that passes is_staff(), so setting it here can
+              // never let a customer through.
+              p_allow_override: newBooking.source === 'Admin' || newBooking.source === 'Walk-in'
+            }).abortSignal(abort.signal)
+          : await client.rpc('book_session_seats', {
+              p_booking: bookingRow,
+              p_session_id: newBooking.sessionId || null
+            }).abortSignal(abort.signal);
+        if (error) {
+          // Surfaced to the caller as well as stored: the checkout screen has to
+          // know not to advance, which a state flag alone would not tell it in
+          // time.
+          console.error('Failed to add booking:', error.message);
+          setBookingError(error.message || 'The booking could not be saved.');
+          throw new Error(error.message);
+        }
+        // Seat counts come from an RPC, which is not a realtime subscription, so
+        // nothing else would tell the pages showing availability that a seat has
+        // just gone.
+        notifySeatsChanged();
+      } finally {
+        clearTimeout(timer);
+      }
+    }
 
     // If walk-in or admin, automatically add to today's live queue
     if (newBookingData.source === 'Walk-in' || newBookingData.source === 'Admin') {
