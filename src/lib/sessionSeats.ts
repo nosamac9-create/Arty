@@ -187,6 +187,75 @@ export async function fetchSessionSeats(sessionId: string): Promise<SessionSeats
   };
 }
 
+/**
+ * Bookings taken per workshop over a window, from the database.
+ *
+ * The popularity signal behind the featured carousel and the workshop grid's
+ * default sort. Both used to count the caller's own bookings — see migration
+ * 0024 — so both counted zero for every workshop on the public site.
+ *
+ * Same not-knowing rule as seats: `get` returns undefined until real counts
+ * arrive, so a caller can hold its ordering rather than rank everything equal.
+ */
+export interface RecentBookingsState {
+  get: (workshopId?: string) => number | undefined;
+  loading: boolean;
+  ready: boolean;
+}
+
+export function useRecentBookings(fromDate: string, toDate: string): RecentBookingsState {
+  const [counts, setCounts] = useState<Map<string, number> | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [nonce, setNonce] = useState(0);
+
+  useEffect(() => {
+    const bump = () => setNonce(n => n + 1);
+    seatListeners.add(bump);
+    const unsubscribeClient = onDataClientChange(bump);
+    return () => {
+      seatListeners.delete(bump);
+      unsubscribeClient();
+    };
+  }, []);
+
+  const requestRef = useRef(0);
+
+  useEffect(() => {
+    if (!fromDate || !toDate) return;
+    const client = getDataClient();
+    if (!client) return;
+
+    const requestId = ++requestRef.current;
+    setLoading(true);
+
+    client
+      .rpc('workshop_recent_bookings', { p_from: fromDate, p_to: toDate })
+      .then(({ data, error }) => {
+        if (requestId !== requestRef.current) return;
+        setLoading(false);
+        if (error) return; // Keep the last known counts rather than ranking on nothing.
+        const next = new Map<string, number>();
+        for (const row of (data as any[]) || []) {
+          next.set(String(row.workshop_id), Number(row.recent_bookings) || 0);
+        }
+        setCounts(next);
+      });
+  }, [fromDate, toDate, nonce]);
+
+  return useMemo(
+    () => ({
+      // A workshop absent from the result genuinely took no bookings, so zero
+      // is correct once the counts have arrived — unlike seats, where absence
+      // means unknown.
+      get: (workshopId?: string) =>
+        counts === null ? undefined : (workshopId ? counts.get(String(workshopId)) ?? 0 : undefined),
+      loading,
+      ready: counts !== null
+    }),
+    [counts, loading]
+  );
+}
+
 // ============================================================================
 // BIRTHDAY PARTY COUNTS
 //

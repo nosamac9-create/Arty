@@ -111,7 +111,6 @@ const FIXTURE_WORKSHOP = {
   title: 'Fixture Wheel Class',
   category: 'Pottery',
   capacity: 6,
-  spotsLeft: 6
 };
 
 const FIXTURE_SESSION = {
@@ -1175,34 +1174,6 @@ export const SYSTEM_TESTS: SystemTestDefinition[] = [
         'One workshop, renamed to "Renamed Class"',
         `${after.length} workshop(s); title is "${edited?.title}"`,
         'Editing a workshop created a duplicate instead of updating the original.'
-      );
-    }
-  },
-  {
-    id: 'WSH-04',
-    name: 'Session capacity recomputes chairs left',
-    description: 'Changes capacity with seats already booked and checks spotsLeft and the full flag follow.',
-    category: 'Workshops',
-    kind: 'scenario',
-    run: async () => {
-      const recompute = (s: { capacity: number; spotsLeft: number }, cap: number) => {
-        const booked = Math.max(0, (Number(s.capacity) || 0) - (Number(s.spotsLeft) || 0));
-        const left = Math.max(0, cap - booked);
-        return { capacity: cap, spotsLeft: left, isFull: left === 0 };
-      };
-      const cases = [
-        { label: '10→12 with 6 booked', got: recompute({ capacity: 10, spotsLeft: 4 }, 12), want: { capacity: 12, spotsLeft: 6, isFull: false } },
-        { label: '10→5 with 9 booked', got: recompute({ capacity: 10, spotsLeft: 1 }, 5), want: { capacity: 5, spotsLeft: 0, isFull: true } },
-        { label: 'empty 8→20', got: recompute({ capacity: 8, spotsLeft: 8 }, 20), want: { capacity: 20, spotsLeft: 20, isFull: false } },
-        { label: 'full 6→8', got: recompute({ capacity: 6, spotsLeft: 0 }, 8), want: { capacity: 8, spotsLeft: 2, isFull: false } }
-      ];
-      const wrong = cases.filter(c => JSON.stringify(c.got) !== JSON.stringify(c.want));
-
-      return check(
-        wrong.length === 0,
-        'Chairs left = capacity − booked, floored at 0, with the full flag following',
-        wrong.length === 0 ? 'All 4 capacity changes correct' : `Wrong for: ${listSome(wrong.map(c => c.label))}`,
-        'Changing a session’s capacity leaves the wrong number of chairs left, so the class can be oversold.'
       );
     }
   },

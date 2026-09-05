@@ -13,7 +13,8 @@ import { WorkshopCardSlideshow, workshopGalleryImages } from './ui/WorkshopCardS
 import { Workshop } from '../types';
 import { BirthdayPackagesShowcase } from './BirthdayPackagesShowcase';
 import { isWorkshopFullyBooked } from '../utils/queueUtils';
-import { useSessionSeats } from '../lib/sessionSeats';
+import { useSessionSeats, useRecentBookings } from '../lib/sessionSeats';
+import { recentBookingsWindow } from '../utils/featuredWorkshops';
 
 /** Pseudo-category: not a real DB category, it swaps the whole grid to birthday packages. */
 const BIRTHDAY_CATEGORY = 'Birthday Packages';
@@ -22,7 +23,7 @@ export const WorkshopsBrowsingSection: React.FC = () => {
   const {
     workshops, setCustomerTab, setSelectedWorkshopId, categories: dbCategories,
     publishedBirthdayPackages, selectedBirthdayPackage, setSelectedBirthdayPackage,
-    workshopsInitialCategory, workshopSessions, bookings, queue, todayDateStr
+    workshopsInitialCategory, workshopSessions, todayDateStr
   } = useApp();
 
   /**
@@ -39,6 +40,10 @@ export const WorkshopsBrowsingSection: React.FC = () => {
     [workshopSessions, todayDateStr]
   );
   const gridSeats = useSessionSeats(gridSeatSessionIds);
+
+  /** Popularity for the default sort — see the sort block below. */
+  const rankingWindow = useMemo(() => recentBookingsWindow(todayDateStr), [todayDateStr]);
+  const recentBookings = useRecentBookings(rankingWindow.from, rankingWindow.to);
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -97,12 +102,26 @@ export const WorkshopsBrowsingSection: React.FC = () => {
     } else if (sortBy === 'PriceHigh') {
       result.sort((a, b) => b.price - a.price);
     } else {
-      // Popularity (fewer spots left = more popular)
-      result.sort((a, b) => a.spotsLeft - b.spotsLeft);
+      // Popularity: bookings taken over the trailing 30 days, counted by the
+      // database — the same signal the home page's featured carousel ranks by.
+      //
+      // This used to sort on workshops.spots_left, a single per-workshop
+      // counter for a per-session quantity, which a workshop save reset to full
+      // and walk-ins never decremented. That column is gone. Seats remaining
+      // would not have been popularity either: a 4-seat class that fills would
+      // outrank a 20-seat class that sold 15.
+      //
+      // Order is held until the counts arrive rather than ranking everything
+      // equal, so the grid does not reshuffle under the reader.
+      if (recentBookings.ready) {
+        result.sort((a, b) =>
+          (recentBookings.get(b.id) ?? 0) - (recentBookings.get(a.id) ?? 0)
+        );
+      }
     }
 
     return result;
-  }, [workshops, searchQuery, selectedCategory, selectedSkillLevel, sortBy, isBirthdayView]);
+  }, [workshops, searchQuery, selectedCategory, selectedSkillLevel, sortBy, isBirthdayView, recentBookings]);
 
   // Birthday packages are shown in full, unfiltered: with two of them a search
   // box only ever hides one, so it was removed along with the old card grid.

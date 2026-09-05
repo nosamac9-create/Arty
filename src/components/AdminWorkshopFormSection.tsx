@@ -405,7 +405,6 @@ export const AdminWorkshopFormSection: React.FC = () => {
             ...sess,
             time: sess.time || sess.startTime,
             capacity: usage.capacity,
-            spotsLeft: usage.remainingCapacity,
             isFull: usage.remainingCapacity <= 0
           };
         }));
@@ -548,7 +547,6 @@ export const AdminWorkshopFormSection: React.FC = () => {
       date: '2026-07-24',
       time: '04:30 PM',
       capacity,
-      spotsLeft: capacity,
       isFull: false
     }]);
   };
@@ -1072,7 +1070,6 @@ export const AdminWorkshopFormSection: React.FC = () => {
         ageRange: finalAgeRange,
         price: Number(price) || 200,
         capacity: Number(capacity) || 10,
-        spotsLeft: Number(capacity) || 10,
         // No substitution: a workshop with no photograph is saved with none.
         // The stock photo that used to stand in here is what made a row whose
         // images had been lost look like a row that simply had a photo.
@@ -1096,7 +1093,6 @@ export const AdminWorkshopFormSection: React.FC = () => {
           startTime: s.time || s.startTime || '10:00 AM',
           duration: s.duration || duration,
           capacity: Number(s.capacity) || Number(capacity) || 10,
-          spotsLeft: s.spotsLeft !== undefined ? Number(s.spotsLeft) : (Number(s.capacity) || Number(capacity) || 10),
           isFull: Boolean(s.isFull),
           // A session may have its own instructor; otherwise it inherits the
           // workshop tutor. Both the id and the resolved name are stored.
@@ -1173,7 +1169,6 @@ export const AdminWorkshopFormSection: React.FC = () => {
         ageRange: finalAgeRange,
         price: Number(price) || 200,
         capacity: Number(capacity) || 10,
-        spotsLeft: Number(capacity) || 10,
         // No substitution: a workshop with no photograph is saved with none.
         // The stock photo that used to stand in here is what made a row whose
         // images had been lost look like a row that simply had a photo.
@@ -1197,7 +1192,6 @@ export const AdminWorkshopFormSection: React.FC = () => {
           startTime: s.time || s.startTime || '10:00 AM',
           duration: s.duration || duration,
           capacity: Number(s.capacity) || Number(capacity) || 10,
-          spotsLeft: s.spotsLeft !== undefined ? Number(s.spotsLeft) : (Number(s.capacity) || Number(capacity) || 10),
           isFull: Boolean(s.isFull),
           // A session may have its own instructor; otherwise it inherits the
           // workshop tutor. Both the id and the resolved name are stored.
@@ -1898,7 +1892,6 @@ export const AdminWorkshopFormSection: React.FC = () => {
                       endTime: g.endTime,
                       duration: g.duration,
                       capacity: g.capacity,
-                      spotsLeft: g.capacity,
                       isFull: false,
                       // Keep the stable links the generator resolved.
                       staffId: g.staffId,

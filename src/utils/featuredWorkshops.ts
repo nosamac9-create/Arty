@@ -9,16 +9,15 @@
  * no second availability system: eligibility uses the seat counts supplied by
  * the caller, from the same database function every other page reads,
  * the same seat maths the workshop cards and the walk-in queue run on, and
- * "still counts" reuses `isActiveBookingRecord`.
+ * "still counts" is applied by workshop_recent_bookings (migration 0024),
+ * which mirrors `isActiveBookingRecord`.
  *
  * Kept out of the component so the aggregation runs once per data change
  * rather than per render, and so the rules can be read without the markup.
  */
 
-import { Workshop, WorkshopSessionRecord, Booking, QueueItem } from '../types';
-import { isActiveBookingRecord } from './queueUtils';
+import { Workshop, WorkshopSessionRecord } from '../types';
 import { normalizeDateString, timeToMinutes } from './timeUtils';
-import { getRiyadhDateString } from './dateUtils';
 
 /** The carousel never shows more than this, however many qualify. */
 export const FEATURED_WORKSHOPS_MAX = 4;
@@ -38,8 +37,6 @@ const RANKING_WINDOW_DAYS = 30;
 export interface FeaturedWorkshopsSources {
   workshops: Workshop[];
   workshopSessions: WorkshopSessionRecord[];
-  bookings: Booking[];
-  queue?: QueueItem[];
 }
 
 /**
@@ -60,23 +57,6 @@ function weekdayOf(dateStr: string): number {
   return new Date(Date.UTC(year, (month || 1) - 1, day || 1)).getUTCDay();
 }
 
-/**
- * The Riyadh calendar date a booking was created on.
- *
- * `createdAt` is an instant (`timestamptz` in Postgres, `toISOString()` in
- * `addBooking`), so it has to be read in the studio's timezone before being
- * compared against a Riyadh calendar window — a booking taken at 1am Riyadh is
- * the previous day in UTC, and would otherwise fall out of the window a day
- * early. Bookings written before the field existed fall back to the session
- * date, which is the only other date they carry.
- */
-function bookingDateKey(booking: Booking): string {
-  if (booking.createdAt) {
-    const created = new Date(booking.createdAt);
-    if (!Number.isNaN(created.getTime())) return getRiyadhDateString(created);
-  }
-  return normalizeDateString(booking.date);
-}
 
 interface Ranked {
   workshop: Workshop;
@@ -95,6 +75,18 @@ interface Ranked {
  * published session in the week ahead that still has a seat. Nothing is padded
  * in to reach the cap: three eligible workshops return three.
  */
+/**
+ * The trailing popularity window, in Riyadh dates.
+ *
+ * Exported so the caller can ask the database for exactly the window the
+ * ranking is about to apply — the bounds and the ranking must not drift.
+ */
+export function recentBookingsWindow(todayDateStr: string): { from: string; to: string } {
+  const today = normalizeDateString(todayDateStr);
+  // Inclusive of today, so a 30-day window is today minus 29.
+  return { from: addDays(today, -(RANKING_WINDOW_DAYS - 1)), to: today };
+}
+
 export function selectFeaturedWorkshops(
   sources: FeaturedWorkshopsSources,
   todayDateStr: string,
@@ -108,16 +100,23 @@ export function selectFeaturedWorkshops(
    * session_seats_summary. Omitted only by tests that supply no seat source, in
    * which case sessions are treated as available.
    */
-  getSeats: (sessionId: string) => { seatsRemaining: number } | undefined = () => undefined
+  getSeats: (sessionId: string) => { seatsRemaining: number } | undefined = () => undefined,
+  /**
+   * Bookings this workshop took over the trailing window, or undefined when the
+   * counts have not arrived.
+   *
+   * Counting from a bookings array was the bug: on the public site that array
+   * is RLS-scoped, so every workshop scored zero and the ranking fell through
+   * to its tie-breakers. Backed by workshop_recent_bookings (migration 0024).
+   */
+  getRecentBookings: (workshopId: string) => number | undefined = () => undefined
 ): Workshop[] {
-  const { workshops, workshopSessions, bookings, queue = [] } = sources;
+  const { workshops, workshopSessions } = sources;
 
   const today = normalizeDateString(todayDateStr);
   // Saturday of the week today falls in. The lower bound of the search stays
   // `today` regardless, since a session earlier this week has already run.
   const weekEnd = addDays(today, 6 - ((weekdayOf(today) - WEEK_STARTS_ON + 7) % 7));
-  // Inclusive of today, so a 30-day window is today minus 29.
-  const windowStart = addDays(today, -(RANKING_WINDOW_DAYS - 1));
 
   const ranked: Ranked[] = [];
 
@@ -126,8 +125,8 @@ export function selectFeaturedWorkshops(
     if (workshop.status === 'Draft' || workshop.status === 'Archived') return;
 
     // Eligibility: a published session inside the week that is not yet full.
-    // `getSessionSeatUsage` counts bookings and linked walk-ins together, so a
-    // session filled by walk-ins is correctly treated as full here too.
+    // The seat counts count bookings and linked walk-ins together, so a session
+    // filled by walk-ins is correctly treated as full here too.
     let nextSession = Number.POSITIVE_INFINITY;
 
     for (const session of workshopSessions) {
@@ -154,18 +153,17 @@ export function selectFeaturedWorkshops(
     if (nextSession === Number.POSITIVE_INFINITY) return;
 
     // Popularity: bookings that still stand, by when they were taken, over the
-    // trailing window. `isActiveBookingRecord` is the site's own test for a
-    // booking that still counts — it drops cancelled, auto-cancelled, no-show
-    // and draft records, and failed or declined payments, while Completed,
-    // Checked In, In Progress and Pending all count, which is what popularity
-    // should mean: a finished workshop is the strongest evidence of demand.
-    const recentBookings = bookings.reduce((total, booking) => {
-      if (String(booking.workshopId) !== String(workshop.id)) return total;
-      if (!isActiveBookingRecord(booking)) return total;
-      const date = bookingDateKey(booking);
-      if (!date || date < windowStart || date > today) return total;
-      return total + 1;
-    }, 0);
+    // trailing window. The database applies the same status and payment
+    // exclusions as isActiveBookingRecord — cancelled, auto-cancelled, no-show
+    // and draft records and failed or declined payments are dropped, while
+    // Completed, Checked In, In Progress and Pending all count, which is what
+    // popularity should mean: a finished workshop is the strongest evidence of
+    // demand.
+    //
+    // Zero while the counts are still loading, which ranks every workshop equal
+    // and leaves the tie-breakers in charge — the same order the page showed
+    // before the counts arrive, so it does not visibly reshuffle twice.
+    const recentBookings = getRecentBookings(String(workshop.id)) ?? 0;
 
     ranked.push({ workshop, recentBookings, nextSession, order });
   });

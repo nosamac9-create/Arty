@@ -30,7 +30,11 @@ export interface WorkshopSession {
   date: string;
   time: string;
   capacity: number;
-  spotsLeft: number;
+  /**
+   * Seats left are counted from the bookings (getSessionSeatUsage on the staff
+   * side, session_seats_summary on the customer side), never stored. There is
+   * no such column on workshop_sessions and there never was.
+   */
   isFull: boolean;
   status?: 'Published' | 'Cancelled' | 'Unavailable' | 'Unpublished';
   instructor?: string;
@@ -86,7 +90,6 @@ export interface Workshop {
   price: number; // in SAR
   pricingType?: 'Per person' | 'Per pair' | 'Fixed price';
   capacity: number;
-  spotsLeft: number;
   image: string;
   additionalImages?: string[];
   instructor: string;
@@ -420,7 +423,6 @@ export const INITIAL_WORKSHOPS: Workshop[] = [
     ageRange: '16+ years',
     price: 320,
     capacity: 8,
-    spotsLeft: 3,
     image: 'https://images.unsplash.com/photo-1565192647048-f997ded87958?auto=format&fit=crop&w=800&q=80',
     instructor: 'Ali bin Khalid',
     room: 'The Clay Station (Studio A)',
@@ -428,9 +430,9 @@ export const INITIAL_WORKSHOPS: Workshop[] = [
     skillLevel: 'Beginner',
     status: 'Published',
     sessions: [
-      { id: 1, date: getRelativeRiyadhDateStr(0), time: '11:00 AM', capacity: 8, spotsLeft: 0, isFull: true },
-      { id: 2, date: getRelativeRiyadhDateStr(1), time: '04:30 PM', capacity: 8, spotsLeft: 4, isFull: false },
-      { id: 3, date: getRelativeRiyadhDateStr(2), time: '07:30 PM', capacity: 8, spotsLeft: 3, isFull: false }
+      { id: 1, date: getRelativeRiyadhDateStr(0), time: '11:00 AM', capacity: 8, isFull: true },
+      { id: 2, date: getRelativeRiyadhDateStr(1), time: '04:30 PM', capacity: 8, isFull: false },
+      { id: 3, date: getRelativeRiyadhDateStr(2), time: '07:30 PM', capacity: 8, isFull: false }
     ]
   },
   {
@@ -445,7 +447,6 @@ export const INITIAL_WORKSHOPS: Workshop[] = [
     ageRange: '12+ years',
     price: 240,
     capacity: 12,
-    spotsLeft: 5,
     image: 'https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?auto=format&fit=crop&w=800&q=80',
     instructor: 'Aisha Al-Jahdali',
     room: 'The Handcraft Lounge',
@@ -453,7 +454,7 @@ export const INITIAL_WORKSHOPS: Workshop[] = [
     skillLevel: 'Beginner',
     status: 'Published',
     sessions: [
-      { id: 1, date: getRelativeRiyadhDateStr(0), time: '01:00 PM', capacity: 12, spotsLeft: 5, isFull: false }
+      { id: 1, date: getRelativeRiyadhDateStr(0), time: '01:00 PM', capacity: 12, isFull: false }
     ]
   },
   {
@@ -468,7 +469,6 @@ export const INITIAL_WORKSHOPS: Workshop[] = [
     ageRange: '14+ years',
     price: 280,
     capacity: 15,
-    spotsLeft: 0, // Mark as fully booked/full to test disabled state
     image: 'https://images.unsplash.com/photo-1460661419201-fd4cecdf8a8b?auto=format&fit=crop&w=800&q=80',
     instructor: 'Faisal Al-Otaibi',
     room: 'The Canvas Atelier (Studio B)',
@@ -476,7 +476,7 @@ export const INITIAL_WORKSHOPS: Workshop[] = [
     skillLevel: 'All Levels',
     status: 'Published',
     sessions: [
-      { id: 1, date: getRelativeRiyadhDateStr(0), time: '06:00 PM', capacity: 15, spotsLeft: 0, isFull: true }
+      { id: 1, date: getRelativeRiyadhDateStr(0), time: '06:00 PM', capacity: 15, isFull: true }
     ]
   },
   {
@@ -491,7 +491,6 @@ export const INITIAL_WORKSHOPS: Workshop[] = [
     ageRange: '6-11 years',
     price: 180,
     capacity: 10,
-    spotsLeft: 8,
     image: 'https://images.unsplash.com/photo-1513364776144-60967b0f800f?auto=format&fit=crop&w=800&q=80',
     instructor: 'Sara Al-Malki',
     room: 'Kids Creative Corner',
@@ -499,7 +498,7 @@ export const INITIAL_WORKSHOPS: Workshop[] = [
     skillLevel: 'Beginner',
     status: 'Published',
     sessions: [
-      { id: 1, date: getRelativeRiyadhDateStr(1), time: '10:00 AM', capacity: 10, spotsLeft: 8, isFull: false }
+      { id: 1, date: getRelativeRiyadhDateStr(1), time: '10:00 AM', capacity: 10, isFull: false }
     ]
   },
   {
@@ -514,7 +513,6 @@ export const INITIAL_WORKSHOPS: Workshop[] = [
     ageRange: '18+ years',
     price: 550, // Per couple
     capacity: 6, // 6 couples
-    spotsLeft: 2,
     image: 'https://images.unsplash.com/photo-1513151233558-d860c5398176?auto=format&fit=crop&w=800&q=80',
     instructor: 'Ali bin Khalid',
     room: 'The Clay Station (Studio A)',
@@ -522,7 +520,7 @@ export const INITIAL_WORKSHOPS: Workshop[] = [
     skillLevel: 'All Levels',
     status: 'Published',
     sessions: [
-      { id: 1, date: getRelativeRiyadhDateStr(0), time: '06:00 PM', capacity: 6, spotsLeft: 2, isFull: false }
+      { id: 1, date: getRelativeRiyadhDateStr(0), time: '06:00 PM', capacity: 6, isFull: false }
     ]
   }
 ];

@@ -19,8 +19,8 @@ import {
   ContainerAnimated
 } from './ui/CtaSectionWithGallery';
 import { formatDate } from '../utils/calendarConfig';
-import { selectFeaturedWorkshops } from '../utils/featuredWorkshops';
-import { useSessionSeats } from '../lib/sessionSeats';
+import { selectFeaturedWorkshops, recentBookingsWindow } from '../utils/featuredWorkshops';
+import { useSessionSeats, useRecentBookings } from '../lib/sessionSeats';
 import { Calendar, Sparkles, ChevronRight, Paintbrush, MousePointerClick, CalendarRange, Gift, Coffee, ChevronDown, Phone, Mail, UserCheck, Star, ArrowLeft, Clock }  from 'lucide-react';
 
 /**
@@ -98,14 +98,23 @@ export const HomeSection: React.FC = () => {
   );
   const featuredSeats = useSessionSeats(featuredSeatSessionIds);
 
+  /**
+   * Popularity, counted by the database over the trailing 30 days. Counting the
+   * `bookings` array here scored every workshop zero for the public — see
+   * migration 0024 — so the carousel never actually ranked by demand.
+   */
+  const rankingWindow = useMemo(() => recentBookingsWindow(todayDateStr), [todayDateStr]);
+  const recentBookings = useRecentBookings(rankingWindow.from, rankingWindow.to);
+
   const featuredWorkshops = useMemo(
     () => selectFeaturedWorkshops(
-      { workshops, workshopSessions, bookings, queue },
+      { workshops, workshopSessions },
       todayDateStr,
       undefined,
-      featuredSeats.get
+      featuredSeats.get,
+      recentBookings.get
     ),
-    [workshops, workshopSessions, bookings, queue, todayDateStr, featuredSeats]
+    [workshops, workshopSessions, todayDateStr, featuredSeats, recentBookings]
   );
 
   /** Images only — the carousel renders cards, the details sit below it. */

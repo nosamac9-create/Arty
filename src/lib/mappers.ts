@@ -73,7 +73,7 @@ export const TABLE_COLUMNS: Record<string, string[]> = {
   ],
   workshops: [
     'id', 'title', 'slug', 'category', 'hook', 'description', 'full_details', 'duration',
-    'age_range', 'price', 'pricing_type', 'capacity', 'spots_left', 'image',
+    'age_range', 'price', 'pricing_type', 'capacity', 'image',
     'additional_images', 'instructor', 'staff_id', 'room', 'room_id', 'table_id', 'materials',
     'what_we_provide', 'instructions', 'cancellation_policy', 'skill_level', 'status',
     'featured', 'recurring_schedules', 'session_exceptions', 'custom_fields',
