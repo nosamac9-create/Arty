@@ -73,8 +73,12 @@ export const WorkshopsBrowsingSection: React.FC = () => {
 
     let result = [...workshops];
 
-    // Filter out Drafts for customer view!
-    result = result.filter(ws => (ws.status || 'Published') !== 'Draft');
+    // Published only. This excluded Drafts alone, so Archived workshops — ones
+    // staff have deliberately retired — stayed visible and bookable. It also
+    // meant the grid and the home page's "Workshops running" stat were counting
+    // by two different rules, which is how that stat came to advertise drafts.
+    // One rule, in both places.
+    result = result.filter(ws => ws.status === 'Published');
 
     // Search query
     if (searchQuery.trim()) {
@@ -229,11 +233,20 @@ export const WorkshopsBrowsingSection: React.FC = () => {
                   aria-label="Skill Level"
                   className="appearance-none bg-white border border-brand-clay rounded-full py-3 ps-4 pe-9 text-sm font-medium text-brand-charcoal cursor-pointer focus:ring-1 focus:ring-brand-sage"
                 >
-                  <option value="All">All Levels</option>
+                  {/*
+                    Two of these once read "All Levels" and "All Levels
+                    (Strict)", which are indistinguishable to a customer. They
+                    are different kinds of thing: the first is the absence of a
+                    filter, the rest are skill tags staff put on a workshop.
+                    "Any level" says "show me everything"; "Suitable for all
+                    levels" describes the class, matching how the tag reads on
+                    the card itself.
+                  */}
+                  <option value="All">Any level</option>
                   <option value="Beginner">Beginner</option>
                   <option value="Intermediate">Intermediate</option>
                   <option value="Advanced">Advanced</option>
-                  <option value="All Levels">All Levels (Strict)</option>
+                  <option value="All Levels">Suitable for all levels</option>
                 </select>
                 <ChevronDown className="pointer-events-none absolute end-3 top-1/2 -translate-y-1/2 h-4 w-4 text-brand-muted" />
               </div>

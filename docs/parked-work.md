@@ -228,7 +228,8 @@ Source: `ARTY_QA_Bug_Report.md` (manual testing, customer site sections 1–6 pl
 Everything still open is reproduced here so this file is the single source.
 
 Closed already: **H1** (duplicate session rows), **H2** (My Pieces), **M1** (seat-count display),
-**N5** (generator past dates).
+**N5** (generator past dates), **N2** (false email/SMS claim), **N8** (stat counted drafts),
+**L3** (skill-level labels), **L2** (investigated, not reproducible — see below).
 
 ### Medium-high
 
@@ -268,20 +269,28 @@ Closed already: **H1** (duplicate session rows), **H2** (My Pieces), **M1** (sea
 - **N7 — password reset always reports success.** A reset rejected by Supabase (email rate limit)
   still showed *"reset link is on its way"*. The generic non-revealing wording is correct and
   should stay; the bug is that the real send result is never checked.
-- **N8 — "Workshops Running" counts drafts.** The home page stat shows 7 (4 Published + 3 Draft)
-  instead of 4. Should filter to `status = 'Published'`.
+- **N8 — FIXED.** The home page stat counted every row in `workshops`. Both it and the "View All"
+  count on the same page (not in the report, same bug) now read one `publishedWorkshops` list.
+  Fixed alongside it: the workshop grid filtered `!== 'Draft'`, so **Archived** workshops stayed
+  visible and bookable to customers, and the grid and the stat were counting by two different
+  rules. Both are now `status === 'Published'`.
 
 ### Low
 
 - **L1 — inconsistent contact-field validation.** Name blank, email blank and malformed phone give
   proper app messages; malformed email and blank phone fall through to the browser's native
   tooltip. Nothing gets through either way — this is consistency, not a gap.
-- **L2 — `cancel_own_booking` bumps `updated_at` on a no-op.** Cancelling an already-cancelled
-  booking correctly returns `already_cancelled` and changes nothing else, but `updated_at` still
-  advances, so it is not a reliable "meaningfully modified" signal.
-- **L3 — "All Levels" vs "All Levels (strict)".** The first means "no filter"; the second is a real
-  tag value. Nearly identical labels for different things. Suggested: rename the first to "All"
-  and drop "(strict)" from the second.
+- **L2 — CLOSED, not reproducible.** Reported as `cancel_own_booking` advancing `updated_at` when
+  cancelling an already-cancelled booking. It does not: the function returns at the
+  `already_cancelled` guard (`0017_cancel_own_booking.sql:151`) **before** the `update` at `:200`,
+  so no write to `bookings` happens on that path, and there is no trigger on the table. The only
+  other `updated_at = now()` in the function is on `queue`. Confirmed against the database — every
+  cancelled row has `updated_at` later than `created_at`, but all are genuine first cancellations,
+  so nothing there evidences a no-op write. Do not re-open from the report without a reproduction.
+- **L3 — FIXED.** Renamed to "Any level" (no filter) and "Suitable for all levels" (the tag), so
+  the two differ in kind and not just wording. Filter values are unchanged. The workshop card still
+  renders the raw `All Levels` tag; mapping the display there too was judged not worth a third
+  file.
 - **L4 — stale "Registered" badge after an auth record is deleted directly in Supabase.** Caused by
   an out-of-band database edit, not any in-app flow, so probably not a real defect today. Re-test
   if account deletion or merging is ever built into the app.

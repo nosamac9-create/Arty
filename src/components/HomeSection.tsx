@@ -131,6 +131,18 @@ export const HomeSection: React.FC = () => {
 
   const publishedEvents = events.filter(evt => evt.status === 'Published');
 
+  /**
+   * Workshops a customer can actually see and book.
+   *
+   * The "Workshops running" stat and the "View All" count both used
+   * `workshops.length`, the raw table, so both advertised drafts — 7 when only 4
+   * were live. Counted once here so the two figures cannot drift apart again.
+   */
+  const publishedWorkshops = useMemo(
+    () => workshops.filter(ws => ws.status === 'Published'),
+    [workshops]
+  );
+
   const formatEventDate = (dateStr: string) => {
     try {
       const d = new Date(dateStr);
@@ -229,7 +241,7 @@ export const HomeSection: React.FC = () => {
             <dl className="mx-auto mt-12 grid max-w-xl grid-cols-1 xs:grid-cols-3 gap-6 border-t border-brand-clay pt-8">
               <div>
                 <dt className="font-display text-2xl font-semibold text-brand-charcoal ltr-numerals">
-                  <CountingNumber target={workshops.length} />
+                  <CountingNumber target={publishedWorkshops.length} />
                 </dt>
                 <dd className="mt-1 text-[11px] uppercase tracking-[0.1em] text-brand-muted">Workshops running</dd>
               </div>
@@ -282,7 +294,7 @@ export const HomeSection: React.FC = () => {
               }}
               className="group inline-flex shrink-0 items-center gap-2 rounded-full border border-brand-clay bg-brand-cream px-5 py-2.5 text-sm font-semibold text-brand-charcoal transition-colors hover:bg-brand-clay-soft cursor-pointer"
             >
-              <span>View All ({workshops.length})</span>
+              <span>View All ({publishedWorkshops.length})</span>
               <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-1 flip-rtl" />
             </button>
           </ContainerAnimated>
