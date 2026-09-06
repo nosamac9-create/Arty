@@ -334,6 +334,10 @@ interface AppContextType {
   // Mutators
   addWorkshop: (ws: Omit<Workshop, 'id' | 'slug'>) => void;
   updateWorkshop: (id: string, updates: Partial<Workshop>) => void;
+  /** A customer's session ended without them asking. See the implementation. */
+  sessionExpired: boolean;
+  clearSessionExpired: () => void;
+
   addBooking: (
     booking: Omit<Booking, 'id' | 'createdAt' | 'timeline'>,
     existingRefCode?: string
@@ -1283,9 +1287,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true };
   };
 
+  /**
+   * True when a customer's session ended WITHOUT them asking for it — the token
+   * expired or was revoked, and Supabase dropped it.
+   *
+   * Detection is not ours: @supabase/auth-js registers its own
+   * `visibilitychange` handler and re-checks the session every time the tab
+   * becomes visible, removing it and emitting SIGNED_OUT when the refresh
+   * genuinely fails. That already worked. What was missing is that
+   * `setCurrentUser(null)` happened in silence, so the customer was simply
+   * signed out mid-session with no explanation.
+   *
+   * THREE GUARDS keep this from firing when it should not, because a customer
+   * told "your session expired" right after they clicked Sign Out is a worse
+   * bug than the one being fixed:
+   *
+   *   1. The event must be SIGNED_OUT specifically. INITIAL_SESSION (first
+   *      load, no session) and TOKEN_REFRESHED both carry a null-or-changed
+   *      session and must not count.
+   *   2. There must have been a customer session immediately before. On first
+   *      load there was not, so nothing can announce an expiry to someone who
+   *      was never signed in.
+   *   3. It must not be an app-initiated sign-out. logoutCustomer sets a flag
+   *      the listener consumes.
+   */
+  const [sessionExpired, setSessionExpired] = useState(false);
+  /** Set for the duration of a deliberate sign-out. Guard 3. */
+  const intentionalSignOutRef = useRef(false);
+  /** Whether a customer was signed in as of the last event. Guard 2. */
+  const hadCustomerSessionRef = useRef(false);
+
   const logoutCustomer = async () => {
+    // Signing out is a SIGNED_OUT event like any other, so the listener has to
+    // be told this one was asked for. Without this, clicking Sign Out would
+    // announce "your session expired", which is worse than the silence it
+    // replaces.
+    intentionalSignOutRef.current = true;
+    setSessionExpired(false);
     // Supabase owns the session; signing out clears it everywhere.
     if (supabase) await supabase.auth.signOut();
+    // Belt and braces: if signOut() threw, or emitted nothing, the flag must
+    // not survive to swallow a genuine expiry later.
+    intentionalSignOutRef.current = false;
     setCurrentUser(null);
     setCustomerTab('home');
   };
@@ -3222,6 +3265,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       staffId = staffSession.data.session?.user?.id ?? null;
       customerId = customerSession.data.session?.user?.id ?? null;
       customerEmail = customerSession.data.session?.user?.email ?? null;
+      // Seeds guard 2. Until this runs, hadCustomerSession is false, so a
+      // SIGNED_OUT arriving during startup cannot announce an expiry.
+      hadCustomerSessionRef.current = customerId !== null;
       resolveSessions(staffId, customerId, customerEmail, mountGeneration);
     });
 
@@ -3231,8 +3277,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       resolveSessions(staffId, customerId, customerEmail, sessionGenerationRef.current);
     });
 
-    const customerSub = supabase.auth.onAuthStateChange((_e, session) => {
-      customerId = session?.user?.id ?? null;
+    const customerSub = supabase.auth.onAuthStateChange((event, session) => {
+      const nextCustomerId = session?.user?.id ?? null;
+
+      if (event === 'SIGNED_OUT') {
+        if (intentionalSignOutRef.current) {
+          // They asked. Consume the flag and say nothing.
+          intentionalSignOutRef.current = false;
+        } else if (hadCustomerSessionRef.current) {
+          setSessionExpired(true);
+        }
+      }
+      // Signed in again, by any route — the notice has served its purpose.
+      if (nextCustomerId) setSessionExpired(false);
+
+      hadCustomerSessionRef.current = nextCustomerId !== null;
+      customerId = nextCustomerId;
       customerEmail = session?.user?.email ?? null;
       sessionGenerationRef.current += 1;
       resolveSessions(staffId, customerId, customerEmail, sessionGenerationRef.current);
@@ -4235,6 +4295,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       workshopFields, updateWorkshopFields,
       birthdayFormFields, updateBirthdayFormFields,
       addWorkshop, updateWorkshop,
+      sessionExpired, clearSessionExpired: () => setSessionExpired(false),
       addBooking, bookingError, clearBookingError: () => setBookingError(null),
       cancelBooking, cancelOwnBooking, updateBookingStatus,
       addCategoryIfMissing, assignBookingStaff, updateWorkshopSession, appendBookingTimeline,

@@ -62,7 +62,7 @@ const formVariants = {
 
 export const AuthSection: React.FC = () => {
   const { 
-    authScreen, setAuthScreen, currentUser, setCurrentUser, setCustomerTab, 
+    authScreen, setAuthScreen, currentUser, setCurrentUser, setCustomerTab, sessionExpired, 
     loginCustomer, claimCustomerAccount, registerCustomer, requestPasswordReset,
     logoutCustomer, pendingBooking, changeCustomerPassword 
   } = useApp();
@@ -657,6 +657,17 @@ export const AuthSection: React.FC = () => {
             exit={prefersReducedMotion ? undefined : 'exit'}
             className="flex flex-col justify-center text-start"
           >
+
+            {/*
+              Shown above any form error: it explains why the customer is
+              looking at this screen at all, which no field-level message can.
+            */}
+            {sessionExpired && !errorMsg && (
+              <div className="mb-6 p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold flex items-start gap-2.5">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-amber-600" />
+                <p>Your session expired, please sign in again.</p>
+              </div>
+            )}
 
             {errorMsg && (
               <div className="mb-6 p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold flex items-start gap-2.5">

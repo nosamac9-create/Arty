@@ -16,6 +16,7 @@ import { BackButton } from './ui/BackButton';
 export const CheckoutPaymentSection: React.FC = () => {
   const { 
     pendingBooking, setPendingBooking, setCustomerTab, addBooking, setLastBookingCreated, workshops, currentUser,
+    sessionExpired,
     appSettings
   } = useApp();
 
@@ -382,6 +383,16 @@ export const CheckoutPaymentSection: React.FC = () => {
                 />
                 <p className="text-[11px] text-brand-muted">A payment authorization notification will be pushed to your STC Pay app.</p>
               </div>
+            )}
+
+            {/*
+              The costliest place to be signed out without being told: the
+              customer has filled in everything and is about to pay.
+            */}
+            {sessionExpired && (
+              <p className="text-xs text-amber-700 font-semibold text-center">
+                Your session expired, please sign in again.
+              </p>
             )}
 
             {bookingError && (

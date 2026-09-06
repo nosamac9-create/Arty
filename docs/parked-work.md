@@ -173,6 +173,13 @@ correct wherever it is opened.
 
 Needs its own investigation before launch.
 
+### A session expiring mid-checkout loses the form
+
+`pendingBooking` is React state in `AppContext` and the checkout fields are local state in their
+own components — none of it is persisted. So a session that expires while a customer is filling in
+checkout takes the draft with it. The M3 fix explains why that happened rather than preventing it.
+Persisting `pendingBooking` is separate work and is not done.
+
 ### Birthday maxima are declared twice
 
 `BIRTHDAY_DAILY_MAX` / `BIRTHDAY_SAME_SLOT_MAX` in `src/utils/queueUtils.ts`, and again in
@@ -232,14 +239,14 @@ Closed already: **H1** (duplicate session rows), **H2** (My Pieces), **M1** (sea
 **L3** (skill-level labels), **N6** (shared password state), **N7** (reset always reported success),
 **L1** (native validation tooltips), **N3** (customer source always "Website"),
 **N1** (confirmation links routed to password reset — *fixed, not yet verified, see below*),
-**L2** (investigated, not reproducible — see below).
+**M3** (no notice when a session expired), **L2** (investigated, not reproducible — see below).
 
 Also closed, with no item number because it was not in the QA report: **the workshop grid showed
 Archived workshops to customers** (it filtered `!== 'Draft'`). Found while fixing N8 and recorded
 in that entry, noted here so it is findable on its own.
 
-Still open: **M2**, **M3**, **N4**, **L4**, the Live Queue modals, the three staff/manager
-questions, and I1/I2.
+Still open: **M2**, **N4**, **L4**, the Live Queue modals, the three staff/manager questions,
+and I1/I2.
 
 ### Medium-high
 
@@ -250,12 +257,14 @@ questions, and I1/I2.
   the stepper to live remaining seats, and settle whether the hard cap of 6 is a deliberate
   per-booking limit (if so, say so in the UI: "Max 6 per booking — contact us for larger groups").
   Needs staff/manager confirmation.
-- **M3 — auth not re-validated on in-app navigation.** Clearing the auth token without reloading
-  and then navigating to My Reservations via the in-app nav still renders 5 real bookings with no
-  sign-in prompt; a full reload correctly shows the prompt. Auth state is read once at
-  initialisation and held in React state rather than re-checked per view. **Not a cross-customer
-  leak** — the data is the right customer's, shown after the session should have been treated as
-  invalid.
+- **M3 — FIXED, and smaller than reported.** The report asked for revalidation on route change.
+  Investigation found detection already worked: `@supabase/auth-js` registers its own
+  `visibilitychange` listener and emits `SIGNED_OUT` when a refresh genuinely fails, which the app
+  already handled by clearing the customer. What was missing was any *explanation* — the UI simply
+  became signed-out mid-session. A `sessionExpired` flag now surfaces on the auth screen and the
+  checkout payment step. Three guards stop it firing on a deliberate sign-out or on first load;
+  they fail silent rather than loud. No `window.focus` handler was added — the SDK's coverage is
+  enough and the remaining gap is narrow and self-correcting. **Was never a cross-customer leak.**
 
 ### Medium
 
