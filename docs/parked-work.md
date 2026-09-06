@@ -268,10 +268,12 @@ Diagnosed while looking at something else, deliberately not fixed.
 
 ---
 
-## Found during concurrency testing
+## Found during concurrency testing — fixed in 0029
 
-Both found while writing the Block 4 race tests in `docs/manual-test-m1-capacity.md`. Neither is
-reachable through the UI today.
+Both found while writing the Block 4 race tests in `docs/manual-test-m1-capacity.md`. Neither was
+reachable through the UI, but both functions are executable by `anon`, so both were reachable by a
+crafted request. **Both fixed in migration `0029`**; kept here as the record of what was wrong and
+why, since neither is visible from the current function bodies.
 
 ### `book_session_seats` / `book_birthday_slot` bypass column defaults
 
@@ -294,8 +296,17 @@ Surfaced by a race-test payload missing `created_at`, which failed with *"null v
 `created_at` of relation `bookings` violates not-null constraint"* despite `created_at` having a
 `now()` default.
 
-Fix when either function is next touched: build the insert with an explicit column list, or
-populate over a base row that already carries the defaults.
+**Fixed in `0029`.** The payload is merged over a defaults object at the top of each function
+(`defaults || p_booking`), so everything downstream sees one normalised object and any
+caller-supplied key still wins. `id` and `date` are deliberately not defaulted — neither has a
+default in the table, and a payload missing either is genuinely incomplete and must keep failing.
+
+An explicit `null` in the payload also wins over the default and will still fail the constraint.
+That is deliberate: omitting a key is an incomplete payload, sending `null` for it is a statement,
+and only the first should be filled in.
+
+The defaults are now duplicated from `0001_init` into both functions, with a warning comment on
+each. They must be changed together.
 
 ### `book_session_seats` skips capacity checks when `p_session_id` is null
 
@@ -307,8 +318,21 @@ check at all.
 Not reachable through the UI — the client always passes the parameter — but the function is
 executable by `anon`, so this is a crafted-request hole rather than a theoretical one.
 
-Fix: derive the session id from `p_booking->>'session_id'` when the parameter is null, and refuse
-the call if both are absent.
+`book_birthday_slot` had the same hole from the other direction, which the original entry missed.
+It never looks at `session_id` — but `session_seats_taken` counts bookings by `session_id` **with
+no `workshop_id` filter**, so a birthday-routed payload carrying a real `session_id` consumed
+workshop seats through a function that checks only dates and slots. A second unguarded path to the
+same outcome.
+
+**Both fixed in `0029`.** `book_session_seats` now resolves the session as
+`coalesce(p_session_id, p_booking->>'session_id')` and refuses when neither is present; the lock
+and the capacity check no longer sit inside a conditional that can be skipped.
+`book_birthday_slot` refuses any payload carrying a `session_id` at all.
+
+Side effect worth knowing: `migrationCheck.ts` probes `book_session_seats` on every page load with
+a null session, so that probe now returns the "not linked to a workshop session" refusal instead of
+a 23502. `rpcExists` still passes — it only cares that the error is not function-not-found — but
+the console text on a signed-out page load changed, and nothing else would explain why.
 
 ---
 
