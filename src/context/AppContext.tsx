@@ -615,12 +615,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const linkError = params.get('error_description') || params.get('error');
     if (linkError) setRecoveryLinkError(linkError.replace(/\+/g, ' '));
 
-    if (
-      hash.includes('type=recovery') ||
-      hash.includes('access_token') ||
-      search.includes('type=recovery') ||
-      linkError
-    ) {
+    // Only a RECOVERY link opens the reset screen.
+    //
+    // This used to fire on a bare `access_token` in the fragment, which every
+    // Supabase auth link carries — signup confirmation and email-change
+    // included. So confirming a new email address dumped the customer on "Set a
+    // new password", and if they already had one it dead-ended on "New password
+    // should be different from the old password". The type is what distinguishes
+    // them, so the type is what is checked.
+    const linkType = params.get('type') || new URLSearchParams(search.replace(/^\?/, '')).get('type');
+    const isRecovery = linkType === 'recovery' || linkError !== null;
+
+    if (isRecovery) {
       setArea('customer');
       setCustomerTab('reset-password');
     }
@@ -1136,9 +1142,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       redirectTo: `${window.location.origin}${window.location.pathname}`
     });
 
-    // A failure is logged but never distinguished to the caller: reporting
-    // "no such user" here would leak the account list.
-    if (error) console.error('Password reset request failed:', error.message);
+    if (error) {
+      console.error('Password reset request failed:', error.message);
+
+      // Two kinds of failure, and only one of them is safe to describe.
+      //
+      // A per-account failure ("no such user", "email not confirmed") must stay
+      // behind the generic message — saying anything specific turns this form
+      // into a way of discovering which addresses have accounts, which is what
+      // the generic wording exists to prevent.
+      //
+      // An infrastructure failure — rate limit, provider outage, SMTP
+      // misconfiguration — says nothing about whether the account exists, and
+      // reporting success for it is a plain lie: the customer waits for an
+      // email that was never sent and has no reason to retry. Those are named.
+      const reason = String(error.message || '').toLowerCase();
+      const isInfrastructure =
+        error.status === 429 ||
+        error.status === 500 ||
+        error.status === 502 ||
+        error.status === 503 ||
+        /rate limit|too many requests|smtp|sending|provider|timeout|unavailable/.test(reason);
+
+      if (isInfrastructure) {
+        return {
+          success: false,
+          error: 'We are having trouble sending email right now. Please try again in a few minutes.'
+        };
+      }
+    }
 
     return { success: true, message: generic };
   };

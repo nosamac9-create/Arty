@@ -70,7 +70,16 @@ export const AuthSection: React.FC = () => {
   // Common Inputs
   const [email, setEmail] = useState('');
   const [loginIdentifier, setLoginIdentifier] = useState(''); // Email or Phone
+  /**
+   * Sign In's password. Create Account has its own (`registerPassword`) below.
+   *
+   * They shared one state, so typing a password on Sign In and switching tabs
+   * showed it pre-filled on Create Account. Separate state rather than clearing
+   * on tab change: there are six places that switch screens, and a future
+   * seventh would silently reintroduce the leak.
+   */
   const [password, setPassword] = useState('');
+  const [registerPassword, setRegisterPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -191,6 +200,7 @@ export const AuthSection: React.FC = () => {
     setClaimEmail('');
     setClaimEmailHint(null);
     setPassword('');
+    setRegisterPassword('');
     if (pendingBooking) setCustomerTab('checkout-info');
     else setCustomerTab('my-bookings');
   };
@@ -202,7 +212,7 @@ export const AuthSection: React.FC = () => {
     // Every rule comes from the shared validation layer, including the
     // duplicate phone/email checks against the customers table.
     const fieldErrors = await validateCustomerForm(
-      { name: fullName, email, phone, password, confirmPassword },
+      { name: fullName, email, phone, password: registerPassword, confirmPassword },
       { requirePassword: true }
     );
     setErrors(fieldErrors);
@@ -214,7 +224,7 @@ export const AuthSection: React.FC = () => {
       // Stored in the one canonical format, so duplicate checks match later.
       email: canonicalEmail(email),
       phone: canonicalPhone(phone),
-      password
+      password: registerPassword
     });
     setIsSubmitting(false);
 
@@ -881,13 +891,13 @@ export const AuthSection: React.FC = () => {
                     <PasswordField
                       required
                       placeholder="••••••••"
-                      value={password}
-                      onChange={ v => { setPassword(v); setErrorMsg(null); clearError('password'); }}
+                      value={registerPassword}
+                      onChange={ v => { setRegisterPassword(v); setErrorMsg(null); clearError('password'); }}
                       className="w-full bg-brand-cream border border-brand-clay rounded-xl py-3.5 px-4 text-sm font-semibold text-brand-charcoal shadow-2xs"
                     />
                     {/* Live checklist, updating as they type. */}
                     <ul className="space-y-0.5 pt-0.5">
-                      {passwordChecklist(password).map(item => (
+                      {passwordChecklist(registerPassword).map(item => (
                         <li
                           key={item.label}
                           className={`text-[11px] font-semibold flex items-center gap-1.5 ${

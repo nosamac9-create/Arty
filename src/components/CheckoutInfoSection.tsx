@@ -256,8 +256,18 @@ export const CheckoutInfoSection: React.FC = () => {
               </label>
               <div className="relative">
                 <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-charcoal/40" />
+                {/*
+                  type="text", not type="email". The browser validates an
+                  type="email" field itself and pops its own tooltip before the
+                  submit handler runs, so a malformed address got the native
+                  "Please include an '@'" while every other field on this form
+                  showed an app message. inputMode keeps the email keyboard on a
+                  phone; validateEmailRule does the checking.
+                */}
                 <input
-                  type="email"
+                  type="text"
+                  inputMode="email"
+                  autoComplete="email"
                   placeholder="e.g. noura@example.com"
                   value={email}
                   onChange={e => { setEmail(e.target.value); if (errors.email) setErrors({...errors, email: ''}); }}
@@ -273,9 +283,14 @@ export const CheckoutInfoSection: React.FC = () => {
               </div>
             )}
 
+            {/*
+              `required` is dropped for the same reason: it made the browser
+              claim the field before validatePhoneRule could say "Phone number
+              is required." in the app's own voice. The asterisk that `required`
+              rendered is kept in the label instead, so nothing looks optional.
+            */}
             <PhoneInput
-              label="Saudi Mobile Phone Number"
-              required
+              label="Saudi Mobile Phone Number *"
               value={phone}
               onChange={val => { setPhone(val); if (errors.phone) setErrors({...errors, phone: ''}); }}
               error={errors.phone}
