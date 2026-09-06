@@ -255,8 +255,12 @@ and I1/I2.
   whole Customer Information step before being blocked at Confirm or Payment. Not an overbooking
   risk — the block is real and no row is created — purely the wasted journey. **Two parts:** cap
   the stepper to live remaining seats, and settle whether the hard cap of 6 is a deliberate
-  per-booking limit (if so, say so in the UI: "Max 6 per booking — contact us for larger groups").
-  Needs staff/manager confirmation.
+  per-booking limit.
+
+  **Client has now answered: there is no per-booking limit.** So the hard cap of 6 is a bug, not a
+  policy, and both parts collapse into one change — the stepper's maximum becomes the live
+  remaining seats and nothing else. No UI copy is needed to explain a limit that should not exist.
+  Unblocked and ready to build; no code has changed yet.
 - **M3 — FIXED, and smaller than reported.** The report asked for revalidation on route change.
   Investigation found detection already worked: `@supabase/auth-js` registers its own
   `visibilitychange` listener and emits `SIGNED_OUT` when a refresh genuinely fails, which the app
@@ -345,7 +349,7 @@ and I1/I2.
 
 ### Needs confirmation from staff or the manager
 
-- **Participant cap of 6** — deliberate per-booking limit, or a bug? (See M2.)
+- ~~**Participant cap of 6**~~ — ANSWERED: no per-booking limit. See M2, now unblocked.
 - **Customer-facing add-ons (`workshop_options`)** — the table and data exist but no customer
   selector was found in the booking flow. Staff-only by design, or missing? Blocks QA test 3.3.
 - **A "Cancelled" tab for My Reservations** — cancelled bookings currently stay in Upcoming until
