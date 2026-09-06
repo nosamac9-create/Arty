@@ -1281,7 +1281,13 @@ export const LiveQueueSection: React.FC = () => {
     // account, never to a second record. resolveCustomer matches on the
     // normalized phone, so passing the chosen name is what decides whether the
     // stored name changes.
-    const { customer } = await resolveCustomer({ name: nameToUse, phone: normPhone });
+    // 'Live Queue' rather than the default 'Website': this person is standing at
+    // the counter. Only applies when the record is created — a customer already
+    // known to the studio keeps whatever they were first filed under.
+    const { customer } = await resolveCustomer(
+      { name: nameToUse, phone: normPhone },
+      'Live Queue'
+    );
 
     // "Update to new name" was chosen for an account that already existed.
     if (existing && nameToUse !== existing.name) {

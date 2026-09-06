@@ -281,11 +281,20 @@ interface AppContextType {
    * Finds the shared customer for these details, or creates one. The primary
    * match is the normalized phone, so a returning customer is never duplicated.
    */
-  resolveCustomer: (input: {
-    name?: string;
-    phone?: string;
-    email?: string;
-  }) => Promise<{ customer: CustomerAccount; created: boolean; matchedOn: string }>;
+  resolveCustomer: (
+    input: {
+      name?: string;
+      phone?: string;
+      email?: string;
+    },
+    /**
+     * How this customer first reached the studio. Written only when the record
+     * is created — see the implementation. Omitted, the database falls back to
+     * 'Website', which is what every caller used to get whether it was true or
+     * not.
+     */
+    source?: CustomerAccount['source']
+  ) => Promise<{ customer: CustomerAccount; created: boolean; matchedOn: string }>;
 
   /** Studio rooms and table stations — one shared record used everywhere. */
   studioResources: StudioResource[];
@@ -1845,6 +1854,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
    * It now rejects if the write fails, so the caller cannot show success for a
    * booking that did not happen.
    */
+  /**
+   * Whether a booking is a birthday party, for the purpose of tagging the
+   * customer record it creates. Deliberately the same test book_birthday_slot
+   * routing uses, so the two cannot disagree about what a birthday booking is.
+   */
+  const isBirthdayBookingData = (b: { workshopId?: string; workshopTitle?: string }) =>
+    b.workshopId === 'birthday-party-event' ||
+    String(b.workshopTitle || '').toLowerCase().includes('birthday');
+
   const addBooking = async (
     newBookingData: Omit<Booking, 'id' | 'createdAt' | 'timeline'>,
     /**
@@ -1894,11 +1912,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // My Bookings would always be empty.
       let customerId = newBookingData.customerId;
       if (!customerId && (newBookingData.customerEmail || newBookingData.customerPhone)) {
-        const resolved = await resolveCustomer({
-          name: newBookingData.customerName,
-          email: newBookingData.customerEmail,
-          phone: newBookingData.customerPhone
-        });
+        const resolved = await resolveCustomer(
+          {
+            name: newBookingData.customerName,
+            email: newBookingData.customerEmail,
+            phone: newBookingData.customerPhone
+          },
+          // Only reaches a NEW customer record — an existing one keeps whatever
+          // it was first filed under.
+          isBirthdayBookingData(newBookingData) ? 'Birthday Package' : 'Workshop Booking'
+        );
         customerId = resolved.customer?.id;
       }
 
@@ -3584,7 +3607,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
    * the queue, bookings, the pottery console and admin creation. Matching is by
    * normalized phone first, so the same person is never stored twice.
    */
-  const resolveCustomer = async (input: { name?: string; phone?: string; email?: string }) => {
+  /**
+   * `source` records HOW THIS CUSTOMER FIRST REACHED THE STUDIO, so it is only
+   * ever written when the record is created. resolve_customer_record's update
+   * branch does not touch the column, so passing it can never re-tag an existing
+   * customer, and it plays no part in matching — that is phone, then email.
+   *
+   * Every caller used to leave it null, and the function defaults a null to
+   * 'Website'. So a walk-in checked in at the counter was filed as having come
+   * from the website, and the field carried no information at all.
+   *
+   * Values come from CustomerAccount['source'], not Booking['source'] — they are
+   * different vocabularies for different questions. A booking's source is how
+   * that booking was taken; a customer's is where the relationship started.
+   */
+  const resolveCustomer = async (
+    input: { name?: string; phone?: string; email?: string },
+    source?: CustomerAccount['source']
+  ) => {
     // Find-or-create runs in Postgres. It has to: a guest booking is made by an
     // anonymous visitor, who cannot read or insert customer rows directly, and
     // doing the lookup client-side would also race two simultaneous walk-ins
@@ -3604,7 +3644,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       p_phone: input.phone ?? null,
       p_email: input.email ?? null,
       p_auth_id: null,
-      p_source: null
+      p_source: source ?? null
     });
 
     if (error || !id) {

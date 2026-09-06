@@ -1538,11 +1538,15 @@ export const AdminPiecesTrackingSection: React.FC = () => {
 
                   // Resolve against the one shared customers table: an existing
                   // customer is reused (matched on normalized phone), never copied.
-                  const { customer: linkedCustomer } = await resolveCustomer({
-                    name: manualName.trim(),
-                    phone: manualPhone.trim(),
-                    email: manualEmail.trim()
-                  });
+                  const { customer: linkedCustomer } = await resolveCustomer(
+                    {
+                      name: manualName.trim(),
+                      phone: manualPhone.trim(),
+                      email: manualEmail.trim()
+                    },
+                    // Staff typing a customer in by hand while logging a piece.
+                    'Admin Created'
+                  );
 
                   const newPieceData = {
                     customerId: linkedCustomer.id,
