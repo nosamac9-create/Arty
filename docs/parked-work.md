@@ -229,7 +229,17 @@ Everything still open is reproduced here so this file is the single source.
 
 Closed already: **H1** (duplicate session rows), **H2** (My Pieces), **M1** (seat-count display),
 **N5** (generator past dates), **N2** (false email/SMS claim), **N8** (stat counted drafts),
-**L3** (skill-level labels), **L2** (investigated, not reproducible — see below).
+**L3** (skill-level labels), **N6** (shared password state), **N7** (reset always reported success),
+**L1** (native validation tooltips), **N3** (customer source always "Website"),
+**N1** (confirmation links routed to password reset — *fixed, not yet verified, see below*),
+**L2** (investigated, not reproducible — see below).
+
+Also closed, with no item number because it was not in the QA report: **the workshop grid showed
+Archived workshops to customers** (it filtered `!== 'Draft'`). Found while fixing N8 and recorded
+in that entry, noted here so it is findable on its own.
+
+Still open: **M2**, **M3**, **N4**, **L4**, the Live Queue modals, the three staff/manager
+questions, and I1/I2.
 
 ### Medium-high
 
@@ -249,26 +259,45 @@ Closed already: **H1** (duplicate session rows), **H2** (My Pieces), **M1** (sea
 
 ### Medium
 
-- **N1 — email confirmation routes through "Set a new password".** Confirmation links from both
-  normal signup and guest-checkout account creation land on the password-reset screen. If the
-  account already has a password it dead-ends on *"New password should be different from the old
-  password"*. Confirmed **not** a security bypass — unconfirmed accounts are refused login, and the
-  original password works straight after. The two flows appear to share a redirect handler.
+- **N1 — FIXED, NOT YET VERIFIED.** The recovery effect routed to the reset-password screen
+  whenever the URL fragment contained `access_token`, which every Supabase auth link carries —
+  signup confirmation and email-change included. Now keyed on `type === 'recovery'`, checked in
+  both the fragment and the query string. A link error still routes there deliberately, because
+  that screen is the one that can explain an expired link.
+
+  **Verification is outstanding.** The confirmation email redirects to the Vercel deployment, so
+  the attempt made during the fix exercised the old build. Three checks against the deployed build:
+
+  1. A **signup confirmation** link must land the user signed in, *not* on "Set a new password".
+  2. A **password reset** link must still reach the reset screen. This is the regression risk —
+     the fix narrows the condition, so what needs proving is that it did not narrow too far.
+  3. An **expired link** must still land somewhere that explains itself.
+
+  Was confirmed **not** a security bypass when reported: unconfirmed accounts are refused login,
+  and the original password works straight after confirming.
 - **N2 — confirmation screen claims an SMS and email were sent.** *"A confirmation email and SMS
   with parking guidelines has been sent."* Neither is sent, and neither is supposed to be. Either
   drop the claim or send the notification.
-- **N3 — `customers.source` saved as "Website" for a Live Queue walk-in.** The booking is labelled
-  Walk-in correctly everywhere; only the `customers` row is mis-tagged. The right value is
-  available in the same creation flow.
+- **N3 — FIXED.** Wider than reported: `resolveCustomer` passed `p_source: null` and the RPC
+  defaults a null to `'Website'`, so *every* customer row was tagged Website regardless of origin,
+  not just Live Queue walk-ins. Source is now threaded from each caller using the
+  `CustomerAccount` vocabulary — `'Workshop Booking'`, `'Birthday Package'`, `'Live Queue'`,
+  `'Admin Created'`. Creation only: the RPC matches on phone then email and its UPDATE branch never
+  touches the column. **No backfill** — existing rows stay `Website`, because inferring origin from
+  earliest bookings would replace an obviously-unset field with plausible guesswork.
 - **N4 — phone-only walk-ins cannot self-claim an account.** A customer with no email on file is
   told to ask the studio to add one, so they cannot self-serve at all. The real fix is SMS OTP
   claiming, which is a known unstarted feature rather than an isolated bug.
-- **N6 — password carries between Sign In and Create Account tabs.** Typing a password on Sign In
-  and switching tabs shows it pre-filled. No autofill highlight, so this is shared app state.
-  Only the password field is affected.
-- **N7 — password reset always reports success.** A reset rejected by Supabase (email rate limit)
-  still showed *"reset link is on its way"*. The generic non-revealing wording is correct and
-  should stay; the bug is that the real send result is never checked.
+- **N6 — FIXED.** Sign In and Create Account shared one `password` state. The live strength
+  checklist under the Create Account field read that same shared value, so it would have sat
+  unmoving while the customer typed — not in the report. Create Account now has its own
+  `registerPassword`. Separate state rather than clearing on tab change: six places in that file
+  switch screens, and a seventh added later would silently reintroduce it.
+- **N7 — FIXED.** Split by kind. An infrastructure failure (429/5xx, rate limit, SMTP, provider,
+  timeout) now returns a real error the customer can act on; a per-account failure stays behind the
+  generic message, because naming those would turn the form into a way of discovering which
+  addresses have accounts. The three call sites already branched on `res.success` and needed no
+  change.
 - **N8 — FIXED.** The home page stat counted every row in `workshops`. Both it and the "View All"
   count on the same page (not in the report, same bug) now read one `publishedWorkshops` list.
   Fixed alongside it: the workshop grid filtered `!== 'Draft'`, so **Archived** workshops stayed
@@ -277,9 +306,11 @@ Closed already: **H1** (duplicate session rows), **H2** (My Pieces), **M1** (sea
 
 ### Low
 
-- **L1 — inconsistent contact-field validation.** Name blank, email blank and malformed phone give
-  proper app messages; malformed email and blank phone fall through to the browser's native
-  tooltip. Nothing gets through either way — this is consistency, not a gap.
+- **L1 — FIXED.** The app rules already existed and were simply never reached: native validation
+  runs before the submit handler. The email input is now `type="text"` with `inputMode="email"` and
+  `autoComplete="email"` so the mobile keyboard and autofill are unchanged, and `required` is
+  dropped from `PhoneInput` with the asterisk moved into the label. Phone validation itself is
+  untouched — whether non-Saudi numbers are accepted is still a client question.
 - **L2 — CLOSED, not reproducible.** Reported as `cancel_own_booking` advancing `updated_at` when
   cancelling an already-cancelled booking. It does not: the function returns at the
   `already_cancelled` guard (`0017_cancel_own_booking.sql:151`) **before** the `update` at `:200`,
