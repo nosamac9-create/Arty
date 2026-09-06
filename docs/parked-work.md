@@ -5,6 +5,56 @@ is forgotten or accidental — each was found during other work and consciously 
 
 ---
 
+## LAUNCH BLOCKER
+
+### The payment flow is simulated — no money moves
+
+`CheckoutPaymentSection.completePayment()` resolves an 800ms `setTimeout` and then writes the
+booking. There is **no Moyasar integration, no provider call, no card capture, and no payment
+record**. Every booking in the database marked `Paid` or `Deposit Paid` was marked so by the client
+without any money changing hands.
+
+The site's stated purpose is taking payment for workshop and birthday bookings, so **it cannot
+launch in this state**. This is not a defect in the booking logic — capacity, locking and
+idempotency are all real and tested — it is that the step between choosing a session and holding a
+confirmed booking does not exist.
+
+The STC Pay copy at `CheckoutPaymentSection.tsx:383` — *"A payment authorization notification will
+be pushed to your STC Pay app"* — is false for the same reason. It should be written when the real
+flow exists and describes what that flow actually does, not before. Fixing the wording now would
+just produce a different false statement.
+
+### Customer-triggered SMS has no access path
+
+`send-sms` is gated on `is_staff()` (`supabase/functions/send-sms/index.ts`), verified against
+Supabase Auth. That is correct for what it does today — every existing caller is a staff action:
+booking cancellation by staff, piece status changes, pickup reminders.
+
+But it means **any future customer-triggered send cannot use it as-is**. That covers a booking
+confirmation SMS, and the already-recorded self-cancellation gap (see *"No SMS or in-app
+notification on customer self-cancellation"* below, which is the same wall from the other side).
+Solving one solves both, and the shape of the solution — a `SECURITY DEFINER` wrapper, a
+server-side trigger, or a separate function with its own narrower authorisation — should be decided
+once for both rather than twice.
+
+No booking-confirmation SMS or email is wanted (client decision), so this is only a blocker for the
+self-cancel notification today.
+
+### N7 — password reset always reports success
+
+A reset request rejected by Supabase (email rate limit, provider failure) still shows *"reset link
+is on its way"*. The send result is never checked. The generic non-revealing wording is correct and
+should stay — the bug is that it does not reflect reality.
+
+`AdminDashboardSection.tsx:182-190` is the pattern to copy: it branches on the real result and
+tells staff *"the text message could not be sent: …"* when the send fails. It is currently the only
+place in the app that reports a true send outcome.
+
+Affects `AppContext.tsx:1123` and its three callers — `AuthSection.tsx:257`,
+`AdminLoginSection.tsx:53`, `CheckoutInfoSection.tsx:147`.
+
+---
+
 ## Deployment — required step
 
 ### Verify a migration batch actually applied
@@ -106,6 +156,22 @@ result is not a subscription. Counts are refetched on mount, when the session id
 the signed-in session changes, and via `notifySeatsChanged()` after any write that moves a seat.
 Deliberate — seats are read far more often than they change, and `book_session_seats` holds the
 real guarantee under a row lock.
+
+### `parseBookingDateTimeToRiyadhDate` returns a browser-local Date
+
+`dateUtils.ts:62` returns `new Date(y, m, d, h, min)`, which is built in the **browser's**
+timezone, not Riyadh. Correct for the same-day comparisons it was written for, wrong for anything
+absolute.
+
+It is used by the session generator's past-slot guard and the workshop detail page's cutoff logic,
+so a customer browsing from a different timezone may see a different set of bookable slots than a
+customer in Jeddah.
+
+Found while writing the `.ics` export on the booking confirmation screen, which deliberately does
+not use it — that converts to UTC with a fixed +03:00 offset instead, so the calendar entry is
+correct wherever it is opened.
+
+Needs its own investigation before launch.
 
 ### Birthday maxima are declared twice
 
