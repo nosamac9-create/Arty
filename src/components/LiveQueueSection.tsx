@@ -17,7 +17,7 @@ import { validateSaudiPhone, normaliseSaudiPhone } from '../utils/phoneUtils';
 import { PhoneInput } from './PhoneInput';
 import {
   resolveQueueInstructor, resolveQueueSession, getTodaysAvailableSessions,
-  getSessionSeatUsage, computeQueueSessionPlan, validateHoursAndGuests, isSelfGuided,
+  getSessionSeatUsage, computeQueueSessionPlan, validateHoursAndGuests, isSelfGuided, formatQueueNumber,
   QueueRecordSources, AvailableSessionOption, CapacitySnapshot
 } from '../utils/queueUtils';
 import { timeToMinutes, getEndTimeMinutes } from '../utils/timeUtils';
@@ -74,7 +74,7 @@ const WaitingCard: React.FC<{
         <div className="flex justify-between items-start">
           <div className="flex items-center gap-2">
             <div className="bg-brand-charcoal text-brand-cream text-xs font-extrabold px-2.5 py-1.5 rounded-lg font-mono">
-              No. {item.id.replace('Q-', '')}
+              No. {formatQueueNumber(item.queueNumber)}
             </div>
             <span className={`text-[10px] font-bold px-2 py-1 rounded-md border ${
               item.source === 'Website' 
@@ -235,7 +235,7 @@ const CalledCard: React.FC<{
         <div className="flex justify-between items-start">
           <div className="flex items-center gap-2">
             <div className="bg-brand-charcoal text-brand-cream text-xs font-extrabold px-2.5 py-1.5 rounded-lg font-mono animate-pulse">
-              No. {item.id.replace('Q-', '')}
+              No. {formatQueueNumber(item.queueNumber)}
             </div>
             <span className={`text-[10px] font-bold px-2 py-1 rounded-md border ${
               item.source === 'Website' 
@@ -466,7 +466,7 @@ const InProgressCard: React.FC<{
             whichever source it is. */}
         <div className="flex flex-wrap items-center gap-2">
           <span className="inline-flex h-6 items-center rounded-lg bg-brand-charcoal px-2.5 font-mono text-xs font-extrabold text-brand-cream">
-            No. {item.id.replace('Q-', '')}
+            No. {formatQueueNumber(item.queueNumber)}
           </span>
           <span className={`inline-flex h-6 items-center rounded-md border px-2 text-[10px] font-bold ${
             item.source === 'Website'
@@ -668,7 +668,7 @@ const CompletedCard: React.FC<{
             2-unit gap, with only the chevron pinned to the end. */}
         <div className="flex flex-wrap items-center gap-2">
           <span className="inline-flex h-6 items-center rounded-md bg-brand-clay px-2 font-mono text-[11px] font-extrabold text-brand-charcoal/70">
-            No. {item.id.replace('Q-', '')}
+            No. {formatQueueNumber(item.queueNumber)}
           </span>
           <span className="inline-flex h-6 items-center rounded-md border border-blue-100 bg-blue-50 px-2 text-[10px] font-bold text-blue-700">
             {item.source}
@@ -1036,14 +1036,14 @@ export const LiveQueueSection: React.FC = () => {
         updateQueueStatus(item.id, 'Completed');
         addStaffNotification(
           '⏱ Self-guided session ended',
-          `${item.name} (${item.id}) finished their ${item.hours ?? ''} hour session and was moved to Completed Today automatically.`,
+          `${item.name} (No. ${formatQueueNumber(item.queueNumber)}) finished their ${item.hours ?? ''} hour session and was moved to Completed Today automatically.`,
           { newStatus: 'Completed', highlighted: true }
         );
       } else {
         // Instructor-led: notify only. The card stays In Progress.
         addStaffNotification(
           '⏱ Workshop session time is up',
-          `${item.name} (${item.id}) has reached the end of their session. Complete the visit when the class is finished.`,
+          `${item.name} (No. ${formatQueueNumber(item.queueNumber)}) has reached the end of their session. Complete the visit when the class is finished.`,
           { highlighted: true }
         );
       }
@@ -1806,7 +1806,7 @@ export const LiveQueueSection: React.FC = () => {
                   {[
                     warning.item.activity,
                     warning.item.staffName ? `with ${warning.item.staffName}` : null,
-                    `No. ${warning.item.id.replace('Q-', '')}`
+                    `No. ${formatQueueNumber(warning.item.queueNumber)}`
                   ].filter(Boolean).join(' · ')}
                 </p>
               </div>
@@ -2516,7 +2516,7 @@ export const LiveQueueSection: React.FC = () => {
               <div className="min-w-0">
                 <h3 className="font-display text-sm font-bold text-brand-charcoal">Add Time</h3>
                 <p className="text-[11px] font-bold text-brand-charcoal/50 truncate">
-                  {returningItem.name} · completed entry No. {returningItem.id.replace('Q-', '')}
+                  {returningItem.name} · completed entry No. {formatQueueNumber(returningItem.queueNumber)}
                 </p>
               </div>
               <button
@@ -2687,7 +2687,7 @@ export const LiveQueueSection: React.FC = () => {
                 Confirm Cancel Queue Entry?
               </h3>
               <p className="text-xs text-brand-charcoal/60 leading-relaxed">
-                Are you sure you want to cancel the queue entry for <span className="font-bold text-brand-charcoal">{cancellingItem.name}</span> (No. {cancellingItem.id.replace('Q-', '')})? This action cannot be undone.
+                Are you sure you want to cancel the queue entry for <span className="font-bold text-brand-charcoal">{cancellingItem.name}</span> (No. {formatQueueNumber(cancellingItem.queueNumber)})? This action cannot be undone.
               </p>
             </div>
 
@@ -2723,7 +2723,7 @@ export const LiveQueueSection: React.FC = () => {
                   {seatModalMode === 'seat' ? 'Seat Guest — Choose Table(s)' : 'Change Table'}
                 </h3>
                 <p className="text-[11px] font-bold text-brand-charcoal/50">
-                  {seatModalItem.name} · No. {seatModalItem.id.replace('Q-', '')} · {seatModalItem.participants} guests
+                  {seatModalItem.name} · No. {formatQueueNumber(seatModalItem.queueNumber)} · {seatModalItem.participants} guests
                 </p>
               </div>
               <button

@@ -83,6 +83,44 @@ union all select 'unique slot index (0022)',
 Generalise the pattern for future batches: assert the objects exist rather than trusting that
 running the script means it ran.
 
+### Dropping a primary key on a published table fails mid-transaction
+
+Every table the app touches is in the `supabase_realtime` publication — 17 of them, listed in
+`0002_capacity_rpc.sql:190-195`: `workshops`, `workshop_sessions`, `bookings`, `queue`, `pieces`,
+`piece_history`, `categories`, `notifications`, `pipeline_stages`, `staff`, `workshop_options`,
+`event_options`, `events`, `app_settings`, `customers`, `birthday_packages`, `studio_resources`.
+
+A published table's **default replica identity is its primary key**. Drop the key and the table has
+none, and Postgres then refuses every further UPDATE and DELETE on it:
+
+```
+ERROR 55000: cannot update table "x" because it does not have a replica identity
+             and publishes updates
+```
+
+This bites **mid-transaction**, after the earlier steps have already run, so the whole migration
+rolls back and has to be re-run from the top. `0030` hit it on its first attempt.
+
+**The fix is `REPLICA IDENTITY FULL` for the duration, restored afterwards** — see `0030` step 5
+for the pattern, including capturing the previous setting in case it was already FULL.
+
+**Do NOT drop the table from the publication and re-add it.** `alter publication` needs ownership
+of `supabase_realtime`, which `0002:179-183` records the SQL editor's role not having on this
+project — it wraps every `add table` in an exception handler for exactly that reason. If the drop
+succeeded and the re-add silently failed, the table would simply stop publishing and the affected
+screen would go stale with no error anywhere.
+
+Also expect a burst of realtime UPDATE events if the migration rewrites key values: a console left
+open across it can end up holding both the old and the new row. Harmless and self-correcting, but
+tell staff to reload afterwards.
+
+Confirm membership and the current setting before planning any such migration:
+
+```sql
+select tablename from pg_publication_tables where pubname = 'supabase_realtime' order by 1;
+select relreplident from pg_class where oid = 'public.<table>'::regclass;  -- d, f, n or i
+```
+
 ### Reload the PostgREST schema cache after adding or changing a function
 
 ```sql
@@ -179,6 +217,22 @@ Needs its own investigation before launch.
 own components — none of it is persisted. So a session that expires while a customer is filling in
 checkout takes the draft with it. The M3 fix explains why that happened rather than preventing it.
 Persisting `pendingBooking` is separate work and is not done.
+
+### Two definitions of a consumed seat, already drifted
+
+`getSessionSeatUsage` (`queueUtils.ts`) requires `q.type === 'With Instructor'` before counting a
+queue row. `session_seats_taken` (migration 0002) does not filter on type at all — it counts any
+queue row with a `session_id` and no `booking_id`. So a self-guided walk-in linked to a session is
+counted by the database and not by the staff console.
+
+Neither is obviously wrong; they simply disagree. Found while tracing the queue id collision
+(migration 0030), deliberately left out of that change so its diff stayed about one thing.
+
+### `addQueueItem` does not notify seat readers
+
+Seat counts come from an RPC and are refetched via `notifySeatsChanged()`. Only the three booking
+writes call it — `addQueueItem` does not. So a walk-in check-in consumes a seat that a customer
+page already open will not see until something else triggers a refetch.
 
 ### Birthday maxima are declared twice
 

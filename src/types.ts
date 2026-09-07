@@ -226,7 +226,19 @@ export interface Booking {
 }
 
 export interface QueueItem {
-  id: string; // e.g. "Q-034"
+  /**
+   * Surrogate key — a uuid, never displayed.
+   *
+   * This used to be the human-readable "Q-034", generated per DAY, so ids
+   * restarted every morning and collided across days. See migration 0030.
+   */
+  id: string;
+  /**
+   * The daily sequence staff actually say out loud. Resets each day and is
+   * unique within one date, which is the whole reason it cannot be the key.
+   * Format for display with formatQueueNumber().
+   */
+  queueNumber?: number;
   bookingId?: string; // e.g. "ART-10293"
   /** The shared customer record this visit belongs to. */
   customerId?: string;

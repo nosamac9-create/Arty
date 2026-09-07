@@ -1988,20 +1988,24 @@ export const SYSTEM_TESTS: SystemTestDefinition[] = [
       if (!client) return pass('Skipped — Supabase is not configured', 'No client to test with');
 
       const day = '2026-12-02';
-      const before = await client.rpc('next_queue_id', { p_date: day });
+      const before = await client.rpc('next_queue_number', { p_date: day });
 
+      // The number, not the id, is what the generator reads now — a row with no
+      // queue_number would leave the sequence untouched and the test would pass
+      // for the wrong reason.
       await temp.queue.put({
-        id: 'TEST-Q-900', name: 'Fixture', date: day, status: 'Waiting',
+        id: 'TEST-Q-900', queueNumber: Number(before.data) || 1,
+        name: 'Fixture', date: day, status: 'Waiting',
         participants: 1, type: 'Without Instructor', source: 'Walk-in'
       } as any);
 
-      const after = await client.rpc('next_queue_id', { p_date: day });
+      const after = await client.rpc('next_queue_number', { p_date: day });
 
-      const moved = typeof before.data === 'string' && typeof after.data === 'string'
-        && before.data !== after.data;
+      const moved = typeof before.data === 'number' && typeof after.data === 'number'
+        && after.data > before.data;
 
       return check(
-        moved && String(after.data).startsWith('Q-'),
+        moved,
         'The next number advances once an entry exists for that day',
         `${before.data} then ${after.data}`,
         'Queue numbering does not see other entries, so two walk-ins can be given the same number.'

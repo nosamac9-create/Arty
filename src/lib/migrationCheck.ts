@@ -80,9 +80,9 @@ export const MIGRATION_REQUIREMENTS: MigrationRequirement[] = [
     probe: rpcExists('release_booking_seats', { p_booking_id: '__probe__' })
   },
   {
-    name: 'next_queue_id()',
+    name: 'next_queue_number()',
     migration: '0002_capacity_rpc.sql',
-    probe: rpcExists('next_queue_id', { p_date: '2026-01-01' })
+    probe: rpcExists('next_queue_number', { p_date: '2026-01-01' })
   },
   {
     name: 'session_seats_remaining()',

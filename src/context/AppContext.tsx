@@ -18,6 +18,7 @@ import {
 import { useLiveTable, fetchTable, fetchRow } from '../lib/supabaseData';
 import { getDataClient, isStaffSessionActive, onDataClientChange } from '../lib/supabase';
 import { notifySeatsChanged } from '../lib/sessionSeats';
+import { formatQueueNumber } from '../utils/queueUtils';
 
 /**
  * How long a booking write may take before the client gives up on it.
@@ -1588,15 +1589,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             q.date === todayRiyadh &&
             q.status !== 'Cancelled' &&
             q.status !== 'Completed' &&
-            (q.bookingId === b.id || q.id === `Q-${b.id}` || (q.phone && q.phone === b.customerPhone) || (q.name && q.name === b.customerName))
+            // `q.id === \`Q-${b.id}\`` used to sit here: it compared a queue id to
+            // "Q-ART-64429" and could never match. Removed, not adapted — the
+            // booking link is q.bookingId.
+            (q.bookingId === b.id || (q.phone && q.phone === b.customerPhone) || (q.name && q.name === b.customerName))
           );
 
           if (!exists) {
-            const qId = await generateNextQueueId();
+            const qNumber = await generateNextQueueNumber();
             // Resolve the real tutor through the booked session — no default staff member.
             const link = await resolveBookingSessionLink(b);
             const qItem: QueueItem = {
-              id: qId,
+              ...EMPTY_QUEUE_COLUMNS,
+              id: newQueueId(),
+              queueNumber: qNumber,
               bookingId: b.id,
               name: b.customerName,
               phone: b.customerPhone,
@@ -1620,12 +1626,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               history: [{ status: 'Waiting', timestamp: new Date().toISOString() }]
             };
 
+            // Insert, not upsert: a duplicate must fail loudly. This retry has
+            // existed since before 0030 and had never once fired, because
+            // db.queue.put upserts and an upsert does not throw — every
+            // collision it was written to catch succeeded as a silent merge of
+            // two unrelated visits.
+            //
+            // Now it has a real job: the id is a uuid and cannot collide, but
+            // two concurrent check-ins can read the same display number, and the
+            // unique index on (date, queue_number) rejects the loser.
             try {
-              await db.queue.put(qItem);
-            } catch (putErr) {
-              console.warn("Queue put failed, retrying with fresh ID:", putErr);
-              const retryId = await generateNextQueueId();
-              await db.queue.put({ ...qItem, id: retryId });
+              await db.queue.add(qItem);
+            } catch (addErr) {
+              console.warn('Queue insert failed, retrying with a fresh number:', addErr);
+              await db.queue.add({ ...qItem, id: newQueueId(), queueNumber: await generateNextQueueNumber() });
             }
           }
         }
@@ -1725,22 +1739,51 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   /** Staff read straight from Postgres, for checks that must not be stale. */
   const getFreshStaff = async (): Promise<StaffMember[]> => fetchTable<StaffMember>('staff');
 
-  const generateNextQueueId = async (): Promise<string> => {
+  /**
+   * The next DISPLAY number for today. Not a key.
+   *
+   * Resetting daily is correct for a number staff read out; it was only ever
+   * wrong as a primary key, which is what migration 0030 separated. The id is a
+   * uuid minted at the call site.
+   *
+   * Advisory: two concurrent check-ins can read the same number. The unique
+   * index on (date, queue_number) decides, and callers retry on 23505.
+   */
+  const generateNextQueueNumber = async (): Promise<number> => {
     const today = getRiyadhDateString();
 
     if (supabase) {
-      const { data, error } = await supabase.rpc('next_queue_id', { p_date: today });
-      if (!error && typeof data === 'string' && data) return data;
-      if (error) console.error('next_queue_id failed, numbering locally:', error.message);
+      const { data, error } = await supabase.rpc('next_queue_number', { p_date: today });
+      if (!error && typeof data === 'number') return data;
+      if (error) console.error('next_queue_number failed, numbering locally:', error.message);
     }
 
+    // Local fallback. Reads queueNumber rather than parsing digits out of the
+    // id — the id no longer contains one.
     const todaysItems = (await db.queue.toArray()).filter(qi => qi.date === today);
-    const highest = todaysItems.reduce((max, qi) => {
-      const match = String(qi.id).match(/\d+/);
-      return Math.max(max, match ? parseInt(match[0], 10) : 0);
-    }, 0);
-    return `Q-${String(highest + 1).padStart(3, '0')}`;
+    const highest = todaysItems.reduce((max, qi) => Math.max(max, Number(qi.queueNumber) || 0), 0);
+    return highest + 1;
   };
+
+  /** A fresh surrogate key. Never shown; see formatQueueNumber for display. */
+  const newQueueId = (): string =>
+    (globalThis.crypto?.randomUUID?.() ?? `q-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+
+  /**
+   * Every optional queue column, explicitly null.
+   *
+   * modelToRow drops `undefined`, so an omitted key is simply absent from the
+   * write — and a PostgREST upsert leaves absent columns at their previous
+   * values. That is exactly how a walk-in inherited an unrelated booking_id from
+   * a colliding row. Spreading this first means a creation payload always states
+   * every column it owns, whatever the write path does.
+   */
+  const EMPTY_QUEUE_COLUMNS = {
+    bookingId: null, customerId: null, hours: null, tableIds: null,
+    seatedTime: null, workshopId: null, sessionId: null, sessionStartTime: null,
+    sessionEndTime: null, sessionDuration: null, sessionCapacity: null,
+    returnedFromQueueId: null, extendedByQueueId: null, workshopType: null
+  } as unknown as Partial<QueueItem>;
 
   // Test Running State
   const [isTestRunning, setIsTestRunning] = useState<boolean>(false);
@@ -2020,10 +2063,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // If walk-in or admin, automatically add to today's live queue
     if (newBookingData.source === 'Walk-in' || newBookingData.source === 'Admin') {
-      Promise.all([generateNextQueueId(), resolveBookingSessionLink(newBooking)]).then(([qId, link]) => {
+      Promise.all([generateNextQueueNumber(), resolveBookingSessionLink(newBooking)]).then(([qNumber, link]) => {
         const timeStr = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
         const newQItem: QueueItem = {
-          id: qId,
+          ...EMPTY_QUEUE_COLUMNS,
+          id: newQueueId(),
+          queueNumber: qNumber,
           bookingId: newBooking.id,
           name: newBookingData.customerName,
           phone: newBookingData.customerPhone,
@@ -2047,7 +2092,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           date: getRiyadhDateString(),
           history: [{ status: 'Waiting', timestamp: new Date().toISOString() }]
         };
-        db.queue.put(newQItem).catch(err => {
+        db.queue.add(newQItem).catch(err => {
           console.error("Failed to add queue item in addBooking:", err);
         });
       }).catch(err => {
@@ -2361,11 +2406,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const queueItems = await db.queue.toArray();
         const alreadyInQueue = queueItems.some(q => q.name === booking.customerName && q.status !== 'Completed');
         if (!alreadyInQueue) {
-          const qId = await generateNextQueueId();
+          const qNumber = await generateNextQueueNumber();
           const link = await resolveBookingSessionLink(booking);
           const timeStr = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
           const qItem: QueueItem = {
-            id: qId,
+            ...EMPTY_QUEUE_COLUMNS,
+            id: newQueueId(),
+            queueNumber: qNumber,
             bookingId: booking.id,
             name: booking.customerName,
             phone: booking.customerPhone,
@@ -2448,19 +2495,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const todayRiyadh = getRiyadhDateString();
-    const id = await generateNextQueueId();
     const timeStr = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
-    const newItem: QueueItem = {
+    // EMPTY_QUEUE_COLUMNS first, so every optional column is stated even when
+    // the caller omits it. This is the path that inherited a stranger's
+    // booking_id before 0030.
+    const base: QueueItem = {
+      ...EMPTY_QUEUE_COLUMNS,
       ...item,
-      id,
+      id: newQueueId(),
+      queueNumber: await generateNextQueueNumber(),
       checkInTime: timeStr,
       elapsedMinutes: 0,
       status: 'Waiting',
       date: todayRiyadh,
       history: [{ status: 'Waiting', timestamp: new Date().toISOString() }]
-    };
-    await db.queue.put(newItem);
+    } as QueueItem;
+
+    try {
+      await db.queue.add(base);
+    } catch (addErr) {
+      // Another check-in took this number between the read and the write.
+      console.warn('Queue insert failed, retrying with a fresh number:', addErr);
+      try {
+        await db.queue.add({ ...base, id: newQueueId(), queueNumber: await generateNextQueueNumber() });
+      } catch (retryErr: any) {
+        return { success: false, error: retryErr?.message || 'Could not check in this guest.' };
+      }
+    }
     return { success: true };
   };
 
@@ -2550,9 +2612,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // Sync status to matching booking in db.bookings
       try {
+        // The booking link is item.bookingId, and always was. This used to try
+        // `b.id === id` and `b.id === id.replace('Q-','')` first — comparing an
+        // ART-NNNNN booking id to a queue id and to a bare number. Neither could
+        // ever match, so every status sync fell through to the phone-and-date
+        // guess below, which picks an arbitrary booking when a customer has two
+        // that day. With a uuid id those comparisons are not merely dead but
+        // absurd, so they are gone.
         const allBookings = await db.bookings.toArray();
-        const matchingBooking = allBookings.find(b => 
-          (b.id === id || b.id === id.replace('Q-', '') || (b.customerPhone === item.phone && b.date === todayRiyadh))
+        const matchingBooking = allBookings.find(b =>
+          (item.bookingId && b.id === item.bookingId) ||
+          (!item.bookingId && b.customerPhone === item.phone && b.date === todayRiyadh)
         );
         if (matchingBooking) {
           let bStatus: Booking['status'] = matchingBooking.status;
@@ -2634,7 +2704,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (activeDuplicate) {
       return {
         success: false,
-        message: `${original.name} already has an active queue entry (No. ${activeDuplicate.id.replace('Q-', '')}).`
+        message: `${original.name} already has an active queue entry (No. ${formatQueueNumber(activeDuplicate.queueNumber)}).`
       };
     }
 
@@ -2644,13 +2714,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const check = validateTableSelection(opts.tableIds, participants, states);
     if (!check.valid) return { success: false, message: check.error };
 
-    const newId = await generateNextQueueId();
+    const newId = newQueueId();
     const timeStr = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
     const nowIso = new Date().toISOString();
 
-    await db.queue.put({
+    // Spread from `original` deliberately — an extension inherits the visit's
+    // details. That is the one place inheriting columns is intended, unlike the
+    // upsert-collision inheritance 0030 removed.
+    await db.queue.add({
       ...original,
       id: newId,
+      queueNumber: await generateNextQueueNumber(),
       participants,
       hours,
       tableIds: opts.tableIds,

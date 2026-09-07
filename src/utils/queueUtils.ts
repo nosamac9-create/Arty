@@ -440,6 +440,18 @@ export function isWorkshopFullyBooked(
 // across all birthday package types together, keyed only by date/time.
 // ==========================================================
 
+/**
+ * The queue number as staff read it: "003", or "—" when a row predates
+ * migration 0030 and has no number.
+ *
+ * queue.id is a uuid and must never reach a screen. Every display site used to
+ * do `item.id.replace('Q-', '')`, which is why there were nine of them to change
+ * when the key became a uuid.
+ */
+export function formatQueueNumber(n?: number | null): string {
+  return n == null ? '—' : String(n).padStart(3, '0');
+}
+
 /** The shared placeholder workshop id every birthday booking is saved under. */
 export const BIRTHDAY_WORKSHOP_ID = 'birthday-party-event';
 

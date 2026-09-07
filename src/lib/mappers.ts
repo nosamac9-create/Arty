@@ -91,7 +91,7 @@ export const TABLE_COLUMNS: Record<string, string[]> = {
     'birthday_details', 'timeline', 'created_at', 'updated_at'
   ],
   queue: [
-    'id', 'booking_id', 'customer_id', 'name', 'phone', 'activity', 'participants',
+    'id', 'queue_number', 'booking_id', 'customer_id', 'name', 'phone', 'activity', 'participants',
     'check_in_time', 'elapsed_minutes', 'staff_avatar', 'staff_name', 'staff_id', 'status',
     'source', 'type', 'hours', 'workshop_type', 'date', 'seated_time', 'workshop_id',
     'session_id', 'session_start_time', 'session_end_time', 'session_duration',
