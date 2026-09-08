@@ -262,6 +262,21 @@ export const WorkshopDetailSection: React.FC = () => {
     return `${workshop.price} SAR / Person`;
   }, [workshop]);
 
+  // Live remaining seats for the chosen session, not an arbitrary cap. Falls
+  // back to the session's total capacity while the live count is still
+  // loading, and to 1 if neither is known yet.
+  const selectedSlotData = useMemo(
+    () => slots.find(s => (selectedSessionId ? s.id === selectedSessionId : s.time === selectedSlot)),
+    [slots, selectedSessionId, selectedSlot]
+  );
+  const maxParticipants = selectedSlotData?.spots ?? selectedSlotData?.capacity ?? 1;
+
+  // Pull participants back down if a session switch lowers the live max
+  // below what was already selected.
+  useEffect(() => {
+    setParticipants(prev => Math.max(1, Math.min(prev, maxParticipants)));
+  }, [maxParticipants]);
+
   const handleBook = async () => {
     if (!selectedSlot) return;
 
@@ -663,8 +678,8 @@ export const WorkshopDetailSection: React.FC = () => {
                 </button>
                 <span className="font-semibold text-base w-4 text-center text-brand-charcoal">{participants}</span>
                 <button
-                  disabled={participants >= 6}
-                  onClick={() => setParticipants(prev => Math.min(6, prev + 1))}
+                  disabled={participants >= maxParticipants}
+                  onClick={() => setParticipants(prev => Math.min(maxParticipants, prev + 1))}
                   className="w-9 h-9 flex items-center justify-center text-brand-terracotta hover:text-brand-terracotta-hover disabled:opacity-30 cursor-pointer text-lg font-semibold"
                 >
                   +
