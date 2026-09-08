@@ -65,7 +65,7 @@ exist, which was misread for half an hour as a caching problem. Nothing surfaced
 failed.
 
 ```sql
--- Every object migrations 0023–0027 are supposed to create.
+-- Every object migrations 0023–0030 are supposed to create.
 select 'session_seats_summary'    as object, to_regprocedure('public.session_seats_summary(text[])')      is not null as present
 union all select 'workshop_recent_bookings', to_regprocedure('public.workshop_recent_bookings(date,date)') is not null
 union all select 'birthday_booking_counts',  to_regprocedure('public.birthday_booking_counts(date[],text)') is not null
@@ -75,7 +75,23 @@ union all select 'workshops.spots_left gone',
                where table_schema='public' and table_name='workshops' and column_name='spots_left')
 union all select 'unique slot index (0022)',
   exists (select 1 from pg_indexes
-           where schemaname='public' and indexname='workshop_sessions_live_slot_key');
+           where schemaname='public' and indexname='workshop_sessions_live_slot_key')
+union all select 'book_session_seats retry-safe (0028)',
+  pg_get_functiondef('public.book_session_seats(jsonb,text)'::regprocedure)
+    like '%Already written by an earlier attempt whose reply never arrived%'
+union all select 'book_session_seats session guard (0029)',
+  pg_get_functiondef('public.book_session_seats(jsonb,text)'::regprocedure)
+    like '%not linked to a workshop session%'
+union all select 'queue.queue_number column (0030)',
+  exists (select 1 from information_schema.columns
+           where table_schema='public' and table_name='queue' and column_name='queue_number')
+union all select 'queue date+number unique index (0030)',
+  exists (select 1 from pg_indexes
+           where schemaname='public' and indexname='queue_date_number_key')
+union all select 'next_queue_number function (0030)',
+  to_regprocedure('public.next_queue_number(date)') is not null
+union all select 'next_queue_id gone (0030)',
+  to_regprocedure('public.next_queue_id(date)') is null;
 ```
 
 → every row `present = true`. Anything false did not apply, whatever the editor appeared to say.
