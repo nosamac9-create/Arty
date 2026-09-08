@@ -2359,9 +2359,12 @@ export const LiveQueueSection: React.FC = () => {
       {/* ========================================================== */}
       {editModalOpen && editingItem && (
         <div className="fixed inset-0 bg-brand-charcoal/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-brand-cream border border-brand-clay rounded-3xl p-6 shadow-2xl max-w-sm w-full text-left space-y-5 animate-in zoom-in-95 duration-200">
-            
-            <div className="flex justify-between items-center border-b border-brand-clay/60 pb-3">
+          {/* Same viewport-safe shape as Add Walk-In: header and footer are
+              shrink-0 siblings of the scroll area, never part of it, so the
+              Save button can never end up below the fold. */}
+          <div className="bg-brand-cream border border-brand-clay rounded-3xl shadow-2xl max-w-sm w-full max-h-[90vh] flex flex-col overflow-hidden text-left animate-in zoom-in-95 duration-200">
+
+            <div className="shrink-0 flex justify-between items-center border-b border-brand-clay/60 px-6 py-4">
               <h3 className="font-display text-sm font-bold text-brand-charcoal">
                 Edit Queue Entry {editingItem.id}
               </h3>
@@ -2370,7 +2373,7 @@ export const LiveQueueSection: React.FC = () => {
               </button>
             </div>
 
-            <div className="space-y-4">
+            <div className="flex-1 min-h-0 overflow-y-auto always-scrollbar px-6 py-4 space-y-4">
 
               {/* Stepper for Guests */}
               <div className="flex items-center justify-between border border-brand-clay bg-white rounded-xl p-3">
@@ -2480,22 +2483,23 @@ export const LiveQueueSection: React.FC = () => {
                 </>
               )}
 
-              {/* CTAs */}
-              <div className="grid grid-cols-2 gap-3 pt-2">
-                <button
-                  onClick={() => setEditModalOpen(false)}
-                  className="cursor-pointer py-3 border border-brand-clay hover:bg-brand-sand text-brand-charcoal text-xs font-bold rounded-xl text-center"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSaveEdit}
-                  className="cursor-pointer py-3 bg-brand-terracotta hover:bg-brand-terracotta-hover text-brand-cream text-xs font-bold rounded-xl text-center shadow-md"
-                >
-                  Save Changes
-                </button>
-              </div>
+            </div>
 
+            {/* Footer — a shrink-0 sibling of the scroll area, so Cancel and
+                Save Changes never need scrolling to reach. */}
+            <div className="shrink-0 grid grid-cols-2 gap-3 border-t border-brand-clay/60 px-6 py-4">
+              <button
+                onClick={() => setEditModalOpen(false)}
+                className="cursor-pointer py-3 border border-brand-clay hover:bg-brand-sand text-brand-charcoal text-xs font-bold rounded-xl text-center"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                className="cursor-pointer py-3 bg-brand-terracotta hover:bg-brand-terracotta-hover text-brand-cream text-xs font-bold rounded-xl text-center shadow-md"
+              >
+                Save Changes
+              </button>
             </div>
 
           </div>
@@ -2715,9 +2719,12 @@ export const LiveQueueSection: React.FC = () => {
       {/* ========================================================== */}
       {seatModalOpen && seatModalItem && (
         <div className="fixed inset-0 bg-brand-charcoal/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-brand-cream border border-brand-clay rounded-3xl p-6 shadow-2xl max-w-sm w-full text-left space-y-5 animate-in zoom-in-95 duration-200">
+          {/* Same viewport-safe shape as Add Walk-In: header and footer are
+              shrink-0 siblings of the scroll area, never part of it, so a
+              studio with many tables never pushes Seat Guest below the fold. */}
+          <div className="bg-brand-cream border border-brand-clay rounded-3xl shadow-2xl max-w-sm w-full max-h-[90vh] flex flex-col overflow-hidden text-left animate-in zoom-in-95 duration-200">
 
-            <div className="flex justify-between items-center border-b border-brand-clay/60 pb-3">
+            <div className="shrink-0 flex justify-between items-center border-b border-brand-clay/60 px-6 py-4">
               <div>
                 <h3 className="font-display text-sm font-bold text-brand-charcoal">
                   {seatModalMode === 'seat' ? 'Seat Guest — Choose Table(s)' : 'Change Table'}
@@ -2733,6 +2740,8 @@ export const LiveQueueSection: React.FC = () => {
                 <X className="h-4 w-4" />
               </button>
             </div>
+
+            <div className="flex-1 min-h-0 overflow-y-auto always-scrollbar px-6 py-4 space-y-5">
 
             {seatModalMode === 'seat' && (
               <p className="text-[11px] font-semibold text-brand-charcoal/60 bg-white border border-brand-clay/50 rounded-xl p-2.5">
@@ -2756,7 +2765,11 @@ export const LiveQueueSection: React.FC = () => {
               </p>
             )}
 
-            <div className="grid grid-cols-2 gap-3 pt-2">
+            </div>
+
+            {/* Footer — a shrink-0 sibling of the scroll area, so Cancel and
+                Seat Guest/Save Table never need scrolling to reach. */}
+            <div className="shrink-0 grid grid-cols-2 gap-3 border-t border-brand-clay/60 px-6 py-4">
               <button
                 onClick={() => setSeatModalOpen(false)}
                 className="cursor-pointer py-3 border border-brand-clay hover:bg-brand-sand text-brand-charcoal text-xs font-bold rounded-xl text-center"
