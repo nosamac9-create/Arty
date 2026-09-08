@@ -286,16 +286,19 @@ The `500` deposit fallback is repeated in four places rather than read from one 
 Repeated across five components. Should come from `app_settings` alongside the other studio
 details.
 
-### Migration probes log errors on every public page load
+### Migration probes log errors on every public page load — FIXED
 
 `checkMigrations()` (`src/lib/migrationCheck.ts`) pings every RPC with placeholder arguments on
-mount to confirm it exists. Two of those pings are refused by design and surface as red console
+mount to confirm it exists. Two of those pings were refused by design and surfaced as red console
 errors on every signed-out page load — a `403` on `get_customer_summary` and a `400` on
-`book_session_seats`. See "Investigated and explained" below for why each is expected.
+`book_session_seats`. See "Investigated and explained" below for why each occurred.
 
-Nothing is broken, but it reads as a fault to anyone who opens devtools, and has already cost one
-round of investigation. Either skip the probes for anonymous visitors, or probe in a way that does
-not log as an error.
+**Fixed by removing both probes**, rather than skipping them for anonymous visitors or changing how
+they're checked: each has a sibling probe from the same migration file that already succeeds
+silently, so migration coverage is unchanged. `resolve_customer_record()` still verifies
+`0003_customer_write_access.sql`; `release_booking_seats()`, `next_queue_number()` and
+`session_seats_remaining()` still verify `0002_capacity_rpc.sql`. One migration applies as one
+transaction, so any of those existing proves the removed probe's function exists too.
 
 ---
 
@@ -536,23 +539,27 @@ the console text on a signed-out page load changed, and nothing else would expla
 
 ## Investigated and explained — no action needed
 
-Recording these so they are not re-reported. Two errors appear in the browser console on every
-page load when signed out:
+Recording these so they are not re-reported. Two errors used to appear in the browser console on
+every page load when signed out:
 
 - `403` on `get_customer_summary`
 - `400` on `book_session_seats`
 
-**Both are deliberate probes, not faults.** `MigrationWarning` calls `checkMigrations()`
-(`src/lib/migrationCheck.ts`) on mount, which pings every RPC with placeholder arguments purely to
-see whether it exists. `rpcExists` treats *any* error other than "function not found" as proof the
-function is present, so both responses are the intended outcome:
+**RESOLVED — both probes removed.** They were deliberate probes, not faults: `MigrationWarning`
+calls `checkMigrations()` (`src/lib/migrationCheck.ts`) on mount, which pinged every RPC with
+placeholder arguments purely to see whether it exists, and `rpcExists` treated *any* error other
+than "function not found" as proof the function is present, so both responses were the intended
+outcome:
 
-- `get_customer_summary` returns 403 because migration `0011` revoked it from `anon` to close an
+- `get_customer_summary` returned 403 because migration `0011` revoked it from `anon` to close an
   anonymous PII enumeration hole. Anonymous callers are *supposed* to be refused.
-- `book_session_seats` returns 400 because the probe passes `{ p_booking: {}, p_session_id: null }`,
-  which the function correctly rejects. A 400 here means "exists, and validated its input".
+- `book_session_seats` returned 400 because the probe passed `{ p_booking: {}, p_session_id: null }`,
+  which the function correctly rejected. A 400 here meant "exists, and validated its input".
 
-**The one real (cosmetic) issue:** these are logged as errors on every public page load, which
-looks like a fault to anyone opening devtools — including whoever reports it next. Worth either
-skipping the probes for anonymous visitors, or checking for the functions in a way that does not
-surface as a console error. Low priority, but it costs time every time someone notices it.
+**The one real (cosmetic) issue** was that these were logged as errors on every public page load,
+which read as a fault to anyone opening devtools — including whoever reported it next. Fixed by
+removing both requirement entries from `MIGRATION_REQUIREMENTS` rather than skipping them for
+anonymous visitors or changing how they're checked: each has a sibling probe from the same
+migration file (`resolve_customer_record()` for 0003; `release_booking_seats()`,
+`next_queue_number()` and `session_seats_remaining()` for 0002) that already succeeds silently, so
+migration coverage is unchanged.

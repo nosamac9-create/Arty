@@ -69,11 +69,14 @@ export const MIGRATION_REQUIREMENTS: MigrationRequirement[] = [
   },
 
   // 0002 — atomic capacity and queue numbering.
-  {
-    name: 'book_session_seats()',
-    migration: '0002_capacity_rpc.sql',
-    probe: rpcExists('book_session_seats', { p_booking: {}, p_session_id: null })
-  },
+  // book_session_seats() is intentionally not probed here: it is callable by
+  // anon by design (real customers book before signing in), so proving it
+  // exists without writing a booking means calling it with an invalid payload
+  // and reading the resulting validation error. That error is a genuine HTTP
+  // 400 the browser's own network panel logs regardless of how the app
+  // handles it — noise on every page load for no benefit this file's other
+  // three probes don't already give: one migration, one transaction, so any
+  // of them existing proves book_session_seats() exists too.
   {
     name: 'release_booking_seats()',
     migration: '0002_capacity_rpc.sql',
@@ -96,11 +99,12 @@ export const MIGRATION_REQUIREMENTS: MigrationRequirement[] = [
     migration: '0003_customer_write_access.sql',
     probe: rpcExists('resolve_customer_record', { p_name: null, p_phone: null, p_email: null, p_auth_id: null, p_source: null })
   },
-  {
-    name: 'get_customer_summary()',
-    migration: '0003_customer_write_access.sql',
-    probe: rpcExists('get_customer_summary', { p_id: '__probe__' })
-  },
+  // get_customer_summary() is intentionally not probed here: migration 0011
+  // revoked EXECUTE on it from anon to close a PII-enumeration hole, so an
+  // anonymous probe call gets refused by design — a genuine HTTP 403 the
+  // browser's own network panel logs regardless of how the app handles it,
+  // on every anonymous page load. resolve_customer_record() above is from
+  // the same file and already proves this migration ran.
 
   // 0004 — staff assignment on a booking.
   {
