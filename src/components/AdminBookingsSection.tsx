@@ -87,6 +87,17 @@ export const AdminBookingsSection: React.FC = () => {
     return [...bookings, ...mappedQueueWalkins];
   }, [bookings, mappedQueueWalkins]);
 
+  // Ids of rows synthesized from Live Queue walk-ins rather than real
+  // booking rows. Migration 0030 moved queue.id from "Q-XXX" strings to
+  // uuids, so a queue-originated row can no longer be told apart from a
+  // real booking by its id's shape (id.startsWith('Q-') is now always
+  // false) — membership in mappedQueueWalkins is exact regardless of id
+  // format.
+  const queueWalkinIds = useMemo(
+    () => new Set(mappedQueueWalkins.map(m => m.id)),
+    [mappedQueueWalkins]
+  );
+
   // Selected booking state (for detail drawer)
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
 
@@ -267,7 +278,7 @@ export const AdminBookingsSection: React.FC = () => {
   // Calculate cancellation eligibility dynamically
   const cancellationRefundDetails = useMemo(() => {
     if (!targetCancellingBooking) return { eligible: false, hoursLeft: 0 };
-    if (targetCancellingBooking.id.startsWith('Q-')) return { eligible: false, hoursLeft: 0 };
+    if (queueWalkinIds.has(targetCancellingBooking.id)) return { eligible: false, hoursLeft: 0 };
     try {
       const scheduled = parseBookingDateTimeToRiyadhDate(targetCancellingBooking.date, targetCancellingBooking.time);
       const nowRiyadh = getRiyadhNow();
@@ -280,12 +291,12 @@ export const AdminBookingsSection: React.FC = () => {
     } catch (e) {
       return { eligible: false, hoursLeft: 0 };
     }
-  }, [targetCancellingBooking, tick]);
+  }, [targetCancellingBooking, tick, queueWalkinIds]);
 
   // Handle Cancellation submission from Custom modal
   const handleConfirmCancellation = () => {
     if (!cancellingBookingId) return;
-    if (cancellingBookingId.startsWith('Q-')) {
+    if (queueWalkinIds.has(cancellingBookingId)) {
       updateQueueStatus(cancellingBookingId, 'Cancelled');
     } else {
       const paymentStatusUpdate = refundOption === 'Refunded' ? 'Refunded' : undefined;
@@ -885,7 +896,7 @@ export const AdminBookingsSection: React.FC = () => {
                   disabled={activeBookingDetail.status === 'Cancelled'}
                   onClick={() => {
                     setCancellingBookingId(activeBookingDetail.id);
-                    if (activeBookingDetail.id.startsWith('Q-')) {
+                    if (queueWalkinIds.has(activeBookingDetail.id)) {
                       setRefundOption('Forfeited');
                     } else {
                       setRefundOption(cancellationRefundDetails.eligible ? 'Refunded' : 'Forfeited');
