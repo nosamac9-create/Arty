@@ -689,7 +689,12 @@ export const AdminBookingsSection: React.FC = () => {
                 ) : (
                   paginatedBookings.map((b) => {
                     const isSelected = selectedBookingId === b.id;
-                    const isLate = isActivelyPending(b);
+                    // Never true for a mapped queue walk-in: its "time" is a
+                    // check-in timestamp, not a scheduled workshop start, so
+                    // isActivelyPending would misread "just checked in" as
+                    // overdue within seconds — no real auto-cancel applies to
+                    // a queue-only row, so this must never fire for one.
+                    const isLate = !queueWalkinIds.has(b.id) && isActivelyPending(b);
                     return (
                       <tr
                         key={b.id}
@@ -730,7 +735,7 @@ export const AdminBookingsSection: React.FC = () => {
                             </span>
                             
                             {/* Render live countdown timers for actively pending bookings */}
-                            {!b.id.startsWith('Q-') && isLate && (() => {
+                            {isLate && (() => {
                               try {
                                 const bTime = parseBookingDateTimeToRiyadhDate(b.date, b.time);
                                 const remMs = (15 * 60 * 1000) - (getRiyadhNow().getTime() - bTime.getTime());
