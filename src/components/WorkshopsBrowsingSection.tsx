@@ -95,9 +95,11 @@ export const WorkshopsBrowsingSection: React.FC = () => {
       result = result.filter(ws => ws.category === selectedCategory);
     }
 
-    // Skill level filter
+    // Skill level filter. A workshop tagged "All Levels" is suitable for
+    // every specific level, so it matches whichever one is selected — not
+    // just the "All Levels" filter itself.
     if (selectedSkillLevel !== 'All') {
-      result = result.filter(ws => ws.skillLevel === selectedSkillLevel);
+      result = result.filter(ws => ws.skillLevel === selectedSkillLevel || ws.skillLevel === 'All Levels');
     }
 
     // Sort order
