@@ -27,7 +27,7 @@ import {
   checkDuplicateCustomerPhone, checkDuplicateCustomerEmail, validatePasswordRule,
   validateBookingForm, makeLocalSeatReader, canonicalPhone, customerStorageFields, ValidationDb
 } from './validation';
-import { getSessionSeatUsage } from './queueUtils';
+import { getSessionSeatUsage, BIRTHDAY_WORKSHOP_ID, BIRTHDAY_DAILY_MAX, BIRTHDAY_SAME_SLOT_MAX } from './queueUtils';
 import { getRiyadhDateString } from './dateUtils';
 import { getActivitiesForDate } from './activityUtils';
 import { checkStaffMemberAvailability } from './staffAvailabilityUtils';
@@ -1085,6 +1085,129 @@ export const SYSTEM_TESTS: SystemTestDefinition[] = [
           ? `${mapped[0].id} shown as ${mapped[0].status}`
           : `${mapped.length} walk-ins mapped`,
         'A walk-in visit is missing from the Bookings page, so the day’s takings and attendance are understated.'
+      );
+    }
+  },
+  {
+    id: 'BKG-06',
+    name: 'Birthday capacity maxima match what the database enforces',
+    description: 'Books through the real book_birthday_slot RPC and checks it trips at BIRTHDAY_DAILY_MAX and BIRTHDAY_SAME_SLOT_MAX (queueUtils.ts), not some other number.',
+    category: 'Bookings',
+    kind: 'scenario',
+    run: async ({ temp }) => {
+      await seedTemp(temp);
+      const client = getDataClient();
+      if (!client) return pass('Skipped — Supabase is not configured', 'No client to test with');
+
+      // BIRTHDAY_DAILY_MAX/BIRTHDAY_SAME_SLOT_MAX (queueUtils.ts) are only the
+      // client's copy. book_birthday_slot (migration 0027) hardcodes its own
+      // c_daily_max/c_slot_max, which is what actually decides the outcome —
+      // this test proves the two still agree by exercising the real function,
+      // rather than trusting the comments in each file that say they should.
+      const birthdayBooking = (id: string, date: string, time: string) => ({
+        id, customer_name: 'Fixture', workshop_id: BIRTHDAY_WORKSHOP_ID, workshop_title: 'Birthday Party',
+        date, time, participants: 2, total_price: 500, source: 'Admin', status: 'Pending', payment_status: 'Paid',
+        timeline: [], created_at: new Date().toISOString()
+      });
+      const why = (r: { error: { message: string } | null }) => r.error ? `refused (${r.error.message})` : 'ok';
+
+      // Two dates far enough in the future, and far enough apart from each
+      // other, that a real party is not expected to already occupy either —
+      // but the real count is read first and topped up to the boundary
+      // rather than assumed to be zero, so a coincidental real booking cannot
+      // produce a false result either way.
+      const dailyDate = '2028-06-01';
+      const slotDate = '2028-06-02';
+      const slotTime = '2:00 PM';
+      const dailyFillTimes = ['9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM', '3:00 PM', '4:00 PM'];
+
+      const { data: counts, error: countsError } = await client.rpc('birthday_booking_counts', {
+        p_dates: [dailyDate, slotDate]
+      });
+      if (countsError) {
+        return fail(
+          'Existing birthday counts could be read',
+          `birthday_booking_counts failed: ${countsError.message}`,
+          'Could not read the real counts for the fixture dates, so the boundary could not be set up safely.'
+        );
+      }
+
+      const rows = (counts || []) as Array<{ booking_date: string; booking_time: string; party_count: number }>;
+      const onDailyDate = rows.filter(r => r.booking_date === dailyDate).reduce((sum, r) => sum + r.party_count, 0);
+      const onSlotDate = rows.filter(r => r.booking_date === slotDate).reduce((sum, r) => sum + r.party_count, 0);
+      const atSlot = rows.find(r => r.booking_date === slotDate && r.booking_time === slotTime)?.party_count || 0;
+
+      // --- Daily max: top the date up to one below the max, each filler at
+      // its own time so no slot is exercised, then the next booking must be
+      // accepted (reaching the max) and the one after refused.
+      let dailyFilled = 0;
+      while (onDailyDate + dailyFilled < BIRTHDAY_DAILY_MAX - 1) {
+        if (dailyFilled >= dailyFillTimes.length) {
+          return fail(
+            'The daily-max fixture date had room to test the boundary',
+            `${dailyDate} already has ${onDailyDate} real birthday bookings, leaving no room to test a max of ${BIRTHDAY_DAILY_MAX}`,
+            'The fixture date is too close to its real capacity for this run to prove anything — pick a different fixture date.'
+          );
+        }
+        const fill = await client.rpc('book_birthday_slot', {
+          p_booking: birthdayBooking(`TEST-BDAY-DAILY-FILL-${dailyFilled}`, dailyDate, dailyFillTimes[dailyFilled])
+        });
+        if (fill.error) {
+          return fail(
+            'Fixture setup for the daily-max scenario succeeded',
+            `seeding filler booking ${dailyFilled} failed: ${fill.error.message}`,
+            'Could not set up the daily-max scenario, so the boundary was never exercised.'
+          );
+        }
+        dailyFilled++;
+      }
+      const dailyAtMax = await client.rpc('book_birthday_slot', {
+        p_booking: birthdayBooking('TEST-BDAY-DAILY-ATMAX', dailyDate, dailyFillTimes[dailyFilled])
+      });
+      const dailyOverMax = await client.rpc('book_birthday_slot', {
+        p_booking: birthdayBooking('TEST-BDAY-DAILY-OVERMAX', dailyDate, dailyFillTimes[dailyFilled + 1])
+      });
+
+      // --- Same-slot max: top one time slot up to one below its max, then
+      // the next booking at that exact time must be accepted and the one
+      // after refused. onSlotDate is checked too, so a real date already
+      // near its own daily max cannot make this half misreport why a
+      // booking was refused.
+      let slotFilled = 0;
+      if (onSlotDate + BIRTHDAY_SAME_SLOT_MAX + 1 > BIRTHDAY_DAILY_MAX) {
+        return fail(
+          'The slot-max fixture date had room to test the boundary without also hitting the daily max',
+          `${slotDate} already has ${onSlotDate} real birthday bookings, too close to the daily max of ${BIRTHDAY_DAILY_MAX} to isolate the slot rule`,
+          'The fixture date is too close to its real daily capacity for this run to prove anything about the slot rule — pick a different fixture date.'
+        );
+      }
+      while (atSlot + slotFilled < BIRTHDAY_SAME_SLOT_MAX - 1) {
+        const fill = await client.rpc('book_birthday_slot', {
+          p_booking: birthdayBooking(`TEST-BDAY-SLOT-FILL-${slotFilled}`, slotDate, slotTime)
+        });
+        if (fill.error) {
+          return fail(
+            'Fixture setup for the slot-max scenario succeeded',
+            `seeding filler booking ${slotFilled} failed: ${fill.error.message}`,
+            'Could not set up the slot-max scenario, so the boundary was never exercised.'
+          );
+        }
+        slotFilled++;
+      }
+      const slotAtMax = await client.rpc('book_birthday_slot', {
+        p_booking: birthdayBooking('TEST-BDAY-SLOT-ATMAX', slotDate, slotTime)
+      });
+      const slotOverMax = await client.rpc('book_birthday_slot', {
+        p_booking: birthdayBooking('TEST-BDAY-SLOT-OVERMAX', slotDate, slotTime)
+      });
+
+      return check(
+        !dailyAtMax.error && !!dailyOverMax.error && !slotAtMax.error && !!slotOverMax.error,
+        `Exactly ${BIRTHDAY_DAILY_MAX} parties allowed per day, ${BIRTHDAY_SAME_SLOT_MAX} sharing one time slot`,
+        `daily at max: ${why(dailyAtMax)}, daily over max: ${why(dailyOverMax)}, `
+          + `slot at max: ${why(slotAtMax)}, slot over max: ${why(slotOverMax)}`,
+        "book_birthday_slot's hardcoded maxima no longer match BIRTHDAY_DAILY_MAX/BIRTHDAY_SAME_SLOT_MAX "
+          + 'in queueUtils.ts — the picker and the database now disagree on what is allowed.'
       );
     }
   },
