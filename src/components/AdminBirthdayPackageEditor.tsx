@@ -11,6 +11,7 @@ import {
 import { BirthdayPackage } from '../types';
 import { LineListTextarea } from './ui/LineListTextarea';
 import { BackButton } from './ui/BackButton';
+import { DEFAULT_DEPOSIT_AMOUNT } from '../utils/queueUtils';
 
 interface Props {
   /** The record being edited, straight from the shared data layer. */
@@ -310,7 +311,7 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
             <input
               type="number"
               min={0}
-              value={draft.depositAmount ?? 500}
+              value={draft.depositAmount ?? DEFAULT_DEPOSIT_AMOUNT}
               onChange={e => setField('depositAmount', Number(e.target.value) || 0)}
               className={inputClass}
             />

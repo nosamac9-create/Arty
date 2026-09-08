@@ -9,6 +9,7 @@ import { Calendar, Users, Clock, GraduationCap, AlertCircle, Trash2, CalendarX, 
 import { Booking } from '../types';
 import { resolveBookingInstructor } from '../utils/queueUtils';
 import { normalizeCustomerPhone } from '../utils/customerIdentity';
+import { STUDIO_PHONE } from '../utils/studioConfig';
 import Reveal from './ui/Reveal';
 import { ScrollReveal } from './ui/ScrollReveal';
 import { AppImage } from './ui/AppImage';
@@ -352,7 +353,7 @@ export const MyBookingsSection: React.FC = () => {
                           <button
                             onMouseEnter={() => setHoveredTooltipId(b.id)}
                             onMouseLeave={() => setHoveredTooltipId(null)}
-                            onClick={() => alert("Cancellation closed. It is less than 24 hours before class start. Please contact the front desk at +966 54 822 2055.")}
+                            onClick={() => alert(`Cancellation closed. It is less than 24 hours before class start. Please contact the front desk at ${STUDIO_PHONE}.`)}
                             className="text-xs font-semibold text-gray-400 bg-gray-100 border border-gray-200 px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-not-allowed"
                           >
                             <Trash2 className="h-3.5 w-3.5" />

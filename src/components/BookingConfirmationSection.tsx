@@ -7,6 +7,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { Sparkles, Calendar, Receipt, ChevronRight, MapPin, Gift } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { STUDIO_PHONE } from '../utils/studioConfig';
 
 /**
  * Riyadh is UTC+3 all year — Saudi Arabia has observed no daylight saving since
@@ -213,7 +214,7 @@ export const BookingConfirmationSection: React.FC = () => {
         <p className="text-sm text-brand-ink leading-relaxed">{bookingError}</p>
         <p className="text-xs text-brand-charcoal/55">
           Nothing has been reserved and you have not been charged. Please try again,
-          or call the studio on +966 54 822 2055.
+          or call the studio on {STUDIO_PHONE}.
         </p>
         <button
           onClick={() => setCustomerTab('workshops')}

@@ -12,6 +12,7 @@ import {
 import { BirthdayPackage } from '../types';
 import { AppImage } from './ui/AppImage';
 import { PackageBalloonBackdrop } from './ui/PackageBalloonBackdrop';
+import { DEFAULT_DEPOSIT_AMOUNT } from '../utils/queueUtils';
 
 interface Props {
   packages: BirthdayPackage[];
@@ -472,7 +473,7 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                   Choose this package
                 </button>
                 <p className="mt-2.5 text-center text-[11px] text-brand-muted">
-                  {focused.depositAmount ?? 500} SAR deposit confirms your date.
+                  {focused.depositAmount ?? DEFAULT_DEPOSIT_AMOUNT} SAR deposit confirms your date.
                 </p>
               </motion.div>
             </div>

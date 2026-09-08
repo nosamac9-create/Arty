@@ -17,7 +17,7 @@ import {
 } from '../types';
 import { DateInput } from './DateInput';
 import { validatePhoneRule, canonicalPhone } from '../utils/validation';
-import { minBirthdayNoticeDays, BIRTHDAY_DAILY_MAX, BIRTHDAY_SAME_SLOT_MAX } from '../utils/queueUtils';
+import { minBirthdayNoticeDays, BIRTHDAY_DAILY_MAX, BIRTHDAY_SAME_SLOT_MAX, DEFAULT_DEPOSIT_AMOUNT } from '../utils/queueUtils';
 import { useBirthdayCounts } from '../lib/sessionSeats';
 import { BackButton } from './ui/BackButton';
 
@@ -147,7 +147,7 @@ export const BirthdayBookingSection: React.FC = () => {
     [publishedBirthdayPackages, selectedPkgId]
   );
 
-  const depositAmount = selectedPackage?.depositAmount ?? 500;
+  const depositAmount = selectedPackage?.depositAmount ?? DEFAULT_DEPOSIT_AMOUNT;
   const timeOptions = selectedPackage?.availableTimes?.length
     ? selectedPackage.availableTimes
     : FALLBACK_TIMES;

@@ -20,6 +20,7 @@ import {
 } from './ui/CtaSectionWithGallery';
 import { formatDate } from '../utils/calendarConfig';
 import { selectFeaturedWorkshops, recentBookingsWindow } from '../utils/featuredWorkshops';
+import { STUDIO_PHONE } from '../utils/studioConfig';
 import { useSessionSeats, useRecentBookings } from '../lib/sessionSeats';
 import { Calendar, Sparkles, ChevronRight, Paintbrush, MousePointerClick, CalendarRange, Gift, Coffee, ChevronDown, Phone, Mail, UserCheck, Star, ArrowLeft, Clock }  from 'lucide-react';
 
@@ -863,7 +864,7 @@ export const HomeSection: React.FC = () => {
                   <div className="border-t border-b border-brand-clay py-4">
                     <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-muted">Call Front Desk</dt>
                     <dd className="mt-1.5 text-brand-charcoal ltr-numerals">
-                      +966 54 822 2055 (Walk-ins welcome!)
+                      {STUDIO_PHONE} (Walk-ins welcome!)
                     </dd>
                   </div>
                 </Reveal>

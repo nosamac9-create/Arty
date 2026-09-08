@@ -471,6 +471,13 @@ export const BIRTHDAY_DAILY_MAX = 5;
 /** No more than this many parties may share one date + time slot. */
 export const BIRTHDAY_SAME_SLOT_MAX = 2;
 
+/**
+ * Deposit assumed for a birthday package that has not set its own
+ * `depositAmount`. Was previously repeated as a literal `500` at each call
+ * site — kept here so the fallback only has to change in one place.
+ */
+export const DEFAULT_DEPOSIT_AMOUNT = 500;
+
 export function isBirthdayBookingRecord(b: Booking): boolean {
   return b.workshopId === BIRTHDAY_WORKSHOP_ID || String(b.workshopTitle || '').toLowerCase().includes('birthday');
 }

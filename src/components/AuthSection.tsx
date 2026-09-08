@@ -16,6 +16,7 @@ import {
   validateCustomerForm, canonicalEmail, canonicalPhone, passwordChecklist,
   validatePasswordRule, validatePasswordConfirmation
 } from '../utils/validation';
+import { STUDIO_PHONE } from '../utils/studioConfig';
 
 /** Staggered fade-up for the title block over the photograph. */
 const textVariants = {
@@ -1056,7 +1057,7 @@ export const AuthSection: React.FC = () => {
                       <p className="leading-relaxed">
                         We can only reset a password once we can confirm the account is yours.
                         SMS verification is not switched on yet, so please use email recovery.
-                        If there is no email on your record, call the studio on +966 54 822 2055.
+                        If there is no email on your record, call the studio on {STUDIO_PHONE}.
                       </p>
                     </div>
                     <button
