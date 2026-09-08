@@ -178,9 +178,14 @@ export const AdminEventsSection: React.FC = () => {
 
   // Handle Cancel Booking from Table
   const [cancellingBookingId, setCancellingBookingId] = useState<string | null>(null);
+  // Events & Socials do not follow the workshop 24h refund window (confirmed
+  // policy difference) — staff choose the outcome explicitly instead, same
+  // as the Bookings Ledger's cancel modal.
+  const [refundOption, setRefundOption] = useState<'Refunded' | 'NotRefunded'>('Refunded');
 
   const confirmCancel = async (id: string) => {
-    await cancelBooking(id, 'Staff', 'Refunded');
+    const paymentStatusUpdate = refundOption === 'Refunded' ? 'Refunded' : undefined;
+    await cancelBooking(id, 'Staff', paymentStatusUpdate);
     setCancellingBookingId(null);
     showToast(`Booking ${id} has been cancelled.`);
   };
@@ -457,7 +462,7 @@ export const AdminEventsSection: React.FC = () => {
                       {b.status !== 'Cancelled' ? (
                         <button
                           type="button"
-                          onClick={() => setCancellingBookingId(b.id)}
+                          onClick={() => { setCancellingBookingId(b.id); setRefundOption('Refunded'); }}
                           className="cursor-pointer px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-[10px] font-bold rounded-lg transition-colors"
                         >
                           Cancel Booking
@@ -759,8 +764,46 @@ export const AdminEventsSection: React.FC = () => {
               <h3 className="font-display text-base font-bold text-brand-charcoal">Cancel Event Booking?</h3>
             </div>
             <p className="text-xs text-brand-charcoal/70 leading-relaxed">
-              Are you sure you want to cancel booking <strong className="font-mono text-brand-charcoal">{cancellingBookingId}</strong>? This will release reserved seats and mark the reservation as cancelled.
+              Are you sure you want to cancel booking <strong className="font-mono text-brand-charcoal">{cancellingBookingId}</strong>? This will release reserved seats and mark the reservation as cancelled
+              {refundOption === 'Refunded'
+                ? ', and the payment will be marked as refunded.'
+                : ' — the payment will not be refunded and stays as recorded.'}
             </p>
+
+            {/* Refund Action Selector — same pattern as the Bookings Ledger's
+                cancel modal. Events don't follow the workshop 24h window, so
+                there is no eligibility hint here, only the explicit choice. */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-brand-charcoal/70 block">Select Payment Action outcome:</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRefundOption('Refunded')}
+                  className={`cursor-pointer p-3 rounded-xl border text-xs font-bold transition-all text-center flex flex-col items-center justify-center gap-1 ${
+                    refundOption === 'Refunded'
+                      ? 'bg-blue-50 border-blue-400 text-blue-700 ring-2 ring-blue-300'
+                      : 'bg-white border-brand-clay/60 hover:bg-brand-sand/50'
+                  }`}
+                >
+                  <span>Mark as Refunded</span>
+                  <span className="text-[9px] font-normal opacity-85">Reverts payment as Refunded</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setRefundOption('NotRefunded')}
+                  className={`cursor-pointer p-3 rounded-xl border text-xs font-bold transition-all text-center flex flex-col items-center justify-center gap-1 ${
+                    refundOption === 'NotRefunded'
+                      ? 'bg-amber-50 border-amber-400 text-amber-800 ring-2 ring-amber-300'
+                      : 'bg-white border-brand-clay/60 hover:bg-brand-sand/50'
+                  }`}
+                >
+                  <span>Mark as Not Refunded</span>
+                  <span className="text-[9px] font-normal opacity-85">No refund issued — payment stays as recorded</span>
+                </button>
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-3 pt-2">
               <button
                 onClick={() => setCancellingBookingId(null)}
