@@ -420,7 +420,9 @@ export const WorkshopsBrowsingSection: React.FC = () => {
                         before — it is existing content, not new metadata. */}
                     <div className="absolute inset-x-0 bottom-0 p-6 sm:p-7">
                       <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-cream/70">
-                        {ws.category}{ws.skillLevel ? ` · ${ws.skillLevel}` : ''}
+                        {/* Same wording as the filter's "All Levels" option — the tag
+                            and the filter describe the same thing and should read alike. */}
+                        {ws.category}{ws.skillLevel ? ` · ${ws.skillLevel === 'All Levels' ? 'Suitable for all levels' : ws.skillLevel}` : ''}
                       </span>
                       <h3 className="mt-1.5 font-display text-[24px] font-semibold leading-tight text-brand-cream sm:text-[26px] line-clamp-2">
                         {ws.title}
