@@ -160,7 +160,7 @@ export const BookingConfirmationSection: React.FC = () => {
     const location = [room, 'Arty Café', 'Ahmad Al Attas St, Jeddah'].filter(Boolean).join(', ');
     const guests = `${booking.participants} ${booking.participants === 1 ? 'guest' : 'guests'}`;
     const description = `${title} at Arty Café. Booking reference ${booking.id}, ${guests}. `
-      + 'You can cancel or reschedule free of charge up to 24 hours before the session.';
+      + 'You can cancel free of charge up to 24 hours before the session.';
 
     // A UID must be globally unique and stable, so the same booking re-added
     // updates the existing entry rather than creating a duplicate.
@@ -322,7 +322,7 @@ export const BookingConfirmationSection: React.FC = () => {
 
         {/* Cancellation policy note */}
         <p className="mt-5 text-[10px] text-center text-brand-muted italic leading-relaxed">
-          *Need to reschedule? You can cancel or shift times free of charge up to 24 hours before your session directly from your bookings portal.
+          *You can cancel free of charge up to 24 hours before your session directly from your bookings portal.
         </p>
 
       </div>
