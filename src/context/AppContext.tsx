@@ -2254,17 +2254,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
    * 24-hour refund rule, releases the seats through the same RPC, and appends
    * the same kind of timeline entry.
    *
-   * The notification and SMS stay here rather than in SQL, so a cancellation
-   * sends one message composed in one place whoever triggered it.
+   * The in-app notification and SMS do NOT go through notifyBookingCancellation()
+   * (used by the staff path above) — that helper's in-app insert always failed
+   * silently under RLS for a customer session (no notifications_customer_insert
+   * policy, deliberately — see migration 0031), and its SMS call goes through
+   * supabaseStaff, a client with no session at all for a customer. The
+   * notification is now written server-side inside cancel_own_booking itself
+   * (migration 0031); SMS goes through notify-own-booking, a narrowly-scoped
+   * Edge Function that proves ownership of this specific booking rather than
+   * staff status.
    */
   const cancelOwnBooking = async (id: string): Promise<{ success: boolean; error?: string; refunded?: boolean }> => {
     if (!supabase) {
       return { success: false, error: 'Cancellation is unavailable right now. Please contact the studio.' };
     }
-
-    // Read before the write: the notification needs the workshop title, date,
-    // price and phone, and the row is a customer's own, so SELECT is permitted.
-    const booking = await db.bookings.get(id);
 
     const { data, error } = await supabase.rpc('cancel_own_booking', { p_booking_id: id });
 
@@ -2284,12 +2287,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, error: result?.reason || 'That booking could not be cancelled.' };
     }
 
-    // Same notification and SMS path every other cancellation uses. Awaited so
-    // a caller can report a genuine failure, though the helper swallows its own
-    // errors rather than undoing a cancellation that has already committed.
-    if (booking) {
-      await notifyBookingCancellation(booking, result.refunded);
-    }
+    // Fire-and-forget, matching notifyBookingCancellation()'s own SMS block:
+    // failures are logged, never thrown, never undoing a cancellation that has
+    // already committed. The in-app notification already happened inside the
+    // RPC above — nothing left to do for it here.
+    (async () => {
+      try {
+        const { data: notifyData, error: notifyError } = await supabase.functions.invoke('notify-own-booking', {
+          body: { bookingId: id }
+        });
+        if (notifyError) {
+          let reason = notifyError.message || 'unknown error';
+          if (notifyError instanceof FunctionsHttpError) {
+            try {
+              const errBody = await notifyError.context.json();
+              reason = (errBody as { error?: string })?.error || reason;
+            } catch {
+              /* keep the generic reason */
+            }
+          }
+          console.error(`cancelOwnBooking: SMS for booking ${id} failed:`, reason);
+        } else if (!(notifyData as { success?: boolean })?.success) {
+          console.error(`cancelOwnBooking: SMS for booking ${id} was not confirmed sent:`, (notifyData as { error?: string })?.error);
+        }
+      } catch (err: any) {
+        console.error(`cancelOwnBooking: SMS for booking ${id} failed:`, err?.message || err);
+      }
+    })();
 
     return { success: true, refunded: result.refunded };
   };
