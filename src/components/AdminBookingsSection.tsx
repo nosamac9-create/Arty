@@ -34,7 +34,7 @@ export const AdminBookingsSection: React.FC = () => {
   // Local state for Notification popover and Cancellation modal
   const [showNotifications, setShowNotifications] = useState(false);
   const [cancellingBookingId, setCancellingBookingId] = useState<string | null>(null);
-  const [refundOption, setRefundOption] = useState<'Refunded' | 'Forfeited'>('Refunded');
+  const [refundOption, setRefundOption] = useState<'Refunded' | 'NotRefunded'>('Refunded');
 
   // Local state for CSV Toast
   const [csvToast, setCsvToast] = useState({ show: false, message: '' });
@@ -897,9 +897,9 @@ export const AdminBookingsSection: React.FC = () => {
                   onClick={() => {
                     setCancellingBookingId(activeBookingDetail.id);
                     if (queueWalkinIds.has(activeBookingDetail.id)) {
-                      setRefundOption('Forfeited');
+                      setRefundOption('NotRefunded');
                     } else {
-                      setRefundOption(cancellationRefundDetails.eligible ? 'Refunded' : 'Forfeited');
+                      setRefundOption(cancellationRefundDetails.eligible ? 'Refunded' : 'NotRefunded');
                     }
                   }}
                   className="cursor-pointer w-full bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-bold py-2.5 rounded-xl transition-colors text-center block"
@@ -1009,15 +1009,15 @@ export const AdminBookingsSection: React.FC = () => {
 
                   <button
                     type="button"
-                    onClick={() => setRefundOption('Forfeited')}
+                    onClick={() => setRefundOption('NotRefunded')}
                     className={`cursor-pointer p-3 rounded-xl border text-xs font-bold transition-all text-center flex flex-col items-center justify-center gap-1 ${
-                      refundOption === 'Forfeited'
+                      refundOption === 'NotRefunded'
                         ? 'bg-amber-50 border-amber-400 text-amber-800 ring-2 ring-amber-300'
                         : 'bg-white border-brand-clay/60 hover:bg-brand-sand/50'
                     }`}
                   >
-                    <span>Mark as Forfeited</span>
-                    <span className="text-[9px] font-normal opacity-85">Forfeits payment (Keeps Paid)</span>
+                    <span>Mark as Not Refunded</span>
+                    <span className="text-[9px] font-normal opacity-85">No refund issued — payment stays as recorded</span>
                   </button>
                 </div>
               </div>

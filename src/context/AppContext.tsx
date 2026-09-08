@@ -2201,31 +2201,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const cancelBooking = async (id: string, user: string = 'Staff', paymentStatusUpdate?: 'Refunded' | 'Paid' | 'Unpaid' | 'Deposit Paid') => {
     const booking = await db.bookings.get(id);
     if (booking && booking.status !== 'Cancelled') {
-      const now = getRiyadhNow();
-      let startObj: Date;
-      try {
-        const timeClean = booking.time.split(' - ')[0].trim();
-        startObj = parseBookingDateTimeToRiyadhDate(booking.date, timeClean);
-      } catch (e) {
-        startObj = new Date(`${booking.date}T16:00:00`);
-      }
-
-      const diffMs = startObj.getTime() - now.getTime();
-      const diffHours = diffMs / (1000 * 60 * 60);
-
-      let finalPaymentStatus: Booking['paymentStatus'] = paymentStatusUpdate || booking.paymentStatus;
-      let actionMsg = `Booking cancelled by ${user}`;
-
-      if (paymentStatusUpdate) {
-        actionMsg += ` (${paymentStatusUpdate})`;
-      } else {
-        if (diffHours > 24) {
-          finalPaymentStatus = 'Refunded';
-          actionMsg += ' — Refund issued (>24h notice)';
-        } else {
-          actionMsg += ' — Non-refundable (within 24h cutoff)';
-        }
-      }
+      // Staff choose the refund outcome explicitly; whatever they pick is
+      // written verbatim, with no 24-hour-policy override in either direction.
+      const finalPaymentStatus: Booking['paymentStatus'] = paymentStatusUpdate || booking.paymentStatus;
+      const actionMsg = `Booking cancelled by ${user}` +
+        (finalPaymentStatus === 'Refunded' ? ' — Refunded' : ' — Not refunded');
 
       const nowStr = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
       const nowIso = new Date().toISOString();
