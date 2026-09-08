@@ -2527,6 +2527,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return { success: false, error: retryErr?.message || 'Could not check in this guest.' };
       }
     }
+    // A With Instructor walk-in consumes a seat on a real workshop session;
+    // seat counts come from an RPC, not a realtime subscription, so nothing
+    // else would tell a customer's open workshop page that a seat just went.
+    notifySeatsChanged();
     return { success: true };
   };
 
