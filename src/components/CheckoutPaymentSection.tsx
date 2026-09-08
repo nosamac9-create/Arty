@@ -10,6 +10,7 @@ import { PhoneInput } from './PhoneInput';
 import { PrePaymentPopup } from './PrePaymentPopup';
 import { migratePrePaymentPopup } from '../types';
 import { validateBookingForm, validateBirthdayBookingForm } from '../utils/validation';
+import { generateBookingRefCode } from '../utils/idGeneration';
 import { CheckoutStepper } from './ui/CheckoutStepper';
 import { BackButton } from './ui/BackButton';
 
@@ -59,7 +60,7 @@ export const CheckoutPaymentSection: React.FC = () => {
     refCodeRef.current = null;
   }
   if (!refCodeRef.current) {
-    refCodeRef.current = `ART-${Math.floor(10000 + Math.random() * 90000)}`;
+    refCodeRef.current = generateBookingRefCode();
   }
 
   const [paymentMethod, setPaymentMethod] = useState<'card' | 'applepay' | 'stcpay'>('card');

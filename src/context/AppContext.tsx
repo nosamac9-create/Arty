@@ -19,6 +19,7 @@ import { useLiveTable, fetchTable, fetchRow } from '../lib/supabaseData';
 import { getDataClient, isStaffSessionActive, onDataClientChange } from '../lib/supabase';
 import { notifySeatsChanged } from '../lib/sessionSeats';
 import { formatQueueNumber } from '../utils/queueUtils';
+import { generateBookingRefCode } from '../utils/idGeneration';
 
 /**
  * How long a booking write may take before the client gives up on it.
@@ -1960,7 +1961,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     existingRefCode?: string
   ): Promise<Booking> => {
     setBookingError(null);
-    const refCode = existingRefCode || `ART-${Math.floor(10000 + Math.random() * 90000)}`;
+    const refCode = existingRefCode || generateBookingRefCode();
     const nowStr = new Date().toISOString();
     
     let pStatus: Booking['paymentStatus'] = newBookingData.paymentStatus || 'Paid';
