@@ -57,18 +57,19 @@ export const MyBookingsSection: React.FC = () => {
   const { bookings, cancelOwnBooking, setCustomerTab, workshops, currentUser, setAuthScreen, staff, workshopSessions } = useApp();
   /** The booking currently being cancelled, so its button can be disabled. */
   const [cancellingId, setCancellingId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'Upcoming' | 'Past'>('Upcoming');
+  const [activeTab, setActiveTab] = useState<'Upcoming' | 'Past' | 'Cancelled'>('Upcoming');
   const [hoveredTooltipId, setHoveredTooltipId] = useState<string | null>(null);
 
-  // Divide bookings into Upcoming and Past for current authenticated user
+  // Divide bookings into Upcoming, Past and Cancelled for current authenticated user
   const categorizedBookings = useMemo(() => {
     const today = getRiyadhNow();
-    
+
     const upcomingList: Booking[] = [];
     const pastList: Booking[] = [];
+    const cancelledList: Booking[] = [];
 
     if (!currentUser) {
-      return { Upcoming: [], Past: [] };
+      return { Upcoming: [], Past: [], Cancelled: [] };
     }
 
     // The customer id is the reliable link — it is what the row-level policy
@@ -87,18 +88,19 @@ export const MyBookingsSection: React.FC = () => {
       // as past from 4pm — five hours before it began.
       const bDate = bookingStart(b);
       const isCancelled = b.status === 'Cancelled';
-      
-      // If cancelled, keep it in the tab where it originally belonged (mostly upcoming)
-      if (bDate >= today && !isCancelled) {
+
+      // A cancelled booking gets its own tab regardless of date, rather than
+      // being folded into Upcoming or Past.
+      if (isCancelled) {
+        cancelledList.push(b);
+      } else if (bDate >= today) {
         upcomingList.push(b);
-      } else if (isCancelled) {
-        upcomingList.push(b); // show cancelled bookings in upcoming so customers can review them
       } else {
         pastList.push(b);
       }
     });
 
-    return { Upcoming: upcomingList, Past: pastList };
+    return { Upcoming: upcomingList, Past: pastList, Cancelled: cancelledList };
   }, [bookings, currentUser]);
 
   const activeList = categorizedBookings[activeTab];
@@ -211,7 +213,7 @@ export const MyBookingsSection: React.FC = () => {
 
       {/* Tabs */}
       <div className="flex border-b border-brand-clay mb-8">
-        {(['Upcoming', 'Past'] as const).map(tab => (
+        {(['Upcoming', 'Past', 'Cancelled'] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -246,11 +248,17 @@ export const MyBookingsSection: React.FC = () => {
               <CalendarX className="h-7 w-7" />
             </div>
             <h3 className="font-display text-lg font-semibold text-brand-charcoal">
-              {activeTab === 'Past' ? 'No past bookings yet' : 'No upcoming bookings'}
+              {activeTab === 'Past'
+                ? 'No past bookings yet'
+                : activeTab === 'Cancelled'
+                ? 'No cancelled bookings'
+                : 'No upcoming bookings'}
             </h3>
             <p className="text-sm text-brand-ink mt-2 leading-relaxed">
               {activeTab === 'Past'
                 ? "You haven't completed any art classes with us yet. Let's make something beautiful!"
+                : activeTab === 'Cancelled'
+                ? "You don't have any cancelled bookings."
                 : "You don't have any sessions booked. Check our interactive timetable to join."
               }
             </p>
