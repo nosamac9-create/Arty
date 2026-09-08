@@ -3946,8 +3946,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     }
 
-    const id = `CUST-${Math.floor(1000 + Math.random() * 9000)}`;
-    await db.customers.put({
+    // Was `CUST-${Math.floor(1000 + Math.random() * 9000)}` — only 9,000
+    // possible values, and .put() below was an upsert: a collision would have
+    // silently merged this customer's data into whichever existing record
+    // already held that id. A uuid makes the collision itself negligible;
+    // .add() (a real insert that throws on conflict, unlike .put()) is the
+    // second half of the fix, matching how queue.id was hardened in 0030.
+    const id = `CUST-${globalThis.crypto?.randomUUID?.() ?? `cust-${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
+    await db.customers.add({
       ...customer,
       id,
       name: customer.name.trim(),
