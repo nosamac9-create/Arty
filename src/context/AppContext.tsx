@@ -586,7 +586,11 @@ async function linkAuthToCustomer(identifier: string | undefined, authId: string
 function initialAreaFromHostname(): 'customer' | 'staff' {
   if (typeof window === 'undefined') return 'customer';
   const segments = window.location.hostname.split(/[.-]/);
-  return segments.includes('staff') ? 'staff' : 'customer';
+  if (segments.includes('staff')) return 'staff';
+  // Local dev shortcut (no separate staff hostname to test against):
+  // visiting with ?staff lands straight in the staff console. Dev-only.
+  if (import.meta.env.DEV && new URLSearchParams(window.location.search).has('staff')) return 'staff';
+  return 'customer';
 }
 
 /**
@@ -2062,8 +2066,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
 
-    // If walk-in or admin, automatically add to today's live queue
-    if (newBookingData.source === 'Walk-in' || newBookingData.source === 'Admin') {
+    // If walk-in or admin AND the booking is for today, automatically add to
+    // today's live queue. Guarded by date: this used to fire for ANY
+    // Walk-in/Admin booking regardless of its own date, which was never
+    // reachable before a staff birthday booking (a future date is routine
+    // there) started calling addBooking with these sources.
+    if (
+      (newBookingData.source === 'Walk-in' || newBookingData.source === 'Admin') &&
+      normalizeDateString(newBookingData.date) === normalizeDateString(getRiyadhDateString())
+    ) {
       Promise.all([generateNextQueueNumber(), resolveBookingSessionLink(newBooking)]).then(([qNumber, link]) => {
         const timeStr = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
         const newQItem: QueueItem = {
