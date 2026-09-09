@@ -42,6 +42,15 @@ const DEAD_BOOKING_STATUSES = ['cancelled', 'auto-cancelled', 'autocancelled', '
 const DEAD_PAYMENT_STATUSES = ['failed', 'payment failed', 'declined', 'draft'];
 const DEAD_QUEUE_STATUSES = ['cancelled'];
 
+/**
+ * How close a queue check-in time must be to a booking's scheduled time to be
+ * treated as the same visit, when falling back to a phone-only match (see
+ * getActivitiesForDate). Wide enough for an early or late check-in against a
+ * booked slot; narrow enough that an unrelated same-day visit for the same
+ * customer does not qualify.
+ */
+const QUEUE_LINK_WINDOW_MINUTES = 60;
+
 export function isLiveBooking(booking: Booking): boolean {
   const status = String(booking.status || '').trim().toLowerCase();
   if (DEAD_BOOKING_STATUSES.includes(status)) return false;
@@ -111,8 +120,15 @@ export interface ActivitySources {
  * booking table and the live queue, merged into one row per visit.
  *
  * A queue entry and a booking are the same visit when the queue entry carries the
- * booking's id, or (for rows saved before that link existed) when the phone and
- * date match. The booking row wins, and takes its live status from the queue.
+ * booking's id, or — for rows saved before that link existed — when the phone
+ * matches AND the workshop matches AND the check-in time falls within
+ * QUEUE_LINK_WINDOW_MINUTES of the booking's scheduled time. Phone and date alone
+ * used to be enough, which merged any same-day, same-customer activity into one
+ * row regardless of what it actually was — a real website booking and an
+ * unrelated walk-in check-in for the same person collapsed into a single row,
+ * with the walk-in's status silently overwriting the booking's own. Workshop and
+ * time together are real evidence of the same visit; phone alone is not. The
+ * booking row wins, and takes its live status from the queue.
  */
 export function getActivitiesForDate(
   sources: ActivitySources,
@@ -141,9 +157,20 @@ export function getActivitiesForDate(
   const activities: TodayActivity[] = [];
 
   for (const booking of liveBookings) {
+    const phoneCandidate = queueByPhone.get(normalizePhoneKey(booking.customerPhone));
+    // The phone-only match is real evidence of the same visit only once the
+    // workshop also matches and the check-in happened near the booking's own
+    // scheduled time — otherwise it's just two activities for the same person
+    // on the same day, which is not the same thing.
+    const phoneCandidateIsSameVisit =
+      !!phoneCandidate &&
+      !!phoneCandidate.workshopId &&
+      String(phoneCandidate.workshopId) === String(booking.workshopId) &&
+      Math.abs(timeToMinutes(phoneCandidate.checkInTime) - timeToMinutes(booking.time)) <= QUEUE_LINK_WINDOW_MINUTES;
+
     const linkedQueue =
       queueByBookingId.get(String(booking.id)) ||
-      queueByPhone.get(normalizePhoneKey(booking.customerPhone));
+      (phoneCandidateIsSameVisit ? phoneCandidate : undefined);
 
     if (linkedQueue) claimedQueueIds.add(linkedQueue.id);
 

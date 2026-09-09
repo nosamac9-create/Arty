@@ -408,9 +408,16 @@ and I1/I2.
   the two differ in kind and not just wording. Filter values are unchanged. The workshop card still
   renders the raw `All Levels` tag; mapping the display there too was judged not worth a third
   file.
-- **L4 — stale "Registered" badge after an auth record is deleted directly in Supabase.** Caused by
-  an out-of-band database edit, not any in-app flow, so probably not a real defect today. Re-test
-  if account deletion or merging is ever built into the app.
+- **L4 — stale "Registered" badge after an auth record is deleted directly in Supabase.** Exact
+  mechanism confirmed: `customers.user_id` is `references auth.users(id) on delete set null`
+  (`0001_init.sql`), so deleting the auth user correctly nulls `user_id` via the FK cascade. But
+  `hasWebsiteAccount()` (`src/utils/accountUtils.ts`) treats the record as registered if *any* of
+  three signals is present — `user_id`, `has_account`, or `password` — and only `user_id` is
+  FK-protected. `has_account` and `password` are left exactly as they were, so the row ends up
+  self-contradictory (`user_id` null, `has_account` still true) and the badge keeps reading
+  "Registered". Caused by an out-of-band database edit, not any in-app flow — no in-app path
+  deletes an `auth.users` row today, so this cannot be triggered from the app itself, and no fix
+  is needed unless account deletion or merging is ever built into the app.
 
 ### Live Queue modals
 
