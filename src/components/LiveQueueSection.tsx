@@ -1686,7 +1686,7 @@ export const LiveQueueSection: React.FC = () => {
             className="cursor-pointer w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-brand-terracotta text-brand-cream text-sm font-bold px-5 py-4 rounded-xl hover:bg-brand-terracotta-hover transition-colors shadow-sm"
           >
             <Plus className="h-5 w-5 stroke-[3]" />
-            <span>+ Check In Walk-In</span>
+            <span>Check In Walk-In</span>
           </button>
         </div>
       </div>
