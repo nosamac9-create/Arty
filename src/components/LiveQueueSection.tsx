@@ -600,22 +600,22 @@ const InProgressCard: React.FC<{
       </AnimatePresence>
 
       {/* Primary Action Buttons (Always visible) */}
-      <div className={`pt-2 border-t border-brand-clay/30 grid gap-2 ${isWithoutInstructor ? 'grid-cols-2' : 'grid-cols-1'}`}>
+      <div className={`pt-2 border-t border-brand-clay/30 grid gap-2 ${isWithoutInstructor ? 'grid-cols-[auto_1fr]' : 'grid-cols-1'}`}>
         {isWithoutInstructor && (
           <button
             onClick={() => onChangeTable(item)}
-            className="cursor-pointer py-2.5 border border-brand-clay hover:bg-brand-sand text-brand-charcoal text-xs font-bold rounded-xl flex items-center justify-center gap-1.5"
+            className="cursor-pointer py-2.5 px-2 border border-brand-clay hover:bg-brand-sand text-brand-charcoal text-[10px] font-bold rounded-xl flex items-center justify-center gap-1.5"
           >
             <ArrowLeftRight className="h-3.5 w-3.5" />
-            <span>Change Table</span>
+            <span className="whitespace-nowrap">Change Table</span>
           </button>
         )}
         <button
           onClick={() => updateQueueStatus(item.id, 'Completed')}
-          className="cursor-pointer py-2.5 bg-brand-sage hover:bg-brand-sage-hover text-brand-cream text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-xs"
+          className="cursor-pointer py-3 bg-brand-sage hover:bg-brand-sage-hover text-brand-cream text-[11px] font-bold rounded-xl flex items-center justify-center gap-2 shadow-xs"
         >
-          <CheckCircle className="h-4 w-4" />
-          <span>Complete Session</span>
+          <CheckCircle className="h-3.5 w-3.5" />
+          <span className="whitespace-nowrap">Complete Session</span>
         </button>
       </div>
     </div>
