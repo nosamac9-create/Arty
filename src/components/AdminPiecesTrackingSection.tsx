@@ -114,6 +114,13 @@ export const AdminPiecesTrackingSection: React.FC = () => {
   const [brokenReason, setBrokenReason] = useState('');
   const [brokenError, setBrokenError] = useState('');
 
+  // Resolve-Broken-Piece Modal State
+  const [resolveTargetId, setResolveTargetId] = useState<string | null>(null);
+  const [resolveType, setResolveType] = useState<'Replaced' | 'Refunded' | 'Other' | null>(null);
+  const [resolvePerformer, setResolvePerformer] = useState('');
+  const [resolveNote, setResolveNote] = useState('');
+  const [resolveError, setResolveError] = useState('');
+
   // Backward Move Confirmation Modal State
   const [backwardMoveTarget, setBackwardMoveTarget] = useState<{ pieceId: string; currentStatus: PotteryPiece['status']; targetStatus: PotteryPiece['status'] } | null>(null);
   const [backwardPerformer, setBackwardPerformer] = useState('');
@@ -818,7 +825,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
       {selectedPiece && (
         <div className="fixed inset-0 bg-brand-charcoal/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-brand-cream border border-brand-clay rounded-3xl p-6 shadow-2xl max-w-3xl w-full max-h-[calc(100vh-3rem)] overflow-y-auto always-scrollbar text-left space-y-5 animate-in zoom-in-95 duration-200">
-            
+
             {/* Modal Header */}
             <div className="flex justify-between items-center border-b border-brand-clay/60 pb-3">
               <div>
@@ -827,7 +834,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                   <span>Code: {selectedPiece.pieceCode || selectedPiece.id}</span>
                 </h3>
               </div>
-              <button 
+              <button
                 onClick={() => setSelectedPieceId(null)}
                 className="p-1 rounded-lg text-brand-charcoal hover:bg-brand-sand cursor-pointer focus:outline-none"
               >
@@ -994,36 +1001,56 @@ export const AdminPiecesTrackingSection: React.FC = () => {
 
             {/* Action buttons panel */}
             <div className="pt-4 border-t border-brand-clay/60 grid grid-cols-2 gap-3">
-              <button
-                onClick={() => {
-                  onAttemptStatusChange(selectedPiece.id, 'Ready for Pickup');
-                  setSelectedPieceId(null);
-                }}
-                className="cursor-pointer bg-green-600 hover:bg-green-700 text-brand-cream font-bold text-xs py-3 rounded-xl transition-all shadow-sm flex items-center justify-center gap-1.5"
-              >
-                <Check className="h-4 w-4 stroke-[3]" />
-                <span>Mark Ready for Pickup</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  onAttemptStatusChange(selectedPiece.id, 'Collected');
-                  setSelectedPieceId(null);
-                }}
-                className="cursor-pointer bg-brand-charcoal hover:bg-brand-charcoal/90 text-brand-cream font-bold text-xs py-3 rounded-xl transition-all flex items-center justify-center gap-1.5"
-              >
-                <ClipboardList className="h-4 w-4" />
-                <span>Mark Collected / Picked Up</span>
-              </button>
-
-              {selectedPiece.status !== 'Broken' && (
+              {selectedPiece.status === 'Broken' ? (
+                // Broken is an outcome, not a lifecycle step in progress — the
+                // only forward action here is resolving it, so the ordinary
+                // making-stage buttons are replaced rather than shown alongside
+                // a modal that could be skipped by clicking past it.
                 <button
-                  onClick={() => onAttemptStatusChange(selectedPiece.id, 'Broken')}
-                  className="col-span-2 cursor-pointer bg-red-50 hover:bg-red-100 border border-red-300 text-red-700 font-bold text-xs py-3 rounded-xl transition-all flex items-center justify-center gap-1.5"
+                  onClick={() => {
+                    setResolveTargetId(selectedPiece.id);
+                    setResolveType(null);
+                    setResolvePerformer('');
+                    setResolveNote('');
+                    setResolveError('');
+                  }}
+                  className="col-span-2 cursor-pointer bg-brand-charcoal hover:bg-brand-charcoal/90 text-brand-cream font-bold text-xs py-3 rounded-xl transition-all flex items-center justify-center gap-1.5"
                 >
-                  <AlertCircle className="h-4 w-4" />
-                  <span>Mark as Broken</span>
+                  <ClipboardList className="h-4 w-4" />
+                  <span>Resolve Broken Piece</span>
                 </button>
+              ) : (
+                <>
+                  <button
+                    onClick={() => {
+                      onAttemptStatusChange(selectedPiece.id, 'Ready for Pickup');
+                      setSelectedPieceId(null);
+                    }}
+                    className="cursor-pointer bg-green-600 hover:bg-green-700 text-brand-cream font-bold text-xs py-3 rounded-xl transition-all shadow-sm flex items-center justify-center gap-1.5"
+                  >
+                    <Check className="h-4 w-4 stroke-[3]" />
+                    <span>Mark Ready for Pickup</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      onAttemptStatusChange(selectedPiece.id, 'Collected');
+                      setSelectedPieceId(null);
+                    }}
+                    className="cursor-pointer bg-brand-charcoal hover:bg-brand-charcoal/90 text-brand-cream font-bold text-xs py-3 rounded-xl transition-all flex items-center justify-center gap-1.5"
+                  >
+                    <ClipboardList className="h-4 w-4" />
+                    <span>Mark Collected / Picked Up</span>
+                  </button>
+
+                  <button
+                    onClick={() => onAttemptStatusChange(selectedPiece.id, 'Broken')}
+                    className="col-span-2 cursor-pointer bg-red-50 hover:bg-red-100 border border-red-300 text-red-700 font-bold text-xs py-3 rounded-xl transition-all flex items-center justify-center gap-1.5"
+                  >
+                    <AlertCircle className="h-4 w-4" />
+                    <span>Mark as Broken</span>
+                  </button>
+                </>
               )}
             </div>
 
@@ -1120,6 +1147,128 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                   className="bg-red-600 hover:bg-red-700 text-brand-cream font-bold text-xs py-3 rounded-xl cursor-pointer transition-colors shadow-sm"
                 >
                   Confirm Broken
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ================= RESOLVE BROKEN PIECE MODAL ================= */}
+      {resolveTargetId && (() => {
+        const target = pieces.find(p => p.id === resolveTargetId);
+        if (!target) return null;
+
+        const RESOLUTION_TYPES = ['Replaced', 'Refunded', 'Other'] as const;
+
+        return (
+          <div className="fixed inset-0 bg-brand-charcoal/60 backdrop-blur-xs z-60 flex items-center justify-center p-4">
+            <div className="bg-white border border-brand-clay rounded-3xl p-6 shadow-2xl max-w-md w-full space-y-4 text-left animate-in zoom-in-95 duration-150">
+
+              <div className="flex items-start gap-3 border-b border-brand-clay/60 pb-3">
+                <div className="h-10 w-10 rounded-2xl bg-brand-charcoal/10 text-brand-charcoal flex items-center justify-center shrink-0">
+                  <ClipboardList className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-display text-base font-bold text-brand-charcoal">Resolve Broken Piece</h3>
+                  <p className="text-[11px] font-semibold text-brand-charcoal/60">
+                    {target.pieceCode || target.id} · {target.customerName}
+                  </p>
+                </div>
+              </div>
+
+              <p className="text-[11px] font-semibold text-brand-charcoal/70 bg-brand-cream/60 border border-brand-clay/50 rounded-xl p-2.5">
+                This closes the piece out as Collected. Choose how it was resolved with the customer.
+              </p>
+
+              <div className="space-y-3.5 text-xs">
+                <div className="space-y-1.5">
+                  <label className="font-bold text-brand-charcoal/60 block">Resolution *</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {RESOLUTION_TYPES.map(type => (
+                      <button
+                        key={type}
+                        type="button"
+                        onClick={() => { setResolveType(type); setResolveError(''); }}
+                        className={`py-2.5 rounded-xl border font-bold text-center transition-colors cursor-pointer ${
+                          resolveType === type
+                            ? 'bg-brand-charcoal text-brand-cream border-brand-charcoal'
+                            : 'bg-brand-cream border-brand-clay text-brand-charcoal hover:bg-brand-sand'
+                        }`}
+                      >
+                        {type}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-brand-charcoal/60 block">Staff member recording this *</label>
+                  <select
+                    value={resolvePerformer}
+                    onChange={e => { setResolvePerformer(e.target.value); setResolveError(''); }}
+                    className="w-full bg-brand-cream border border-brand-clay rounded-xl p-2.5 font-bold text-brand-charcoal cursor-pointer"
+                  >
+                    <option value="">Select staff member...</option>
+                    {assignableStaff.map(s => (
+                      <option key={s.id} value={s.name}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-brand-charcoal/60 block">
+                    Note{resolveType === 'Other' ? ' *' : ' (optional)'}
+                  </label>
+                  <textarea
+                    value={resolveNote}
+                    onChange={e => { setResolveNote(e.target.value); setResolveError(''); }}
+                    rows={3}
+                    placeholder={resolveType === 'Other' ? 'Describe how this was resolved…' : 'Optional additional detail…'}
+                    className="w-full bg-brand-cream border border-brand-clay rounded-xl p-2.5 font-semibold text-brand-charcoal"
+                  />
+                </div>
+
+                {resolveError && (
+                  <p className="text-[11px] font-bold text-red-600 bg-red-50 border border-red-200 rounded-xl p-2.5">
+                    {resolveError}
+                  </p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <button
+                  onClick={() => { setResolveTargetId(null); setResolveError(''); }}
+                  className="bg-brand-sand/60 hover:bg-brand-sand text-brand-charcoal font-bold text-xs py-3 rounded-xl cursor-pointer transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    if (!resolveType) {
+                      setResolveError('Choose how this was resolved.');
+                      return;
+                    }
+                    if (!resolvePerformer) {
+                      setResolveError('Select the staff member recording this.');
+                      return;
+                    }
+                    if (resolveType === 'Other' && !resolveNote.trim()) {
+                      setResolveError('Add a note describing the resolution.');
+                      return;
+                    }
+                    const formattedReason = `Resolved: ${resolveType}${resolveNote.trim() ? ` — ${resolveNote.trim()}` : ''}`;
+                    await handleUpdatePieceStatus(resolveTargetId, 'Collected', resolvePerformer, formattedReason);
+                    setResolveTargetId(null);
+                    setResolveType(null);
+                    setResolvePerformer('');
+                    setResolveNote('');
+                    setResolveError('');
+                    setSelectedPieceId(null);
+                  }}
+                  className="bg-brand-charcoal hover:bg-brand-charcoal/90 text-brand-cream font-bold text-xs py-3 rounded-xl cursor-pointer transition-colors shadow-sm"
+                >
+                  Confirm Resolution
                 </button>
               </div>
             </div>
