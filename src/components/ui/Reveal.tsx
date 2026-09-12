@@ -34,11 +34,26 @@ const VARIANTS: Variants = {
 export default function Reveal({
   children,
   className,
-  index = 0
+  index = 0,
+  onMount = false
 }: {
   children: ReactNode;
   className?: string;
   index?: number;
+  /**
+   * Play on mount instead of on scroll.
+   *
+   * The default is viewport-triggered, which is why a heading at the top of a
+   * page appears to animate "on load" — it is simply already in view when the
+   * page mounts. Anything below the fold waits for the scroll instead, which is
+   * the right behaviour for a long page and the wrong one for a grid the
+   * customer is looking straight at.
+   *
+   * Opt-in, so every existing caller keeps the behaviour it has. The variants,
+   * timing and stagger are shared either way, which is the point: change the
+   * animation once and both triggers follow.
+   */
+  onMount?: boolean;
 }) {
   const prefersReducedMotion = useReducedMotion();
 
@@ -50,8 +65,9 @@ export default function Reveal({
     <motion.div
       variants={VARIANTS}
       initial="hidden"
-      whileInView="show"
-      viewport={{ once: true, amount: 0.2 }}
+      {...(onMount
+        ? { animate: 'show' }
+        : { whileInView: 'show', viewport: { once: true, amount: 0.2 } })}
       custom={index}
       className={className}
     >

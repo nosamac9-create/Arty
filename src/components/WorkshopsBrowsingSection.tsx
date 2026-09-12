@@ -6,7 +6,6 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import Reveal from './ui/Reveal';
-import { ScrollReveal } from './ui/ScrollReveal';
 import { Search, SlidersHorizontal, RefreshCw, ChevronDown, Clock, Sparkles, Paintbrush } from 'lucide-react';
 import { BackButton } from './ui/BackButton';
 import { WorkshopCardSlideshow, workshopGalleryImages } from './ui/WorkshopCardSlideshow';
@@ -365,12 +364,19 @@ export const WorkshopsBrowsingSection: React.FC = () => {
               // — so a workshop with other open dates is never shown as full.
               const isFull = isWorkshopFullyBooked(ws.id, { workshopSessions }, todayDateStr, gridSeats.get);
               return (
-                <ScrollReveal
+                /* The same Reveal the page headings use, so the grid and the
+                   type above it share one fade-and-rise and stay in step if it
+                   is ever retuned. `onMount` is what changes: the cards played
+                   on scroll and stayed invisible until reached, which on a page
+                   the customer has just opened reads as nothing having loaded.
+
+                   The stagger index is capped — 0.1s each is right for a few
+                   cards and turns into a slow cascade once a search returns a
+                   dozen. Past the sixth they all land together. */
+                <Reveal
                   key={ws.id}
-                  once
-                  viewOptions={{ once: true, amount: 0.3, margin: '0px 0px -80px 0px' }}
-                  transition={{ delay: cardIndex * 0.12, duration: 0.5, ease: 'easeOut' }}
-                  variants={{ hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0 } }}
+                  onMount
+                  index={Math.min(cardIndex, 5)}
                   className="h-full"
                 >
                 <div
@@ -484,7 +490,7 @@ export const WorkshopsBrowsingSection: React.FC = () => {
                     </div>
                   )}
                 </div>
-                </ScrollReveal>
+                </Reveal>
               );
             })}
           </div>
