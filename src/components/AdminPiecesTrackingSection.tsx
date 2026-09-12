@@ -35,6 +35,7 @@ import { formatDateTime } from '../utils/calendarConfig';
 import { hasWebsiteAccount } from '../utils/accountUtils';
 import { matchesQuery, useDebouncedValue } from '../utils/search';
 import { usePagination, TablePager } from './ui/TablePager';
+import { ConsoleModal } from './ui/ConsoleModal';
 
 /**
  * Reached by their own buttons underneath the dropdown, so they are left out of
@@ -823,24 +824,71 @@ export const AdminPiecesTrackingSection: React.FC = () => {
 
       {/* PIECE DETAIL DIALOG MODAL */}
       {selectedPiece && (
-        <div className="fixed inset-0 bg-brand-charcoal/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-brand-cream border border-brand-clay rounded-3xl p-6 shadow-2xl max-w-3xl w-full max-h-[calc(100vh-3rem)] overflow-y-auto always-scrollbar text-left space-y-5 animate-in zoom-in-95 duration-200">
+        <ConsoleModal
+          maxWidth="max-w-3xl"
+          onClose={() => setSelectedPieceId(null)}
+          title={
+            <span className="flex flex-col">
+              <span className="text-[10px] font-bold text-brand-terracotta font-mono uppercase tracking-widest">PIECE TRACKER DETAIL</span>
+              <span className="font-display text-xl font-bold text-brand-charcoal">Code: {selectedPiece.pieceCode || selectedPiece.id}</span>
+            </span>
+          }
+          footer={
+            <div className="w-full grid grid-cols-2 gap-3">
+              {selectedPiece.status === 'Broken' ? (
+                // Broken is an outcome, not a lifecycle step in progress — the
+                // only forward action here is resolving it, so the ordinary
+                // making-stage buttons are replaced rather than shown alongside
+                // a modal that could be skipped by clicking past it.
+                <button
+                  onClick={() => {
+                    setResolveTargetId(selectedPiece.id);
+                    setResolveType(null);
+                    setResolvePerformer('');
+                    setResolveNote('');
+                    setResolveError('');
+                  }}
+                  className="col-span-2 cursor-pointer bg-brand-charcoal hover:bg-brand-charcoal/90 text-brand-cream font-bold text-xs py-3 rounded-xl transition-all flex items-center justify-center gap-1.5"
+                >
+                  <ClipboardList className="h-4 w-4" />
+                  <span>Resolve Broken Piece</span>
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={() => {
+                      onAttemptStatusChange(selectedPiece.id, 'Ready for Pickup');
+                      setSelectedPieceId(null);
+                    }}
+                    className="cursor-pointer bg-green-600 hover:bg-green-700 text-brand-cream font-bold text-xs py-3 rounded-xl transition-all shadow-sm flex items-center justify-center gap-1.5"
+                  >
+                    <Check className="h-4 w-4 stroke-[3]" />
+                    <span>Mark Ready for Pickup</span>
+                  </button>
 
-            {/* Modal Header */}
-            <div className="flex justify-between items-center border-b border-brand-clay/60 pb-3">
-              <div>
-                <span className="text-[10px] font-bold text-brand-terracotta font-mono uppercase tracking-widest block">PIECE TRACKER DETAIL</span>
-                <h3 className="font-display text-xl font-bold text-brand-charcoal">
-                  <span>Code: {selectedPiece.pieceCode || selectedPiece.id}</span>
-                </h3>
-              </div>
-              <button
-                onClick={() => setSelectedPieceId(null)}
-                className="p-1 rounded-lg text-brand-charcoal hover:bg-brand-sand cursor-pointer focus:outline-none"
-              >
-                <X className="h-5 w-5" />
-              </button>
+                  <button
+                    onClick={() => {
+                      onAttemptStatusChange(selectedPiece.id, 'Collected');
+                      setSelectedPieceId(null);
+                    }}
+                    className="cursor-pointer bg-brand-charcoal hover:bg-brand-charcoal/90 text-brand-cream font-bold text-xs py-3 rounded-xl transition-all flex items-center justify-center gap-1.5"
+                  >
+                    <ClipboardList className="h-4 w-4" />
+                    <span>Mark Collected / Picked Up</span>
+                  </button>
+
+                  <button
+                    onClick={() => onAttemptStatusChange(selectedPiece.id, 'Broken')}
+                    className="col-span-2 cursor-pointer bg-red-50 hover:bg-red-100 border border-red-300 text-red-700 font-bold text-xs py-3 rounded-xl transition-all flex items-center justify-center gap-1.5"
+                  >
+                    <AlertCircle className="h-4 w-4" />
+                    <span>Mark as Broken</span>
+                  </button>
+                </>
+              )}
             </div>
+          }
+        >
 
             {/* Modal Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -999,63 +1047,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
 
             </div>
 
-            {/* Action buttons panel */}
-            <div className="pt-4 border-t border-brand-clay/60 grid grid-cols-2 gap-3">
-              {selectedPiece.status === 'Broken' ? (
-                // Broken is an outcome, not a lifecycle step in progress — the
-                // only forward action here is resolving it, so the ordinary
-                // making-stage buttons are replaced rather than shown alongside
-                // a modal that could be skipped by clicking past it.
-                <button
-                  onClick={() => {
-                    setResolveTargetId(selectedPiece.id);
-                    setResolveType(null);
-                    setResolvePerformer('');
-                    setResolveNote('');
-                    setResolveError('');
-                  }}
-                  className="col-span-2 cursor-pointer bg-brand-charcoal hover:bg-brand-charcoal/90 text-brand-cream font-bold text-xs py-3 rounded-xl transition-all flex items-center justify-center gap-1.5"
-                >
-                  <ClipboardList className="h-4 w-4" />
-                  <span>Resolve Broken Piece</span>
-                </button>
-              ) : (
-                <>
-                  <button
-                    onClick={() => {
-                      onAttemptStatusChange(selectedPiece.id, 'Ready for Pickup');
-                      setSelectedPieceId(null);
-                    }}
-                    className="cursor-pointer bg-green-600 hover:bg-green-700 text-brand-cream font-bold text-xs py-3 rounded-xl transition-all shadow-sm flex items-center justify-center gap-1.5"
-                  >
-                    <Check className="h-4 w-4 stroke-[3]" />
-                    <span>Mark Ready for Pickup</span>
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      onAttemptStatusChange(selectedPiece.id, 'Collected');
-                      setSelectedPieceId(null);
-                    }}
-                    className="cursor-pointer bg-brand-charcoal hover:bg-brand-charcoal/90 text-brand-cream font-bold text-xs py-3 rounded-xl transition-all flex items-center justify-center gap-1.5"
-                  >
-                    <ClipboardList className="h-4 w-4" />
-                    <span>Mark Collected / Picked Up</span>
-                  </button>
-
-                  <button
-                    onClick={() => onAttemptStatusChange(selectedPiece.id, 'Broken')}
-                    className="col-span-2 cursor-pointer bg-red-50 hover:bg-red-100 border border-red-300 text-red-700 font-bold text-xs py-3 rounded-xl transition-all flex items-center justify-center gap-1.5"
-                  >
-                    <AlertCircle className="h-4 w-4" />
-                    <span>Mark as Broken</span>
-                  </button>
-                </>
-              )}
-            </div>
-
-          </div>
-        </div>
+        </ConsoleModal>
       )}
 
       {/* Backward Move Confirmation Modal */}
