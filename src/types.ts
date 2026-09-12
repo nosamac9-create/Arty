@@ -913,7 +913,7 @@ export interface BirthdayPackage {
 
   price: number;
   pricingType: 'Per child' | 'Per person' | 'Fixed price';
-  /** Customer-visible pricing label, e.g. "Per Child". */
+  /** Customer-visible pricing label, e.g. "Per person". */
   pricingLabel?: string;
 
   duration: string; // e.g. "2 Hours"
@@ -1015,11 +1015,11 @@ export const DEFAULT_BIRTHDAY_FORM_FIELDS: BirthdayFormField[] = [
   { id: 'bf-5', key: 'bookingDate', label: 'Date / Day', type: 'date', required: true, enabled: true, order: 4, system: true },
   { id: 'bf-6', key: 'bookingTime', label: 'Time', type: 'time', required: true, enabled: true, order: 5, system: true },
   {
-    id: 'bf-7', key: 'balloonColor', label: 'Balloon Color', type: 'dropdown', required: false, enabled: true, order: 6,
+    id: 'bf-7', key: 'balloonColor', label: 'Pick a balloon colour 🎈', type: 'dropdown', required: false, enabled: true, order: 6,
     options: ['Pink & White', 'Pastel Blue & White', 'Gold & Cream', 'Rose Gold & Blush', 'Sage Green & Neutral', 'Rainbow Multi-Color', 'Custom Mix']
   },
   {
-    id: 'bf-8', key: 'drinksChoice', label: 'Drinks — coffee or fresh juices of your choice', type: 'dropdown', required: false, enabled: true, order: 7,
+    id: 'bf-8', key: 'drinksChoice', label: 'Choose your drinks', type: 'dropdown', required: false, enabled: true, order: 7,
     options: [
       'Fresh Juices (Orange, Lemonade, Watermelon)',
       'Specialty Coffee Bar (Latte, Cappuccino, Spanish Latte)',
@@ -1040,10 +1040,10 @@ export const DEFAULT_BIRTHDAY_PACKAGES: BirthdayPackage[] = [
     name: 'Canvas & Create',
     image: 'https://images.unsplash.com/photo-1513151233558-d860c5398176?auto=format&fit=crop&w=800&q=80',
     shortDescription: 'Pre-sketched canvas, acrylic painting, balloons and studio decor.',
-    fullDescription: 'A creative celebration in our studio: private space, your choice of one painting activity per child, balloon decoration and complimentary beverages.',
+    fullDescription: 'A creative celebration in our studio: private space, your choice of one painting activity per person, balloon decoration and complimentary beverages.',
     price: 165,
-    pricingType: 'Per child',
-    pricingLabel: 'Per Child',
+    pricingType: 'Per person',
+    pricingLabel: 'Per person',
     duration: '2 Hours',
     minGuests: 5,
     maxGuests: 20,
@@ -1081,10 +1081,10 @@ export const DEFAULT_BIRTHDAY_PACKAGES: BirthdayPackage[] = [
     name: 'Pottery Party',
     image: 'https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?auto=format&fit=crop&w=800&q=80',
     shortDescription: 'Handbuilding clay, wheel throwing, firing service and studio decor.',
-    fullDescription: 'A hands-on clay celebration: private studio space, your choice of one pottery activity per child, balloon decoration and complimentary beverages.',
+    fullDescription: 'A hands-on clay celebration: private studio space, your choice of one pottery activity per person, balloon decoration and complimentary beverages.',
     price: 200,
-    pricingType: 'Per child',
-    pricingLabel: 'Per Child',
+    pricingType: 'Per person',
+    pricingLabel: 'Per person',
     duration: '2.5 Hours',
     minGuests: 5,
     maxGuests: 20,

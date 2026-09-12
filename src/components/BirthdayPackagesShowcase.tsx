@@ -209,7 +209,14 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
               as oversized rather than as an object sitting on the page. With the
               section's own px-4 that leaves 32px of sand either side. From 640px
               up the card is already inset by the 900px cap. */}
-          <ul className="relative mx-auto mt-7 max-w-[900px] list-none space-y-5 px-4 sm:px-0 lg:mt-9 lg:space-y-6">
+          {/* A grid with equal rows rather than a block flow with margins.
+              Fixing the image above stops a portrait upload inflating one
+              ticket, but each <li> still sizes to its own content — and these
+              packages genuinely differ, one carrying feature chips and an Ages
+              row that another has not. `auto-rows-fr` makes every row the
+              height of the tallest, so the three match whatever staff put in
+              them. `gap` replaces `space-y`, which does nothing in a grid. */}
+          <ul className="relative mx-auto mt-7 grid max-w-[900px] list-none auto-rows-fr gap-5 px-4 sm:px-0 lg:mt-9 lg:gap-6">
             {packages.map((pkg, index) => {
               const colour = TICKET_COLOURWAYS[index % TICKET_COLOURWAYS.length];
 
@@ -251,7 +258,7 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                       }
                     }}
                     aria-label={`${pkg.name} — see what's included`}
-                    className="package-ticket group relative flex w-full cursor-pointer flex-col overflow-hidden rounded-[4px] text-start transition-transform duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-charcoal motion-safe:hover:-translate-y-0.5 sm:min-h-[240px] sm:flex-row lg:min-h-[300px]"
+                    className="package-ticket group relative flex h-full w-full cursor-pointer flex-col overflow-hidden rounded-[4px] text-start transition-transform duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-charcoal motion-safe:hover:-translate-y-0.5 sm:min-h-[240px] sm:flex-row lg:min-h-[300px]"
                     style={{
                       backgroundColor: colour.card,
                       color: TICKET_INK,
@@ -267,11 +274,27 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                       className="relative h-[168px] w-full shrink-0 overflow-hidden sm:h-auto sm:w-[170px] lg:w-[240px]"
                       style={{ backgroundColor: colour.photo }}
                     >
+                      {/* Absolutely positioned, which is the whole fix.
+                          In flow, `h-full` on this image resolved against a
+                          parent that is `sm:h-auto` — an indeterminate height —
+                          so the percentage fell back to the image's intrinsic
+                          size scaled to the 170/240px column. A portrait upload
+                          therefore rendered several hundred pixels tall and
+                          became the flex line's cross size, dragging the whole
+                          ticket with it. Content could not be the cause: the
+                          content side is `justify-center` and the tallest card
+                          had the least in it.
+
+                          Out of flow, the panel has no in-flow content, so the
+                          card's height comes from its content and min-height,
+                          the panel stretches to match, and object-cover crops
+                          whatever shape staff upload — portrait, landscape or
+                          square. */}
                       {pkg.image && (
                         <AppImage
                           src={pkg.image}
                           alt=""
-                          className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]"
+                          className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]"
                           referrerPolicy="no-referrer"
                         />
                       )}

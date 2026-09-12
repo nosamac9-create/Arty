@@ -77,8 +77,10 @@ export const AdminEventsSection: React.FC = () => {
       shortDescription: '',
       fullDescription: '',
       price: 0,
-      pricingType: 'Per child',
-      pricingLabel: 'Per Child',
+      // Defaults for a newly created package. Existing packages keep whatever
+      // is stored on them and are edited in the package editor.
+      pricingType: 'Per person',
+      pricingLabel: 'Per person',
       duration: '2 Hours',
       minGuests: 1,
       maxGuests: 20,

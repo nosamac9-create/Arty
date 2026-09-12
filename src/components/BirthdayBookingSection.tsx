@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { useApp } from '../context/AppContext';
 import {
@@ -133,13 +133,37 @@ export const BirthdayBookingSection: React.FC = () => {
 
   // The selected package is held by id and resolved from the shared record.
   const [selectedPkgId, setSelectedPkgId] = useState<string>('');
+  /**
+   * Whether the arriving package has already been used to advance past step 1.
+   *
+   * A ref, not state: this must not re-trigger the effect, and it must survive
+   * the visitor going back to step 1 to change their mind — otherwise the effect
+   * would push them straight forward again and step 1 would be unreachable.
+   */
+  const skippedPackageStep = useRef(false);
+
   useEffect(() => {
     if (publishedBirthdayPackages.length === 0) return;
     const match = publishedBirthdayPackages.find(
       p => p.id === selectedBirthdayPackage || p.name === selectedBirthdayPackage
     );
     // Only what the visitor picked on the packages page — never a default.
-    if (match) setSelectedPkgId(prev => prev || match.id);
+    if (!match) return;
+    setSelectedPkgId(prev => prev || match.id);
+
+    // Arriving from "Choose this package" means step 1 has already been
+    // answered, so asking again is the same question twice. Open on Party
+    // Details with step 1 behind them — it stays in the timeline, stays
+    // clickable (furthest is 2), and shows its tick because isDone is n < step.
+    //
+    // Conditional on a package actually being carried. "See packages" on the
+    // home page clears the selection deliberately, and anyone arriving fresh
+    // has none, so those paths still land on step 1 exactly as before.
+    if (!skippedPackageStep.current) {
+      skippedPackageStep.current = true;
+      setStep(prev => (prev === 1 ? 2 : prev));
+      setFurthest(prev => Math.max(prev, 2));
+    }
   }, [publishedBirthdayPackages, selectedBirthdayPackage]);
 
   const selectedPackage = useMemo(
@@ -1081,10 +1105,18 @@ export const BirthdayBookingSection: React.FC = () => {
                               setSelectedPkgId(pkg.id);
                               setSelectedBirthdayPackage(pkg.id);
                             }}
-                            className={`overflow-hidden rounded-[28px] border-2 text-start transition-colors cursor-pointer ${
+                            /* Rings on both states, no border. `border-2
+                               border-transparent` was here to reserve the space
+                               the terracotta selection border would take, so the
+                               card could not shift — but a background paints
+                               under its own border, so `bg-white` showed through
+                               those 2px as a white band around the image. A ring
+                               draws outside the box: same no-shift guarantee,
+                               nothing between the image and the card edge. */
+                            className={`overflow-hidden rounded-[28px] bg-white text-start transition-shadow cursor-pointer ${
                               isOn
-                                ? 'border-brand-terracotta bg-white'
-                                : 'border-transparent bg-white ring-1 ring-brand-clay hover:ring-brand-muted'
+                                ? 'ring-2 ring-brand-terracotta'
+                                : 'ring-1 ring-brand-clay hover:ring-brand-muted'
                             }`}
                           >
                             {pkg.image && (
