@@ -5,7 +5,6 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useReducedMotion } from 'motion/react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface ImageSliderProps {
   images: string[];
@@ -115,10 +114,6 @@ export function ImageSlider({
     return () => clearInterval(timer);
   }, [autoPlay, interval, slides.length, prefersReducedMotion, isPaused]);
 
-  /** Steps the stack, and holds it the same way a manual pick does. */
-  const step = (direction: 1 | -1) =>
-    selectSlide((currentIndex + direction + slides.length) % slides.length);
-
   if (slides.length === 0) {
     return <div className={`bg-brand-sand ${className}`} />;
   }
@@ -170,10 +165,22 @@ export function ImageSlider({
               const isCenter = pos === 0;
               const isAdjacent = Math.abs(pos) === 1;
 
+              // The peek fades out toward the OUTER edge, so the strip ends in
+              // nothing rather than in a hard vertical cut against the beige.
+              // Per side, because the direction differs: the left peek fades
+              // leftward, the right one rightward. Inline rather than a Tailwind
+              // class — the direction is decided at runtime, and Tailwind only
+              // emits classes it can find in the source text.
+              const peekFade = isCenter
+                ? undefined
+                : pos < 0
+                  ? 'linear-gradient(to right, transparent 0%, black 65%)'
+                  : 'linear-gradient(to left, transparent 0%, black 65%)';
+
               return (
                 <div
                   key={slide}
-                  className="absolute h-[86%] w-[70%] transition-all duration-500 ease-in-out"
+                  className="absolute h-full w-[88%] transition-all duration-500 ease-in-out"
                   style={{
                     transform: `
                       translateX(${pos * 45}%)
@@ -183,14 +190,22 @@ export function ImageSlider({
                     zIndex: isCenter ? 10 : isAdjacent ? 5 : 1,
                     opacity: isCenter ? 1 : isAdjacent ? 0.4 : 0,
                     filter: isCenter ? 'blur(0px)' : 'blur(4px)',
-                    visibility: Math.abs(pos) > 1 ? 'hidden' : 'visible'
+                    visibility: Math.abs(pos) > 1 ? 'hidden' : 'visible',
+                    maskImage: peekFade,
+                    WebkitMaskImage: peekFade
                   }}
                   aria-hidden={!isCenter}
                 >
+                  {/* Rounded, but no border. The beige outline that used to sit
+                      here was `border border-brand-clay`; the radius was never
+                      the problem, and square corners on an inset card read as
+                      unfinished. rounded-2xl is the original radius — smaller
+                      than the container's own, which suits a card sitting inside
+                      it rather than filling it. */}
                   <img
                     src={resolveSrc(slide)}
                     alt={isCenter ? alt : ''}
-                    className="h-full w-full rounded-2xl border border-brand-clay object-cover shadow-card"
+                    className="h-full w-full rounded-2xl object-cover"
                     referrerPolicy="no-referrer"
                     onError={() => handleError(slide)}
                   />
@@ -200,32 +215,18 @@ export function ImageSlider({
           </div>
         )}
 
-        {/* Arrows — the studio's own button treatment, not the demo's. */}
-        {!single && (
-          <>
-            <button
-              type="button"
-              onClick={() => step(-1)}
-              aria-label="Previous photo"
-              className="absolute start-3 top-1/2 z-20 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-brand-clay bg-brand-cream/90 text-brand-charcoal shadow-card-sm backdrop-blur-sm transition-colors hover:bg-brand-cream cursor-pointer"
-            >
-              <ChevronLeft className="h-5 w-5 flip-rtl" />
-            </button>
-            <button
-              type="button"
-              onClick={() => step(1)}
-              aria-label="Next photo"
-              className="absolute end-3 top-1/2 z-20 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-brand-clay bg-brand-cream/90 text-brand-charcoal shadow-card-sm backdrop-blur-sm transition-colors hover:bg-brand-cream cursor-pointer"
-            >
-              <ChevronRight className="h-5 w-5 flip-rtl" />
-            </button>
-          </>
-        )}
+        {/* No arrows. The thumbnail strip below is the control — it shows every
+            photo at once, says which one is current, and is a larger target.
+            Overlay arrows duplicated it while hiding part of the image. */}
       </div>
 
       {/* Thumbnails — the primary control. One image needs none. */}
       {showThumbnails && !single && (
-        <div className="flex gap-3 overflow-x-auto no-scrollbar">
+        /* Wraps rather than scrolling. `overflow-x-auto no-scrollbar` hid the
+           scrollbar too, so past roughly seven photos the rest were simply
+           unreachable-looking — nothing on screen suggested they existed.
+           Workshops carry at least three photos and no enforced maximum. */
+        <div className="flex flex-wrap gap-3">
           {slides.map((slide, i) => {
             const isActive = i === currentIndex;
             return (
