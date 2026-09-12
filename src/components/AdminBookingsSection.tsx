@@ -466,23 +466,47 @@ export const AdminBookingsSection: React.FC = () => {
                       {overdueBookings.map(b => {
                         const bTime = parseBookingDateTimeToRiyadhDate(b.date, b.time);
                         const remMs = (15 * 60 * 1000) - (getRiyadhNow().getTime() - bTime.getTime());
-                        const mStr = Math.max(0, Math.floor(remMs / 60000));
-                        const sStr = Math.max(0, Math.floor((remMs % 60000) / 1000));
                         return (
-                          <div 
-                            key={b.id} 
-                            onClick={() => {
-                              setSelectedBookingId(b.id);
-                              setShowNotifications(false);
-                            }}
-                            className="p-2.5 rounded-xl border border-amber-200 bg-amber-50/40 hover:bg-amber-50 cursor-pointer text-left space-y-1 transition-colors"
+                          <div
+                            key={b.id}
+                            className="p-2.5 rounded-xl border border-amber-200 bg-amber-50/40 hover:bg-amber-50 text-left space-y-1.5 transition-colors"
                           >
-                            <div className="flex justify-between font-mono font-bold text-[10px] text-brand-terracotta">
-                              <span>{b.id}</span>
-                              <span className="text-red-600 animate-pulse">Auto-cancel: {String(mStr).padStart(2, '0')}:{String(sStr).padStart(2, '0')}</span>
+                            <div
+                              onClick={() => {
+                                setSelectedBookingId(b.id);
+                                setShowNotifications(false);
+                              }}
+                              className="cursor-pointer space-y-1"
+                            >
+                              <div className="flex justify-between font-mono font-bold text-[10px] text-brand-terracotta">
+                                <span>{b.id}</span>
+                                {remMs > 0 ? (
+                                  <span className="text-red-600 animate-pulse">
+                                    Auto-cancel: {String(Math.floor(remMs / 60000)).padStart(2, '0')}:{String(Math.floor((remMs % 60000) / 1000)).padStart(2, '0')}
+                                  </span>
+                                ) : (
+                                  <span className="text-red-600 animate-pulse">Cancelling...</span>
+                                )}
+                              </div>
+                              <p className="text-xs font-bold text-brand-charcoal">{b.customerName}</p>
+                              <p className="text-[10px] text-brand-charcoal/60">Scheduled: {b.time} ({b.workshopTitle})</p>
                             </div>
-                            <p className="text-xs font-bold text-brand-charcoal">{b.customerName}</p>
-                            <p className="text-[10px] text-brand-charcoal/60">Scheduled: {b.time} ({b.workshopTitle})</p>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setCancellingBookingId(b.id);
+                                if (queueWalkinIds.has(b.id)) {
+                                  setRefundOption('NotRefunded');
+                                } else {
+                                  setRefundOption(cancellationRefundDetails.eligible ? 'Refunded' : 'NotRefunded');
+                                }
+                                setShowNotifications(false);
+                              }}
+                              className="cursor-pointer w-full bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 text-[10px] font-bold py-1.5 rounded-lg transition-colors text-center"
+                            >
+                              Cancel Booking
+                            </button>
                           </div>
                         );
                       })}
