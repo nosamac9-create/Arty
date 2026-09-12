@@ -206,7 +206,12 @@ export const CheckoutInfoSection: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         
         {/* Left Form Column */}
-        <div className="lg:col-span-7 bg-brand-cream rounded-[28px] p-6 sm:p-8 border border-brand-clay shadow-card-sm">
+        {/* shadow-card, matching the month grid on the workshop detail page —
+            the same 0 18px 44px warm shadow, not a new one. The left panel was
+            on shadow-card-sm (8px/20px) and the right had none at all, so both
+            sat flat against the sand background. Colours, radius, padding and
+            border are untouched; only the lift changes. */}
+        <div className="lg:col-span-7 bg-brand-cream rounded-[28px] p-6 sm:p-8 border border-brand-clay shadow-card">
           
           {/* Quick Sign in banner if not logged in */}
           {!currentUser ? (
@@ -370,7 +375,7 @@ export const CheckoutInfoSection: React.FC = () => {
 
         {/* Right Summary Column */}
         <div className="lg:col-span-5">
-          <div className="bg-brand-sand/30 rounded-[28px] p-6 border border-brand-clay space-y-4">
+          <div className="bg-brand-sand/30 rounded-[28px] p-6 border border-brand-clay shadow-card space-y-4">
             <h3 className="font-display text-lg font-semibold text-brand-charcoal border-b border-brand-clay pb-3">
               Order Summary
             </h3>
@@ -408,7 +413,10 @@ export const CheckoutInfoSection: React.FC = () => {
                 <span className="font-semibold text-brand-charcoal">{pendingBooking.participants} {pendingBooking.participants === 1 ? 'guest' : 'guests'}</span>
               </div>
               <div className="flex justify-between">
-                <span>{birthday ? (birthdayPackage?.pricingLabel || 'Per child') : 'Price per person'}:</span>
+                {/* Fallback only — a package with a pricingLabel shows its own.
+                    "Per child" here disagreed with the "Price per person" beside
+                    it for a workshop, on the same line of the same panel. */}
+                <span>{birthday ? (birthdayPackage?.pricingLabel || 'Per person') : 'Price per person'}:</span>
                 <span className="font-semibold text-brand-charcoal">
                   {birthday ? (birthdayPackage?.price ?? 0) : workshop.price} SAR
                 </span>
