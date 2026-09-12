@@ -277,6 +277,61 @@ service-role-permitted send for this specific case.
 
 ## Cleanup
 
+### Customer notifications are matched on phone, not customer_id
+
+`CustomerNotificationBell` (and the My Pieces banners before it) select a
+customer's notifications with a digits-only comparison of `n.customerPhone`
+against `currentUser.phone`. The `notifications` table is **already** scoped by
+RLS to the signed-in customer (`notifications_customer_select`), so this second
+filter adds nothing but a way to fail: a notification whose stored phone is
+formatted differently from the customer's current one — a record created before
+a number was normalised, or a customer whose number was corrected — never reaches
+them, silently.
+
+`customer_id` is the real link and is already on the row. Carried over unchanged
+when the bell was built, deliberately: changing who sees which notification is
+not a UI decision and should not ride along in a presentation pass.
+
+### The notification bell is written twice
+
+`AdminSidebar` builds its own bell inline (`:220-250`) around a hand-inlined SVG
+rather than the lucide `Bell` the rest of the app uses, and clears by bulk-
+deleting (`clearAllNotifications('staff')`). `CustomerNotificationBell` is a
+separate component using lucide, marking individually read, and implementing the
+outside-click and Escape handling the staff one lacks.
+
+One shared component taking the icon, badge and panel, with the list and the
+clear action passed in, is the better end state — the two will otherwise drift.
+Not done here because it means editing the staff console, which the pass that
+created the customer bell deliberately did not touch.
+
+### The birthday band's text fails AA
+
+The home page's birthday section sits on `brand-sage` (#7C8F80) with cream text.
+Measured against that ground:
+
+| | |
+|---|---|
+| `brand-cream` body copy, pill, ticket meta | **3.20:1** — under AA (4.5:1) |
+| The 44px heading | 3.20:1 — passes as *large* text (3:1) |
+| `brand-cream/80`, `/75`, `/50` tints | worse still |
+
+#7C8F80 is mid-luminance, so nothing contrasts strongly with it in either
+direction: cream is 3.20:1, white 3.45:1, and `brand-charcoal` only 4.52:1 —
+passing with 0.02 of headroom, while `brand-ink` at 1.89:1 cannot be used on it
+at all.
+
+**Known and accepted for now, as a design decision.** Both alternatives were
+built and rejected on the screen: a lighter band (`brand-sage-soft` #E7EBE4) made
+the section read as empty, and charcoal-on-sage passes only by dropping every
+tonal level — heading, body and captions all one colour, hierarchy carried by
+size alone.
+
+Revisit as an accessibility item rather than a colour preference. The realistic
+fixes are a darker green than #7C8F80 that keeps cream above 4.5:1, or a
+different treatment for the text block itself (a panel behind the copy), not
+re-tinting the existing text.
+
 ### Deposit fallback hardcoded
 
 The `500` deposit fallback is repeated in four places rather than read from one source.
