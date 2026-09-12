@@ -7,6 +7,7 @@ import React, { useState } from 'react';
 import { PasswordField } from './PasswordField';
 import { useApp } from '../context/AppContext';
 import { ScrollReveal } from './ui/ScrollReveal';
+import Reveal from './ui/Reveal';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { Palette, Mail, Lock, User, Check, AlertCircle, ArrowLeft, LogIn, KeyRound, ShieldCheck, CheckCircle2, RefreshCw , Pin } from 'lucide-react';
 import { PhoneInput } from './PhoneInput';
@@ -323,11 +324,12 @@ export const AuthSection: React.FC = () => {
 
           {/* Read-only profile. Deliberately not inputs — these are changed by
               the studio, not here. */}
-          <ScrollReveal
-            once
-            viewOptions={{ once: true, amount: 0.2, margin: '0px 0px -80px 0px' }}
-            transition={{ delay: 0.24, duration: 0.5, ease: 'easeOut' }}
-            variants={{ hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0 } }}
+          {/* On mount, not on scroll. This page is a destination — someone
+              opened it to do one thing — so its panels must not wait to be
+              scrolled into view. Same Reveal the headings above already use. */}
+          <Reveal
+            onMount
+            index={2}
           >
             <div className="rounded-[28px] border border-brand-clay bg-white p-6 sm:p-7 shadow-card-sm text-start">
               <h2 className="font-display text-lg font-semibold text-brand-charcoal">Profile</h2>
@@ -352,14 +354,13 @@ export const AuthSection: React.FC = () => {
                 ))}
               </dl>
             </div>
-          </ScrollReveal>
+          </Reveal>
 
           {/* The one action: a new password. */}
-          <ScrollReveal
-            once
-            viewOptions={{ once: true, amount: 0.2, margin: '0px 0px -80px 0px' }}
-            transition={{ delay: 0.36, duration: 0.5, ease: 'easeOut' }}
-            variants={{ hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0 } }}
+          {/* A form the customer navigated here specifically to use. */}
+          <Reveal
+            onMount
+            index={3}
           >
             <div className="rounded-[28px] border border-brand-clay bg-white p-6 sm:p-7 shadow-card-sm text-start">
               <div className="flex items-start justify-between gap-4">
@@ -460,14 +461,15 @@ export const AuthSection: React.FC = () => {
                 </p>
               )}
             </div>
-          </ScrollReveal>
+          </Reveal>
 
           {/* Actions */}
-          <ScrollReveal
-            once
-            viewOptions={{ once: true, amount: 0.2, margin: '0px 0px -80px 0px' }}
-            transition={{ delay: 0.48, duration: 0.5, ease: 'easeOut' }}
-            variants={{ hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0 } }}
+          {/* Log Out lives in here. It sat below the fold on a short window,
+              invisible until scrolled to and then delayed a further 0.48s —
+              the control people look for when they cannot find anything else. */}
+          <Reveal
+            onMount
+            index={4}
           >
             <div className="space-y-3">
               {pendingBooking && (
@@ -478,25 +480,38 @@ export const AuthSection: React.FC = () => {
                 </div>
               )}
 
-              <div className="flex flex-col sm:flex-row gap-3">
-                <button
-                  onClick={() => setCustomerTab(pendingBooking ? 'checkout-info' : 'my-bookings')}
-                  className="flex-1 cursor-pointer rounded-full bg-brand-terracotta px-6 py-3.5 text-sm font-semibold text-brand-cream shadow-button transition-colors hover:bg-brand-terracotta-hover"
-                >
-                  {pendingBooking ? 'Continue Booking' : 'View My Bookings'}
-                </button>
+              {/* Centred rather than a two-column grid. "View My Bookings" is
+                  gone — My Bookings is already in the main nav — which left Log
+                  Out as the orphaned half of a `flex-1` row, stretched across
+                  the full width for no reason.
+
+                  The same element still renders as "Continue Booking" when a
+                  draft exists. That is a different button wearing the same
+                  markup: it returns to checkout, not to the bookings list, and
+                  nothing in the nav does it. Removing it outright would leave
+                  the notice above saying "you have an active booking draft"
+                  with no way to reach it. */}
+              <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
+                {pendingBooking && (
+                  <button
+                    onClick={() => setCustomerTab('checkout-info')}
+                    className="cursor-pointer rounded-full bg-brand-terracotta px-6 py-3.5 text-sm font-semibold text-brand-cream shadow-button transition-colors hover:bg-brand-terracotta-hover sm:min-w-[220px]"
+                  >
+                    Continue Booking
+                  </button>
+                )}
                 <button
                   onClick={() => {
                     logoutCustomer();
                     setAuthScreen('login');
                   }}
-                  className="flex-1 cursor-pointer rounded-full border border-brand-clay bg-brand-cream px-6 py-3.5 text-sm font-semibold text-brand-charcoal transition-colors hover:bg-brand-clay-soft"
+                  className="cursor-pointer rounded-full border border-brand-clay bg-brand-cream px-6 py-3.5 text-sm font-semibold text-brand-charcoal transition-colors hover:bg-brand-clay-soft sm:min-w-[220px]"
                 >
                   Log Out
                 </button>
               </div>
             </div>
-          </ScrollReveal>
+          </Reveal>
 
         </div>
       ) : (
