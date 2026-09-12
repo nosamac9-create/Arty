@@ -5,16 +5,14 @@
 
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Sparkles, Calendar, Box, Flame, Compass, Clock, LogIn, Hash , CheckCircle2, Check } from 'lucide-react';
+import { Calendar, Box, Flame, Compass, Clock, LogIn, Hash , CheckCircle2, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { PotteryPiece, stageCustomerLabel, migrateLegacyPieceStatus } from '../types';
-import { formatDateTime } from '../utils/calendarConfig';
 import Reveal from './ui/Reveal';
-import { ScrollReveal } from './ui/ScrollReveal';
 import { AppImage } from './ui/AppImage';
 
 export const MyPiecesSection: React.FC = () => {
   const {
-    pieces, setCustomerTab, currentUser, notifications, markNotificationAsRead,
+    pieces, setCustomerTab, currentUser,
     pipelineStages, workshops
   } = useApp();
 
@@ -33,13 +31,6 @@ export const MyPiecesSection: React.FC = () => {
     });
   }, [pieces, currentUser]);
 
-  // Filter notifications for current customer
-  const customerNotifs = React.useMemo(() => {
-    if (!currentUser) return [];
-    return notifications
-      .filter(n => n.type === 'customer' && n.customerPhone && currentUser.phone && n.customerPhone.replace(/\D/g, '') === currentUser.phone.replace(/\D/g, '') && !n.isRead)
-      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-  }, [notifications, currentUser]);
 
   /**
    * Customer-facing stages come from Settings → Piece Pipeline Stages: the ones
@@ -100,6 +91,63 @@ export const MyPiecesSection: React.FC = () => {
   };
 
   /**
+   * Pieces grouped the way a customer actually asks about them.
+   *
+   * "Is anything ready?" is the question people arrive with, so that is the
+   * first tab. The three making stages collapse into one: Created and First
+   * Burn and Colored are both "we still have it", and splitting them would make
+   * two tabs the customer can do nothing about.
+   *
+   * BROKEN HAS NO TAB, deliberately. It is an internal handling state — the
+   * tracker already refuses to show it (see getCustomerStageIndex below) and
+   * the customer is told to contact the café instead, never shown the damage.
+   * A tab labelled "Broken" would announce on the page exactly what the rest of
+   * this screen takes care not to. Broken pieces sit under In progress: not
+   * collectable, not collected, and the card's own treatment explains itself.
+   *
+   * Collected is customer-invisible as a PIPELINE STAGE — it has no dot on the
+   * tracker — but the pieces are still the customer's and worth being able to
+   * look back at, so they get the archive tab rather than disappearing.
+   */
+  const PIECE_TABS = ['Ready to collect', 'In progress', 'Collected'] as const;
+  type PieceTab = typeof PIECE_TABS[number];
+
+  const [activeTab, setActiveTab] = React.useState<PieceTab>('Ready to collect');
+
+  const categorizedPieces = React.useMemo(() => {
+    const groups: Record<PieceTab, PotteryPiece[]> = {
+      'Ready to collect': [],
+      'In progress': [],
+      Collected: []
+    };
+    for (const piece of userPieces) {
+      const status = migrateLegacyPieceStatus(piece.status);
+      if (status === 'Ready for Pickup') groups['Ready to collect'].push(piece);
+      else if (status === 'Collected') groups.Collected.push(piece);
+      else groups['In progress'].push(piece);
+    }
+    return groups;
+  }, [userPieces]);
+
+  const activeList = categorizedPieces[activeTab];
+
+  /**
+   * Display-only paging over the list already in memory, the same shape My
+   * Reservations uses. Six rather than five: this is a three-column grid, so six
+   * fills two whole rows at desktop and three at tablet, where five would leave
+   * a ragged last row at both.
+   */
+  const PAGE_SIZE = 6;
+  const [page, setPage] = React.useState(1);
+  const pageCount = Math.max(1, Math.ceil(activeList.length / PAGE_SIZE));
+
+  // Derived and clamped, not just reset on tab change: collecting the only piece
+  // on the last page shortens the list underneath the reader, and this pulls
+  // them back to a page that still exists rather than stranding them.
+  const currentPage = Math.min(page, pageCount);
+  const pagedList = activeList.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  /**
    * Broken is an internal handling state, so the customer tracker keeps showing the
    * last stage the piece actually reached rather than resetting to Created. The
    * customer is told to contact the café through the notification instead.
@@ -129,55 +177,17 @@ export const MyPiecesSection: React.FC = () => {
         </Reveal>
       </div>
 
-      {/* Customer Notifications Panel */}
-      {currentUser && customerNotifs.length > 0 && (
-        <div className="mb-8 space-y-3">
-          {customerNotifs.map((n) => (
-            <div
-              key={n.id}
-              className={`p-5 rounded-2xl border text-start flex justify-between items-start gap-4 transition-all duration-300 animate-in fade-in slide-in-from-left-4 ${
-                n.highlighted
-                  ? 'bg-gradient-to-r from-amber-50 to-brand-sand/30 border-brand-terracotta ring-4 ring-brand-terracotta/5 shadow-card-sm'
-                  : 'bg-brand-cream border-brand-clay/70 shadow-card-sm'
-              }`}
-            >
-              <div className="flex items-start gap-3.5">
-                <div className={`p-2.5 rounded-xl shrink-0 ${
-                  n.highlighted ? 'bg-brand-terracotta text-brand-cream animate-pulse' : 'bg-brand-sand text-brand-sage'
-                }`}>
-                  <Sparkles className="h-5 w-5" />
-                </div>
-                <div>
-                  <h4 className={`text-sm font-semibold ${n.highlighted ? 'text-brand-terracotta' : 'text-brand-charcoal'}`}>
-                    {n.title}
-                  </h4>
-                  <p className="text-xs text-brand-ink mt-1 leading-relaxed">
-                    {n.message}
-                  </p>
-                  <span className="text-[9px] text-brand-charcoal/45 font-semibold block mt-1.5">
-                    {formatDateTime(n.timestamp)}
-                  </span>
-                </div>
-              </div>
-
-              <button
-                onClick={() => markNotificationAsRead(n.id)}
-                className="text-[10px] font-semibold text-brand-sage hover:text-brand-terracotta bg-brand-sand/50 hover:bg-brand-sand px-3 py-1.5 rounded-lg border border-brand-clay transition-colors cursor-pointer shrink-0"
-              >
-                Dismiss
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* The piece-status notifications that used to stack here as full-width
+          banners now live behind the bell in the header — reachable from every
+          page rather than only from the one they are about, and no longer
+          pushing the pieces themselves below the fold. */}
 
       {/* Not Logged In State */}
       {!currentUser ? (
-        <ScrollReveal
-          once
-          viewOptions={{ once: true, amount: 0.3, margin: '0px 0px -80px 0px' }}
-          transition={{ delay: 0, duration: 0.5, ease: 'easeOut' }}
-          variants={{ hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0 } }}
+        /* Signed-out prompt — hiding it behind a scroll strands the one
+           person who most needs to see it. */
+        <Reveal
+          onMount
         >
         <div className="bg-white border border-brand-clay rounded-[28px] py-16 px-6 text-center max-w-md mx-auto space-y-4 shadow-card-sm">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-terracotta/10 text-brand-terracotta">
@@ -197,14 +207,12 @@ export const MyPiecesSection: React.FC = () => {
             <span>Sign In to Account</span>
           </button>
         </div>
-        </ScrollReveal>
+        </Reveal>
       ) : userPieces.length === 0 ? (
         /* Empty State for Logged-In User */
-        <ScrollReveal
-          once
-          viewOptions={{ once: true, amount: 0.3, margin: '0px 0px -80px 0px' }}
-          transition={{ delay: 0, duration: 0.5, ease: 'easeOut' }}
-          variants={{ hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0 } }}
+        /* Empty state; see above. */
+        <Reveal
+          onMount
         >
         <div className="bg-white border border-brand-clay rounded-[28px] py-16 px-6 text-center max-w-md mx-auto space-y-4 shadow-card-sm">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-terracotta/10 text-brand-terracotta">
@@ -224,23 +232,58 @@ export const MyPiecesSection: React.FC = () => {
             <span>Explore Workshops</span>
           </button>
         </div>
-        </ScrollReveal>
+        </Reveal>
       ) : (
         /* Grid of Piece Cards */
+        <>
+        {/* Tabs — the same treatment as My Reservations, counts included. */}
+        <div className="flex border-b border-brand-clay mb-8">
+          {PIECE_TABS.map(tab => (
+            <button
+              key={tab}
+              onClick={() => { setActiveTab(tab); setPage(1); }}
+              className={`px-6 py-3.5 text-sm font-semibold border-b-2 transition-colors relative cursor-pointer ${
+                activeTab === tab
+                  ? 'border-brand-terracotta text-brand-terracotta'
+                  : 'border-transparent text-brand-muted hover:text-brand-terracotta'
+              }`}
+            >
+              <span>{tab}</span>
+              {categorizedPieces[tab].length > 0 && (
+                <span className="ml-2 inline-flex items-center rounded-full bg-brand-terracotta/10 px-2 py-0.5 text-xs font-semibold text-brand-terracotta">
+                  {categorizedPieces[tab].length}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {activeList.length === 0 ? (
+          <Reveal onMount>
+            <div className="bg-white border border-brand-clay rounded-[28px] py-12 px-6 text-center max-w-md mx-auto shadow-card-sm">
+              <p className="text-sm text-brand-ink">
+                {activeTab === 'Ready to collect'
+                  ? 'Nothing waiting for you just yet. We will let you know the moment a piece is ready.'
+                  : activeTab === 'In progress'
+                    ? 'No pieces with us at the moment.'
+                    : 'Nothing collected yet.'}
+              </p>
+            </div>
+          </Reveal>
+        ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {userPieces.map((p, cardIndex) => {
+          {pagedList.map((p, cardIndex) => {
             const currentStageIdx = getCustomerStageIndex(p);
             const isReady = p.status === 'Ready for Pickup';
 
             const isBroken = p.status === 'Broken';
 
             return (
-              <ScrollReveal
+              /* Capped stagger, as on My Reservations. */
+              <Reveal
                 key={p.id}
-                once
-                viewOptions={{ once: true, amount: 0.3, margin: '0px 0px -80px 0px' }}
-                transition={{ delay: cardIndex * 0.12, duration: 0.5, ease: 'easeOut' }}
-                variants={{ hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0 } }}
+                onMount
+                index={Math.min(cardIndex, 5)}
               >
               <div
                 className={`relative bg-brand-cream rounded-[32px] p-6 shadow-card shadow-brand-charcoal/5 border flex flex-col justify-between transition-all duration-300 ${
@@ -384,10 +427,43 @@ export const MyPiecesSection: React.FC = () => {
                 </div>
 
               </div>
-              </ScrollReveal>
+              </Reveal>
             );
           })}
         </div>
+        )}
+
+        {/* Prev / Next only, hidden at a single page — the same control My
+            Reservations uses, for the same reason: numbered pages would need
+            their own truncation rules the moment the list grew. */}
+        {pageCount > 1 && (
+          <div className="mt-8 flex items-center justify-center gap-4">
+            <button
+              type="button"
+              onClick={() => setPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              aria-label="Previous page"
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-brand-clay bg-brand-cream text-brand-charcoal transition-colors hover:bg-brand-clay-soft disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-brand-cream cursor-pointer"
+            >
+              <ChevronLeft className="h-4 w-4 flip-rtl" />
+            </button>
+
+            <span aria-live="polite" className="text-sm font-semibold text-brand-charcoal ltr-numerals">
+              Page {currentPage} of {pageCount}
+            </span>
+
+            <button
+              type="button"
+              onClick={() => setPage(prev => Math.min(pageCount, prev + 1))}
+              disabled={currentPage === pageCount}
+              aria-label="Next page"
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-brand-clay bg-brand-cream text-brand-charcoal transition-colors hover:bg-brand-clay-soft disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-brand-cream cursor-pointer"
+            >
+              <ChevronRight className="h-4 w-4 flip-rtl" />
+            </button>
+          </div>
+        )}
+        </>
       )}
 
     </div>

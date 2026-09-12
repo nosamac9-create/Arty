@@ -9,6 +9,7 @@ import { Palette, Coffee, Menu, X, User, Calendar, Flame, Instagram, Facebook } 
 import { useLanguage } from '../context/LanguageContext';
 import { Footer } from './ui/Footer';
 import { LanguageToggle } from './LanguageToggle';
+import { CustomerNotificationBell } from './ui/CustomerNotificationBell';
 
 export const CustomerHeader: React.FC = () => {
   const { customerTab, setCustomerTab, currentUser, setWorkshopsInitialCategory } = useApp();
@@ -81,6 +82,11 @@ export const CustomerHeader: React.FC = () => {
           </nav>
 
           <div className="flex items-center gap-3 shrink-0">
+            {/* In the bar itself at every width, not folded into the mobile
+                drawer: a piece-is-ready notice is time-sensitive, and burying it
+                one tap deeper on the smaller screen is the wrong trade. Renders
+                nothing at all for a signed-out visitor. */}
+            <CustomerNotificationBell />
             <LanguageToggle />
 
             {/* Mobile menu */}
