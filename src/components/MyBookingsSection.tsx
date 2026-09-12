@@ -5,7 +5,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { useApp, getRiyadhNow, parseBookingDateTimeToRiyadhDate } from '../context/AppContext';
-import { Calendar, Users, Clock, GraduationCap, AlertCircle, Trash2, CalendarX, Compass, HelpCircle } from 'lucide-react';
+import { Calendar, Users, Clock, GraduationCap, AlertCircle, Trash2, CalendarX, Compass, HelpCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Booking } from '../types';
 import { resolveBookingInstructor } from '../utils/queueUtils';
 import { normalizeCustomerPhone } from '../utils/customerIdentity';
@@ -105,6 +105,23 @@ export const MyBookingsSection: React.FC = () => {
   }, [bookings, currentUser]);
 
   const activeList = categorizedBookings[activeTab];
+
+  /**
+   * Display-only paging over the list already in memory. Nothing is re-queried
+   * and nothing is filtered out — `activeList` is untouched, and the counts on
+   * the tabs still report the whole tab.
+   */
+  const PAGE_SIZE = 5;
+  const [page, setPage] = useState(1);
+  const pageCount = Math.max(1, Math.ceil(activeList.length / PAGE_SIZE));
+
+  // Switching tabs resets to the first page; without this, moving from a tab on
+  // page 3 to one holding a single booking lands on an empty page. Derived
+  // rather than stored, so it cannot fall out of step with the list: a booking
+  // cancelled from the last page shortens the list under the reader, and this
+  // clamps instead of leaving them on a page that no longer exists.
+  const currentPage = Math.min(page, pageCount);
+  const pagedList = activeList.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   // Whether the free-cancellation window has closed: the session is still to
   // come, but with 24 hours' notice or less. Measured from the booking's real
@@ -217,14 +234,16 @@ export const MyBookingsSection: React.FC = () => {
         {(['Upcoming', 'Past', 'Cancelled'] as const).map(tab => (
           <button
             key={tab}
-            onClick={() => setActiveTab(tab)}
+            onClick={() => { setActiveTab(tab); setPage(1); }}
             className={`px-6 py-3.5 text-sm font-semibold border-b-2 transition-colors relative cursor-pointer ${
               activeTab === tab
                 ? 'border-brand-terracotta text-brand-terracotta'
                 : 'border-transparent text-brand-muted hover:text-brand-terracotta'
             }`}
           >
-            <span>{tab} Tab</span>
+            {/* The underline already says which one is selected; "Tab" was
+                reading as part of the name. */}
+            <span>{tab}</span>
             {categorizedBookings[tab].length > 0 && (
               <span className="ml-2 inline-flex items-center rounded-full bg-brand-terracotta/10 px-2 py-0.5 text-xs font-semibold text-brand-terracotta">
                 {categorizedBookings[tab].length}
@@ -238,11 +257,10 @@ export const MyBookingsSection: React.FC = () => {
       <div className="space-y-6">
         {activeList.length === 0 ? (
           /* PAST TAB EMPTY STATE or GENERAL EMPTY STATE */
-          <ScrollReveal
-            once
-            viewOptions={{ once: true, amount: 0.3, margin: '0px 0px -80px 0px' }}
-            transition={{ delay: 0, duration: 0.5, ease: 'easeOut' }}
-            variants={{ hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0 } }}
+          /* An empty state is the one thing that must never be the hidden
+             thing: a blank page reads as broken rather than as empty. */
+          <Reveal
+            onMount
           >
           <div className="bg-white border border-brand-clay rounded-2xl p-8 sm:p-12 text-center max-w-md mx-auto shadow-card-sm">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-terracotta/10 text-brand-terracotta mb-4">
@@ -271,21 +289,22 @@ export const MyBookingsSection: React.FC = () => {
               <span>Browse Workshops</span>
             </button>
           </div>
-          </ScrollReveal>
+          </Reveal>
         ) : (
-          activeList.map((b, rowIndex) => {
+          pagedList.map((b, rowIndex) => {
             const isClosed = isCancellationClosed(b);
             const isCancelled = b.status === 'Cancelled';
             const imageUrl = getWorkshopImage(b.workshopId);
             const duration = getWorkshopDuration(b.workshopId);
 
             return (
-              <ScrollReveal
+              /* Capped stagger. 0.12s per row is fine for two bookings and turns
+                 into a second of cascade at eight; past the sixth they land
+                 together. Same cap as the workshop grid. */
+              <Reveal
                 key={b.id}
-                once
-                viewOptions={{ once: true, amount: 0.3, margin: '0px 0px -80px 0px' }}
-                transition={{ delay: rowIndex * 0.12, duration: 0.5, ease: 'easeOut' }}
-                variants={{ hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0 } }}
+                onMount
+                index={Math.min(rowIndex, 5)}
               >
               <div
                 className={`flex flex-col sm:flex-row items-start sm:items-center justify-between p-5 rounded-[22px] border border-brand-clay bg-brand-cream shadow-2xs gap-4 transition-all hover:shadow-card-sm relative ${
@@ -414,11 +433,42 @@ export const MyBookingsSection: React.FC = () => {
                 </div>
 
               </div>
-              </ScrollReveal>
+              </Reveal>
             );
           })
         )}
       </div>
+
+      {/* Prev / Next only. At three pages a numbered row adds nothing, and it
+          would need its own truncation rules the moment the list grew. Hidden
+          altogether at one page rather than shown as a dead "Page 1 of 1". */}
+      {pageCount > 1 && (
+        <div className="mt-8 flex items-center justify-center gap-4">
+          <button
+            type="button"
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+            aria-label="Previous page"
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-brand-clay bg-brand-cream text-brand-charcoal transition-colors hover:bg-brand-clay-soft disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-brand-cream cursor-pointer"
+          >
+            <ChevronLeft className="h-4 w-4 flip-rtl" />
+          </button>
+
+          <span aria-live="polite" className="text-sm font-semibold text-brand-charcoal ltr-numerals">
+            Page {currentPage} of {pageCount}
+          </span>
+
+          <button
+            type="button"
+            onClick={() => setPage(p => Math.min(pageCount, p + 1))}
+            disabled={currentPage === pageCount}
+            aria-label="Next page"
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-brand-clay bg-brand-cream text-brand-charcoal transition-colors hover:bg-brand-clay-soft disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-brand-cream cursor-pointer"
+          >
+            <ChevronRight className="h-4 w-4 flip-rtl" />
+          </button>
+        </div>
+      )}
 
     </div>
   );
