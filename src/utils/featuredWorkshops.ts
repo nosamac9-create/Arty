@@ -20,7 +20,14 @@ import { Workshop, WorkshopSessionRecord } from '../types';
 import { normalizeDateString, timeToMinutes } from './timeUtils';
 
 /** The carousel never shows more than this, however many qualify. */
-export const FEATURED_WORKSHOPS_MAX = 4;
+export const FEATURED_WORKSHOPS_MAX = 3;
+
+/**
+ * How far past this Saturday the second tier reaches when the week alone cannot
+ * fill the row. Two weeks: far enough to cover a quiet stretch, near enough that
+ * "featured" still means something a customer could act on soon.
+ */
+const FALLBACK_EXTRA_DAYS = 14;
 
 /**
  * "This week" is the real calendar week, Sunday to Saturday — the convention
@@ -118,28 +125,30 @@ export function selectFeaturedWorkshops(
   // `today` regardless, since a session earlier this week has already run.
   const weekEnd = addDays(today, 6 - ((weekdayOf(today) - WEEK_STARTS_ON + 7) % 7));
 
-  const ranked: Ranked[] = [];
+  /** The same visibility rule the rest of the customer site applies. */
+  const isVisible = (workshop: Workshop) =>
+    workshop.status !== 'Draft' && workshop.status !== 'Archived';
 
-  workshops.forEach((workshop, order) => {
-    // The same visibility rule the rest of the customer site applies.
-    if (workshop.status === 'Draft' || workshop.status === 'Archived') return;
+  const recentFor = (workshop: Workshop) => getRecentBookings(String(workshop.id)) ?? 0;
 
-    // Eligibility: a published session inside the week that is not yet full.
-    // The seat counts count bookings and linked walk-ins together, so a session
-    // filled by walk-ins is correctly treated as full here too.
-    let nextSession = Number.POSITIVE_INFINITY;
+  /**
+   * The soonest session this workshop has inside [today, windowEnd] that is
+   * published and not known to be full, as a sort stamp. Null when it has none.
+   *
+   * A session whose seat count has not arrived is treated as available: with-
+   * holding a workshop on the strength of a number still in flight hides a
+   * class that has seats, which is the more costly mistake here.
+   */
+  const soonestSession = (workshop: Workshop, windowEnd: string): number | null => {
+    let soonest = Number.POSITIVE_INFINITY;
 
     for (const session of workshopSessions) {
       if (String(session.workshopId) !== String(workshop.id)) continue;
       if ((session.status || 'Published') !== 'Published') continue;
 
       const date = normalizeDateString(session.date);
-      if (date < today || date > weekEnd) continue;
+      if (date < today || date > windowEnd) continue;
 
-      // Skipped only when the session is KNOWN to be full. An unknown count
-      // leaves the workshop eligible: withholding a workshop from the carousel
-      // on the strength of a number that has not arrived hides a class that has
-      // seats, which is the more costly mistake here.
       const seats = getSeats(String(session.id));
       if (seats && seats.seatsRemaining <= 0) continue;
 
@@ -147,35 +156,72 @@ export function selectFeaturedWorkshops(
       // start time, and a session with no time sorts after ones that have it.
       const stamp = Number(date.replace(/-/g, '')) * 10_000 +
         (session.startTime ? timeToMinutes(session.startTime) : 9_999);
-      if (stamp < nextSession) nextSession = stamp;
+      if (stamp < soonest) soonest = stamp;
     }
 
-    if (nextSession === Number.POSITIVE_INFINITY) return;
+    return soonest === Number.POSITIVE_INFINITY ? null : soonest;
+  };
 
-    // Popularity: bookings that still stand, by when they were taken, over the
-    // trailing window. The database applies the same status and payment
-    // exclusions as isActiveBookingRecord — cancelled, auto-cancelled, no-show
-    // and draft records and failed or declined payments are dropped, while
-    // Completed, Checked In, In Progress and Pending all count, which is what
-    // popularity should mean: a finished workshop is the strongest evidence of
-    // demand.
-    //
-    // Zero while the counts are still loading, which ranks every workshop equal
-    // and leaves the tie-breakers in charge — the same order the page showed
-    // before the counts arrive, so it does not visibly reshuffle twice.
-    const recentBookings = getRecentBookings(String(workshop.id)) ?? 0;
-
-    ranked.push({ workshop, recentBookings, nextSession, order });
-  });
-
-  ranked.sort((a, b) =>
-    // Most booked first, then whichever runs sooner, then source order — every
-    // key is derived from the data, so the sequence cannot shift between
-    // renders on identical records.
+  // Most booked first, then whichever runs sooner, then source order — every
+  // key is derived from the data, so the sequence cannot shift between renders
+  // on identical records.
+  const byRank = (a: Ranked, b: Ranked) =>
     b.recentBookings - a.recentBookings ||
     a.nextSession - b.nextSession ||
-    a.order - b.order
-  );
+    a.order - b.order;
 
-  return ranked.slice(0, Math.max(0, limit)).map(entry => entry.workshop);
+  const picked: Workshop[] = [];
+  const taken = new Set<string>();
+
+  const take = (entries: Ranked[]) => {
+    for (const entry of entries) {
+      if (picked.length >= limit) return;
+      picked.push(entry.workshop);
+      taken.add(String(entry.workshop.id));
+    }
+  };
+
+  /** Workshops with a qualifying session inside the window, minus any already taken. */
+  const tier = (windowEnd: string): Ranked[] => {
+    const out: Ranked[] = [];
+    workshops.forEach((workshop, order) => {
+      if (!isVisible(workshop) || taken.has(String(workshop.id))) return;
+      const nextSession = soonestSession(workshop, windowEnd);
+      if (nextSession === null) return;
+      out.push({ workshop, recentBookings: recentFor(workshop), nextSession, order });
+    });
+    return out.sort(byRank);
+  };
+
+  // TIER 1 — this week, the strict criteria. These still decide ORDER: anything
+  // qualifying here ranks above everything below, whatever its booking count.
+  take(tier(weekEnd));
+
+  // TIER 2 — the same rules over a wider window. The row used to be allowed to
+  // come up short, which on a Friday or Saturday meant a one- or two-day window
+  // and, for a studio running Sunday to Thursday, an empty carousel every
+  // weekend under a heading that had already rendered.
+  if (picked.length < limit) take(tier(addDays(weekEnd, FALLBACK_EXTRA_DAYS)));
+
+  // TIER 3 — any visible workshop, ranked by demand alone, ignoring sessions
+  // entirely. Something to show beats a heading with nothing under it; these sit
+  // last precisely because they meet none of the criteria above.
+  if (picked.length < limit) {
+    const rest: Ranked[] = [];
+    workshops.forEach((workshop, order) => {
+      if (!isVisible(workshop) || taken.has(String(workshop.id))) return;
+      rest.push({
+        workshop,
+        recentBookings: recentFor(workshop),
+        nextSession: Number.POSITIVE_INFINITY,
+        order
+      });
+    });
+    rest.sort((a, b) => b.recentBookings - a.recentBookings || a.order - b.order);
+    take(rest);
+  }
+
+  // Fewer than `limit` only when the studio genuinely has fewer visible
+  // workshops than that. Nothing left to fall back to.
+  return picked;
 }

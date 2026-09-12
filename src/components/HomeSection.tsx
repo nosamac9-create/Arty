@@ -62,8 +62,24 @@ export const HomeSection: React.FC = () => {
   const {
     workshops, setCustomerTab, setSelectedWorkshopId, events,
     setSelectedBirthdayPackage, publishedBirthdayPackages, setWorkshopsInitialCategory,
-    workshopSessions, bookings, queue, todayDateStr
+    workshopSessions, bookings, queue, todayDateStr, rawWorkshops
   } = useApp();
+
+  /**
+   * Whether the workshops table has come back yet.
+   *
+   * useLiveTable returns `undefined` until its first read resolves and an array
+   * afterwards (src/lib/supabaseData.ts), and AppContext exposes the raw value
+   * alongside the mapped one precisely so that distinction survives. `workshops`
+   * itself is `rawWorkshops || []`, so by the time it reaches here an empty
+   * studio and a studio still loading look identical.
+   *
+   * Sessions are deliberately NOT part of this. The featured selection falls
+   * back to any published workshop ranked by demand when no session qualifies,
+   * so once the workshops are in, the row has something to show whether or not
+   * the sessions have landed.
+   */
+  const workshopsLoading = rawWorkshops === undefined;
   const [showOwnerContact, setShowOwnerContact] = useState(false);
   const prefersReducedMotion = useReducedMotion();
 
@@ -131,6 +147,16 @@ export const HomeSection: React.FC = () => {
   const activeFeatured = featuredWorkshops[featuredIndex] || featuredWorkshops[0] || null;
 
   const publishedEvents = events.filter(evt => evt.status === 'Published');
+
+  /**
+   * The home page shows at most three packages. The full list lives on the
+   * Birthday Packages page, which the "See packages" button already goes to, so
+   * there is nothing here to say "view all" about.
+   */
+  const homeBirthdayPackages = useMemo(
+    () => publishedBirthdayPackages.slice(0, 3),
+    [publishedBirthdayPackages]
+  );
 
   /**
    * Workshops a customer can actually see and book.
@@ -266,7 +292,22 @@ export const HomeSection: React.FC = () => {
       </section>
 
       {/* FEATURED WORKSHOPS — a white full-bleed band, so the cards read against
-          a clean backdrop instead of blending into the cream page. */}
+          a clean backdrop instead of blending into the cream page.
+
+          The whole band is guarded, not just the carousel inside it. The guard
+          used to sit on the slides alone, so an empty list left the heading,
+          the strapline and "View All" stranded above nothing. With the tiered
+          fallback this is now only reachable when the studio has no visible
+          workshops at all — but that is exactly when a heading over blank space
+          would look most broken.
+
+          Held open while the data is still in flight, though. Unmounting on
+          "the list is empty right now" meant the whole band was absent for the
+          first few hundred milliseconds of every visit and then popped in,
+          shifting the page under anyone already scrolling. The band is only
+          absent once the workshops have actually arrived and there is genuinely
+          nothing to feature. */}
+      {(workshopsLoading || featuredWorkshops.length > 0) && (
       <section className="bg-white border-y border-brand-clay/60 py-16 md:py-20">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
 
@@ -276,8 +317,12 @@ export const HomeSection: React.FC = () => {
             on its own beat as the last line of the sequence. */}
         <ContainerStagger className="flex flex-col gap-6 text-start sm:flex-row sm:items-end sm:justify-between sm:gap-10">
           <div className="min-w-0">
+            {/* Was "This week". The tiered fallback can now fill this row from
+                the fortnight beyond it, or from demand alone, so a week-specific
+                label would sometimes be false — the same class of claim as the
+                confirmation screen's sent-email line. */}
             <ContainerAnimated className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-sage">
-              This week
+              Popular right now
             </ContainerAnimated>
             <ContainerAnimated className="mt-2 font-display text-3xl md:text-[38px] font-semibold text-brand-charcoal">
               <h2>Featured Workshops</h2>
@@ -304,6 +349,19 @@ export const HomeSection: React.FC = () => {
         {/* The carousel. Only the images ride in it; the details for whichever
             card is centred are rendered below in the site's own type, which is
             why the component takes no caption of its own. */}
+        {/* The carousel's own height is `var(--cf-card)` plus its py-10 frame, so
+            the space it will occupy is known before the data is. Reserving it
+            with a plain spacer rather than a skeleton: a skeleton would need
+            card shapes, a shimmer and its own reduced-motion handling to say
+            nothing the heading above has not already said. This is one div. */}
+        {workshopsLoading && (
+          <div
+            aria-hidden="true"
+            className="mt-8 lg:mt-10"
+            style={{ minHeight: 'calc(clamp(148px, 22vw, 260px) + 5rem)' }}
+          />
+        )}
+
         {featuredSlides.length > 0 && (
           <div className="mt-8 lg:mt-10">
             <CoverflowCarousel
@@ -338,13 +396,21 @@ export const HomeSection: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => handleCardClick(activeFeatured.id)}
-                  className="group mt-2 cursor-pointer font-display text-2xl md:text-[28px] font-semibold text-brand-charcoal transition-colors hover:text-brand-terracotta"
+                  /* 24/28px sat heavy over a 260px card. One step down keeps it
+                     the focal line without outweighing the image it describes. */
+                  className="group mt-2 cursor-pointer font-display text-xl md:text-2xl font-semibold text-brand-charcoal transition-colors hover:text-brand-terracotta"
                 >
                   {activeFeatured.title}
                 </button>
 
                 {activeFeatured.hook && (
-                  <p className="mx-auto mt-2 max-w-xl text-[15px] leading-[1.7] text-brand-ink">
+                  /* max-w-xl is 576px — 2.2x the 260px card, so the text block
+                     read as the subject and the image as a thumbnail. This clamp
+                     tracks the card's own clamp(148px, 22vw, 260px) at roughly
+                     1.5x, so the relationship holds at every width instead of
+                     only at one breakpoint. Carousel geometry is untouched; the
+                     text is what moves. */
+                  <p className="mx-auto mt-2 max-w-[clamp(240px,34vw,400px)] text-[15px] leading-[1.7] text-brand-ink">
                     {activeFeatured.hook}
                   </p>
                 )}
@@ -382,6 +448,7 @@ export const HomeSection: React.FC = () => {
 
       </div>
       </section>
+      )}
 
       {/* HOW BOOKING WORKS */}
       <section className="bg-brand-sand border-y border-brand-clay py-16">
@@ -435,7 +502,18 @@ export const HomeSection: React.FC = () => {
           other section on the page, instead of a card floating on the cream
           background. Points only at the packages themselves; custom, one-off
           events live in their own section below so the two never blur. */}
-      <section className="relative overflow-hidden bg-brand-charcoal py-16 md:py-20">
+      {/* brand-sage (#7C8F80) — the mid sage, the value the hero sets the word
+          "canvas" in. The band was charcoal, then sage-hover; this is the same
+          design on a lighter green, and the LIGHTER GREEN IS THE ONLY CHANGE.
+          Every cream tint below is the one the dark version used.
+
+          KNOWN: cream on #7C8F80 is 3.20:1, under AA for normal text — it
+          passes only as large text. Deliberate, and recorded in
+          docs/parked-work.md rather than solved by changing the design: fixing
+          it means charcoal-only at full opacity, which collapses the type
+          hierarchy this section is built on. Revisit it as an accessibility
+          item, not as a colour preference. */}
+      <section className="relative overflow-hidden bg-brand-sage py-16 md:py-20">
       {/* Decorative only. The balloons layer is pointer-events-none, so the
           button and the package cards stay fully clickable through it. */}
       <BirthdayBalloons />
@@ -451,7 +529,9 @@ export const HomeSection: React.FC = () => {
                 transition={{ delay: 0, duration: 0.5, ease: 'easeOut' }}
                 variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } }}
               >
-                <div className="inline-flex items-center gap-2 rounded-full bg-brand-cream/10 px-3.5 py-1.5 text-xs font-medium text-brand-cream/85">
+                {/* /10 and /85 were set against a much darker brown; both lift
+                    slightly so the pill still separates from the lighter band. */}
+                <div className="inline-flex items-center gap-2 rounded-full bg-brand-cream/15 px-3.5 py-1.5 text-xs font-medium text-brand-cream/90">
                   <Gift className="h-3.5 w-3.5" />
                   <span>Birthday Celebrations &amp; Private Parties</span>
                 </div>
@@ -476,7 +556,9 @@ export const HomeSection: React.FC = () => {
                 transition={{ delay: 0.24, duration: 0.5, ease: 'easeOut' }}
                 variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } }}
               >
-                <p className="mt-5 max-w-lg text-base leading-[1.7] text-brand-cream/70">
+                {/* /70 measured 4.28:1 on the new ground — under AA for 16px
+                    body. /80 is 5.0:1. */}
+                <p className="mt-5 max-w-lg text-base leading-[1.7] text-brand-cream/80">
                   Make your child's special day unforgettable with creative art sessions, balloons,
                   customized cakes, and fun hands-on memories in our studio.
                 </p>
@@ -498,19 +580,35 @@ export const HomeSection: React.FC = () => {
                     setWorkshopsInitialCategory('Birthday Packages');
                     setCustomerTab('workshops');
                   }}
-                  className="cursor-pointer rounded-full bg-brand-terracotta px-6 py-3.5 text-sm font-semibold text-brand-cream shadow-button transition-colors hover:bg-brand-terracotta-hover active:scale-[0.98]"
+                  /* TRY-AND-SEE, part of the sage band above. The site-wide CTA
+                     is terracotta on cream, and it stays that way everywhere
+                     else — but terracotta (#5A4132) against sage-hover (#4A5B4E)
+                     is 1.3:1, a dark brown on a dark green of nearly the same
+                     lightness, so the button stopped reading as a button. Cream
+                     on the band is 6.7:1 and charcoal on cream is 13.9:1.
+                     Inverted for THIS instance only. */
+                  className="cursor-pointer rounded-full bg-brand-cream px-6 py-3.5 text-sm font-semibold text-brand-charcoal shadow-button transition-colors hover:bg-brand-clay-soft active:scale-[0.98]"
                 >
                   See packages
                 </button>
               </ScrollReveal>
             </div>
 
-            {publishedBirthdayPackages.length > 0 && (
-              /* Two tickets pinned side by side, each tilted the other way.
-                 The tilt is desktop-only — on a phone they stack upright so
-                 they stay readable. */
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 sm:gap-6 pt-2">
-                {publishedBirthdayPackages.map((pkg, index) => (
+            {homeBirthdayPackages.length > 0 && (
+              /* Stacked, not side by side. Three tickets across this column made
+                 each one a narrow vertical sliver — copy wrapping every two or
+                 three words, and the tear notches landing partway down a tall
+                 card instead of beside a stub. A ticket is a wide shape. Stacked
+                 wide rows read correctly at one, two or three, and the column
+                 grows downward beside the heading rather than squeezing sideways.
+
+                 The SHAPE is the `.package-ticket` geometry the Birthday
+                 Packages page uses — corner cuts, the two perforation notches,
+                 and the dotted divider inset by the stub width. Shape only: the
+                 palette, content and type below are this section's own, and the
+                 perforation colour is set explicitly rather than inherited. */
+              <div className="flex flex-col gap-4 sm:gap-5">
+                {homeBirthdayPackages.map((pkg, index) => (
                   <ScrollReveal
                     key={pkg.id}
                     once
@@ -525,56 +623,59 @@ export const HomeSection: React.FC = () => {
                       setWorkshopsInitialCategory('Birthday Packages');
                       setCustomerTab('workshops');
                     }}
-                    className={`birthday-ticket group relative h-full w-full cursor-pointer rounded-[22px] border border-brand-cream/15 bg-brand-cream/[0.07] py-6 ps-6 pe-14 flex flex-col text-start shadow-card transition-all duration-300 hover:bg-brand-cream/[0.13] hover:border-brand-cream/25 sm:hover:rotate-0 sm:hover:-translate-y-1 ${
-                      index % 2 === 0 ? 'sm:-rotate-[2.5deg]' : 'sm:rotate-[2.5deg]'
-                    }`}
+                    /* 0.07 was a barely-lighter brown on brown and disappears
+                       entirely on sage. 0.15 keeps the ticket clearly a separate
+                       object without drifting toward cream, which is what the
+                       stub and the notches would start to look wrong against. */
+                    className="package-ticket group relative flex w-full cursor-pointer flex-col overflow-hidden rounded-[4px] bg-brand-cream/[0.15] text-start shadow-card transition-all duration-300 hover:bg-brand-cream/[0.22] motion-safe:hover:-translate-y-0.5 sm:min-h-[140px] sm:flex-row"
+                    /* The perforation is a light dotted line, so a lighter ground
+                       costs it contrast rather than gaining it. 0.28 -> 0.45. */
+                    style={{ ['--ticket-perf-color' as string]: 'rgba(255, 250, 240, 0.45)' }}
                   >
-                    {/* The tear-off stub: a perforation down the end side, with
-                        the strip beyond it tinted a shade lighter so it reads as
-                        the part that comes away. Logical inset, so it sits on
-                        the correct side in Arabic as well as English. The card's
-                        `pe-14` is what keeps the copy clear of it. */}
-                    <span
-                      aria-hidden="true"
-                      className="pointer-events-none absolute inset-y-0 end-0 w-11 rounded-e-[22px] border-s border-dashed border-brand-cream/20 bg-brand-cream/[0.04]"
-                    />
-
-                    <div className="flex items-start justify-between gap-4">
-                      <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-cream/45">
-                        Package {String(index + 1).padStart(2, '0')}
-                      </span>
+                    {/* MAIN — everything left of the perforation. */}
+                    <div className="flex flex-1 flex-col px-6 py-5 sm:py-6">
                       {/* The ticket's punched holes. */}
-                      <span className="flex gap-1 pt-1" aria-hidden="true">
-                        <span className="h-1.5 w-1.5 rounded-full bg-brand-cream/25" />
-                        <span className="h-1.5 w-1.5 rounded-full bg-brand-cream/25" />
-                        <span className="h-1.5 w-1.5 rounded-full bg-brand-cream/25" />
+                      <span className="flex gap-1" aria-hidden="true">
+                        <span className="h-1.5 w-1.5 rounded-full bg-brand-cream/35" />
+                        <span className="h-1.5 w-1.5 rounded-full bg-brand-cream/35" />
+                        <span className="h-1.5 w-1.5 rounded-full bg-brand-cream/35" />
                       </span>
+
+                      <h3 className="mt-2 font-display text-2xl font-semibold text-brand-cream">{pkg.name}</h3>
+
+                      {/* 13px, so AA still wants 4.5:1. /60 no longer reaches it
+                          on this ground; /75 does. */}
+                      <p className="mt-2 text-[13px] leading-relaxed text-brand-cream/75">
+                        {[
+                          pkg.maxGuests ? `${pkg.maxGuests} guests` : null,
+                          pkg.duration || null,
+                          pkg.shortDescription || null
+                        ].filter(Boolean).join(' · ')}
+                      </p>
                     </div>
 
-                    <h3 className="mt-2 font-display text-2xl font-semibold text-brand-cream">{pkg.name}</h3>
-
-                    <p className="mt-3 text-[13px] leading-relaxed text-brand-cream/60">
-                      {[
-                        pkg.maxGuests ? `${pkg.maxGuests} guests` : null,
-                        pkg.duration || null,
-                        pkg.shortDescription || null
-                      ].filter(Boolean).join(' · ')}
-                    </p>
-
-                    {/* The tear line, then the price stub. */}
-                    <div className="mt-auto pt-6">
-                      <div className="border-t border-dashed border-brand-cream/20 pt-4 flex items-end justify-between gap-3">
-                        <div>
-                          <span className="font-display text-2xl font-semibold text-brand-cream ltr-numerals">
-                            {pkg.price}
-                          </span>
-                          <span className="mt-0.5 block text-[10px] text-brand-cream/50">SAR per party</span>
-                        </div>
-                        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-cream/80 transition-colors group-hover:text-brand-cream">
-                          See package
-                          <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1 flip-rtl" />
+                    {/* STUB — right of the perforation on a wide screen, below it
+                        on a phone, matching where .package-ticket moves the
+                        notches. The widths track --stub-w exactly (130px, 148px
+                        from lg) so the notches land on the boundary rather than
+                        near it. */}
+                    <div className="flex h-[5.5rem] w-full shrink-0 flex-row items-center justify-between gap-3 px-5 py-3 sm:h-auto sm:w-[130px] sm:flex-col sm:justify-center sm:gap-0 sm:px-4 sm:py-5 sm:text-center lg:w-[148px]">
+                      <div>
+                        <span className="font-display text-2xl font-semibold text-brand-cream ltr-numerals">
+                          {pkg.price}
                         </span>
+                        {/* 10px at /50 passed on the brown (4.69:1) and drops to
+                            3.0:1 here — the one item the background change
+                            genuinely broke. /80 restores it to 5.0:1. */}
+                        {/* Per person, not per party — the price is multiplied by
+                            headcount. The rest of the birthday flow says the same
+                            thing, from each package's own pricingLabel. */}
+                        <span className="mt-0.5 block text-[10px] text-brand-cream/80">SAR per person</span>
                       </div>
+                      <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-cream/85 transition-colors group-hover:text-brand-cream sm:mt-3">
+                        See package
+                        <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1 flip-rtl" />
+                      </span>
                     </div>
                   </button>
                   </ScrollReveal>
