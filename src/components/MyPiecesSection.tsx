@@ -237,12 +237,15 @@ export const MyPiecesSection: React.FC = () => {
         /* Grid of Piece Cards */
         <>
         {/* Tabs — the same treatment as My Reservations, counts included. */}
-        <div className="flex border-b border-brand-clay mb-8">
+        {/* Scrolls rather than wraps — see the matching row in
+            MyBookingsSection. These labels are longer, so the overflow is
+            worse: "Ready to collect" alone is most of a phone's width. */}
+        <div className="flex min-w-0 overflow-x-auto no-scrollbar border-b border-brand-clay mb-8">
           {PIECE_TABS.map(tab => (
             <button
               key={tab}
               onClick={() => { setActiveTab(tab); setPage(1); }}
-              className={`px-6 py-3.5 text-sm font-semibold border-b-2 transition-colors relative cursor-pointer ${
+              className={`px-6 py-3.5 text-sm font-semibold whitespace-nowrap border-b-2 transition-colors relative cursor-pointer ${
                 activeTab === tab
                   ? 'border-brand-terracotta text-brand-terracotta'
                   : 'border-transparent text-brand-muted hover:text-brand-terracotta'

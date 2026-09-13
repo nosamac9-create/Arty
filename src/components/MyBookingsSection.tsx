@@ -230,12 +230,16 @@ export const MyBookingsSection: React.FC = () => {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-brand-clay mb-8">
+      {/* Scrolls rather than wraps: three labels with count badges exceed the
+          343px available at 375px, and without this the text wrapped inside the
+          buttons and the active underline detached from its label. Same pattern
+          as the category chips in WorkshopsBrowsingSection. */}
+      <div className="flex min-w-0 overflow-x-auto no-scrollbar border-b border-brand-clay mb-8">
         {(['Upcoming', 'Past', 'Cancelled'] as const).map(tab => (
           <button
             key={tab}
             onClick={() => { setActiveTab(tab); setPage(1); }}
-            className={`px-6 py-3.5 text-sm font-semibold border-b-2 transition-colors relative cursor-pointer ${
+            className={`px-6 py-3.5 text-sm font-semibold whitespace-nowrap border-b-2 transition-colors relative cursor-pointer ${
               activeTab === tab
                 ? 'border-brand-terracotta text-brand-terracotta'
                 : 'border-transparent text-brand-muted hover:text-brand-terracotta'
@@ -382,7 +386,7 @@ export const MyBookingsSection: React.FC = () => {
 
                           {/* Hover Tooltip - requested in the prompt */}
                           {hoveredTooltipId === b.id && (
-                            <div className="absolute right-0 bottom-full mb-2 z-50 w-64 p-3 bg-brand-charcoal text-brand-cream rounded-xl text-[11px] leading-relaxed shadow-card border border-brand-clay animate-in fade-in slide-in-from-bottom-2 duration-200 font-semibold">
+                            <div className="absolute right-0 bottom-full mb-2 z-50 w-[min(16rem,calc(100vw-2rem))] p-3 bg-brand-charcoal text-brand-cream rounded-xl text-[11px] leading-relaxed shadow-card border border-brand-clay animate-in fade-in slide-in-from-bottom-2 duration-200 font-semibold">
                               <div className="flex items-start gap-1.5">
                                 <AlertCircle className="h-4 w-4 text-brand-terracotta shrink-0 mt-0.5" />
                                 <span>Cancellation closed — less than 24 hours before start</span>
