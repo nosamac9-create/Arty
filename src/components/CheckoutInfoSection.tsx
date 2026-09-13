@@ -441,7 +441,10 @@ export const CheckoutInfoSection: React.FC = () => {
       {/* Quick Login Modal */}
       {isLoginModalOpen && (
         <div className="fixed inset-0 z-50 bg-brand-charcoal/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-brand-cream rounded-[28px] p-6 sm:p-8 max-w-sm w-full shadow-2xl border border-brand-clay text-start animate-in zoom-in-95 duration-150">
+          {/* Bounded and scrollable: at 375x667 with the software keyboard up
+              this panel is taller than the visible area, and centring it in a
+              fixed overlay clipped it at BOTH ends. */}
+          <div className="bg-brand-cream rounded-[28px] p-6 sm:p-8 max-w-sm w-full shadow-2xl border border-brand-clay text-start animate-in zoom-in-95 duration-150 max-h-[calc(100dvh-2rem)] overflow-y-auto">
             <h3 className="font-display text-xl font-semibold text-brand-charcoal mb-2">Sign In</h3>
             <p className="text-xs text-brand-ink mb-4">Enter your email to quickly sign in and autofill your details.</p>
             

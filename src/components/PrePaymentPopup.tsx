@@ -26,10 +26,14 @@ export const PrePaymentPopup: React.FC<PrePaymentPopupProps> = ({ config, onConf
   // being laid out inside the page rather than over it.
   return createPortal(
     <div className="fixed inset-0 z-50 bg-brand-charcoal/50 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-brand-clay text-left animate-in zoom-in-95 duration-150 overflow-hidden">
-        <div className="h-1.5 bg-brand-terracotta" />
+      {/* Bounded to the viewport with the body scrolling inside it. overflow-hidden
+          stays — it is what clips the accent bar into the rounded corner — but on
+          its own it made content taller than the screen unreachable rather than
+          scrollable. */}
+      <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-brand-clay text-left animate-in zoom-in-95 duration-150 overflow-hidden flex max-h-[calc(100dvh-2rem)] flex-col">
+        <div className="h-1.5 bg-brand-terracotta shrink-0" />
 
-        <div className="p-6 sm:p-7 space-y-4">
+        <div className="p-6 sm:p-7 space-y-4 overflow-y-auto">
           <div className="flex items-start gap-3">
             <div className="p-2 bg-brand-terracotta/10 rounded-xl text-brand-terracotta shrink-0">
               <Shield className="h-5 w-5" />

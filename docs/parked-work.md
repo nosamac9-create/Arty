@@ -234,6 +234,26 @@ own components — none of it is persisted. So a session that expires while a cu
 checkout takes the draft with it. The M3 fix explains why that happened rather than preventing it.
 Persisting `pendingBooking` is separate work and is not done.
 
+### Modals still overflow on iOS when the software keyboard is up
+
+`PrePaymentPopup` and the sign-in modal in `CheckoutInfoSection` are now capped at
+`max-h-[calc(100dvh-2rem)]` with the body scrolling, so content taller than the screen is reachable
+instead of clipped. That fixes the general case but not the keyboard case on iOS Safari: the
+software keyboard does **not** shrink `dvh`. It reduces the *visual* viewport only, which is
+exposed through `window.visualViewport` and nothing else — `100dvh` still resolves to the full
+layout viewport with the keyboard open.
+
+The practical effect on the sign-in modal at 375×667: the keyboard takes roughly half the screen,
+the panel is still sized against all 667px, and the part behind the keyboard can only be reached by
+scrolling. Better than being clipped dead, but the panel is not sized to what the customer can
+actually see.
+
+Fully solving it means listening to `visualViewport` `resize`/`scroll` and driving the cap from
+`visualViewport.height` rather than `dvh`. That is a behavioural change with a listener and
+teardown, so it was deliberately left out of the presentational pass that capped these two. It
+belongs in one shared modal shell rather than being written twice — see the note about the two
+notification bells for the same shape of problem.
+
 ### Two definitions of a consumed seat, already drifted
 
 `getSessionSeatUsage` (`queueUtils.ts`) requires `q.type === 'With Instructor'` before counting a
