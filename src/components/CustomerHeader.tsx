@@ -62,7 +62,7 @@ export const CustomerHeader: React.FC = () => {
           </button>
 
           {/* Desktop navigation — plain words, weight marks the active one */}
-          <nav className="hidden lg:flex items-center gap-[30px]">
+          <nav className="hidden md:flex items-center gap-[30px]">
             {navItems.map(item => {
               const isActive = customerTab === item.id;
               return (
@@ -92,7 +92,7 @@ export const CustomerHeader: React.FC = () => {
             {/* Mobile menu */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="lg:hidden p-2 rounded-xl text-brand-charcoal hover:bg-brand-sand focus:outline-none cursor-pointer"
+              className="md:hidden p-2 rounded-xl text-brand-charcoal hover:bg-brand-sand focus:outline-none cursor-pointer"
               aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
             >
               {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
@@ -102,7 +102,7 @@ export const CustomerHeader: React.FC = () => {
 
         {/* Mobile drawer */}
         {mobileMenuOpen && (
-          <div className="lg:hidden border-t border-brand-clay bg-brand-cream px-4 py-4 space-y-1 shadow-card-sm animate-in fade-in slide-in-from-top-4 duration-200">
+          <div className="md:hidden border-t border-brand-clay bg-brand-cream px-4 py-4 space-y-1 shadow-card-sm animate-in fade-in slide-in-from-top-4 duration-200">
             {navItems.map(item => {
               const Icon = item.icon;
               const isActive = customerTab === item.id;
@@ -132,8 +132,11 @@ export const CustomerHeader: React.FC = () => {
       </header>
 
       {/* Mobile bottom tab bar — the design's primary mobile navigation */}
-      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 border-t border-brand-clay bg-brand-cream/95 backdrop-blur-md px-2 pb-[env(safe-area-inset-bottom)]">
-        <div className="flex items-stretch justify-around">
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-brand-clay bg-brand-cream/95 backdrop-blur-md px-2 pb-[env(safe-area-inset-bottom)]">
+        {/* The row height is declared by --mobile-tabbar-h rather than left to
+            emerge from the buttons, so the page padding that clears this bar
+            (src/App.tsx) is driven by the same number. */}
+        <div className="flex h-[var(--mobile-tabbar-h)] items-stretch justify-around">
           {navItems.map(item => {
             const Icon = item.icon;
             const isActive = customerTab === item.id;
@@ -141,7 +144,7 @@ export const CustomerHeader: React.FC = () => {
               <button
                 key={item.id}
                 onClick={() => handleNavClick(item.id)}
-                className={`flex flex-1 flex-col items-center gap-1 py-2.5 text-[10px] font-semibold cursor-pointer transition-colors ${
+                className={`flex flex-1 flex-col items-center justify-center gap-1 text-[10px] font-semibold cursor-pointer transition-colors ${
                   isActive ? 'text-brand-terracotta' : 'text-brand-muted'
                 }`}
               >

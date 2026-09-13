@@ -1312,8 +1312,19 @@ export const BirthdayBookingSection: React.FC = () => {
       </form>
 
       {/* MOBILE SUMMARY — a bar that stays out of the way until it is opened.
-          Hidden on the review step, where the ticket is already the page. */}
-      <div className={`fixed inset-x-0 bottom-0 z-30 border-t border-brand-clay bg-brand-cream/95 backdrop-blur-md lg:hidden ${
+          Hidden on the review step, where the ticket is already the page.
+
+          Docked ABOVE the customer tab bar rather than over it. The tab bar is
+          the only way off this page on mobile, so a contextual bar must never
+          cover it. Separating them in space also means the z-index difference
+          between the two no longer decides anything.
+
+          Deliberately still gated on lg, not md, unlike the tab bar. It is
+          paired with the desktop ticket sidebar below, which does not appear
+          until lg — moving this to md would leave 768–1024px with no order
+          summary at all. The offset resolves to 0 from md up, where the tab
+          bar is gone, so the bar sits flush on the edge there. */}
+      <div className={`fixed inset-x-0 bottom-[var(--mobile-tabbar-total)] z-30 border-t border-brand-clay bg-brand-cream/95 backdrop-blur-md lg:hidden ${
         step === 4 ? 'hidden' : ''
       }`}>
         <AnimatePresence initial={false}>
@@ -1334,7 +1345,10 @@ export const BirthdayBookingSection: React.FC = () => {
           type="button"
           onClick={() => setMobileSummaryOpen(v => !v)}
           aria-expanded={mobileSummaryOpen}
-          className="flex w-full cursor-pointer items-center justify-between gap-4 px-4 py-3.5 pb-[calc(0.875rem+env(safe-area-inset-bottom))] text-start"
+          // No safe-area padding: this bar no longer touches the screen edge,
+          // so the tab bar below it owns the inset. Adding it here would count
+          // it twice.
+          className="flex w-full cursor-pointer items-center justify-between gap-4 px-4 py-3.5 text-start"
         >
           <span className="min-w-0">
             <span className="block truncate text-xs font-semibold text-brand-ink">

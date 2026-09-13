@@ -393,6 +393,33 @@ balloons {
   --breakpoint-xs: 25rem;
 }
 
+/* The mobile tab bar is `position: fixed`, so it takes no space in flow and
+   would otherwise sit over the last stripe of every customer page. Its height
+   is declared here rather than left to emerge from its contents, so the bar
+   and the padding that clears it can never disagree. Change this and both
+   move together.
+
+   --mobile-tabbar-total adds the home-indicator inset. Outside a safe-area
+   context env() resolves to 0px, so it is the plain height on every other
+   device. */
+:root {
+  --mobile-tabbar-h: 3.5rem;
+  --mobile-tabbar-total: calc(var(--mobile-tabbar-h) + env(safe-area-inset-bottom));
+}
+
+/* The tab bar is gone from `md` up, so everything that reserves space for it
+   must stop reserving it at the same width. Zeroing the token here means the
+   page padding and the birthday summary bar's offset both follow the bar
+   automatically — neither has to restate the breakpoint and drift from it.
+
+   48rem is Tailwind's `md`. Kept in step with the gates in CustomerHeader. */
+@media (width >= 48rem) {
+  :root {
+    --mobile-tabbar-h: 0rem;
+    --mobile-tabbar-total: 0px;
+  }
+}
+
 /* =============================================================================
    ARC GALLERY HERO
    The cards rise the last few degrees into place, then the headline follows.
