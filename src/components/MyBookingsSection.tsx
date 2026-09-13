@@ -373,7 +373,7 @@ export const MyBookingsSection: React.FC = () => {
                             onMouseEnter={() => setHoveredTooltipId(b.id)}
                             onMouseLeave={() => setHoveredTooltipId(null)}
                             onClick={() => alert(`Cancellation closed. It is less than 24 hours before class start. Please contact the front desk at ${STUDIO_PHONE}.`)}
-                            className="text-xs font-semibold text-gray-400 bg-gray-100 border border-gray-200 px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-not-allowed"
+                            className="text-xs font-semibold text-gray-400 bg-gray-100 border border-gray-200 px-3 py-2 min-h-11 rounded-lg flex items-center gap-1.5 cursor-not-allowed"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                             <span>Cancel booking</span>
@@ -415,7 +415,7 @@ export const MyBookingsSection: React.FC = () => {
                               window.alert(result.error || 'That booking could not be cancelled.');
                             }
                           }}
-                          className="text-xs font-semibold text-brand-terracotta hover:text-brand-terracotta-hover hover:underline py-1.5 px-3 rounded-lg border border-transparent hover:border-brand-clay flex items-center gap-1.5 cursor-pointer"
+                          className="text-xs font-semibold text-brand-terracotta hover:text-brand-terracotta-hover hover:underline py-2 px-3 min-h-11 rounded-lg border border-transparent hover:border-brand-clay flex items-center gap-1.5 cursor-pointer"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                           <span>Cancel booking</span>

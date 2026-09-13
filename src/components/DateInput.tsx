@@ -87,7 +87,11 @@ export const DateInput: React.FC<DateInputProps> = ({
    * upstream can clip it and it cannot be trapped by a transformed ancestor.
    */
   const POPUP_WIDTH = 264;
-  const POPUP_MAX_HEIGHT = 360;
+  // Raised from 360 when the day cells went to 44px: a six-row month landed at
+  // ~362 and the calendar began to scroll by a hair, which is worse than the
+  // small tap targets it was fixing. 420 still fits a 375x667 screen within the
+  // 8px margins below.
+  const POPUP_MAX_HEIGHT = 420;
   const VIEWPORT_MARGIN = 8;
   const [popupStyle, setPopupStyle] = useState<React.CSSProperties>({ visibility: 'hidden' });
   const popupRef = useRef<HTMLDivElement>(null);
@@ -249,7 +253,7 @@ export const DateInput: React.FC<DateInputProps> = ({
             <button
               type="button"
               onClick={() => stepMonth(-1)}
-              className="p-1.5 rounded-lg hover:bg-brand-sand text-brand-charcoal/70 cursor-pointer"
+              className="relative p-1.5 rounded-lg hover:bg-brand-sand text-brand-charcoal/70 cursor-pointer before:absolute before:-inset-2 before:content-['']"
               title="Previous month"
             >
               <ChevronLeft className="h-4 w-4" />
@@ -259,7 +263,7 @@ export const DateInput: React.FC<DateInputProps> = ({
               <select
                 value={viewMonth}
                 onChange={e => setViewMonth(Number(e.target.value))}
-                className="bg-brand-cream/50 border border-brand-clay rounded-lg px-1.5 py-1 text-[11px] font-bold text-brand-charcoal cursor-pointer"
+                className="h-11 bg-brand-cream/50 border border-brand-clay rounded-lg px-1.5 text-[11px] font-bold text-brand-charcoal cursor-pointer"
               >
                 {MONTH_NAMES.map((label, idx) => (
                   <option key={label} value={idx + 1}>{label}</option>
@@ -269,14 +273,14 @@ export const DateInput: React.FC<DateInputProps> = ({
                 type="number"
                 value={viewYear}
                 onChange={e => setViewYear(Number(e.target.value) || viewYear)}
-                className="w-[62px] bg-brand-cream/50 border border-brand-clay rounded-lg px-1.5 py-1 text-[11px] font-bold text-brand-charcoal font-mono"
+                className="h-11 w-[62px] bg-brand-cream/50 border border-brand-clay rounded-lg px-1.5 text-[11px] font-bold text-brand-charcoal font-mono"
               />
             </div>
 
             <button
               type="button"
               onClick={() => stepMonth(1)}
-              className="p-1.5 rounded-lg hover:bg-brand-sand text-brand-charcoal/70 cursor-pointer"
+              className="relative p-1.5 rounded-lg hover:bg-brand-sand text-brand-charcoal/70 cursor-pointer before:absolute before:-inset-2 before:content-['']"
               title="Next month"
             >
               <ChevronRight className="h-4 w-4" />
@@ -307,7 +311,10 @@ export const DateInput: React.FC<DateInputProps> = ({
                   type="button"
                   disabled={disabledDay}
                   onClick={() => commit(cell.iso)}
-                  className={`h-7 rounded-lg text-[11px] font-bold transition-colors ${
+                  // h-11 is the 44px touch minimum. The WIDTH cannot reach it —
+                  // seven columns in a 264px popup leave ~33px — so the height
+                  // is taken as far as it goes.
+                  className={`h-11 rounded-lg text-[11px] font-bold transition-colors ${
                     disabledDay
                       ? 'text-brand-charcoal/25 cursor-not-allowed'
                       : isSelected

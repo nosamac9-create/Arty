@@ -225,7 +225,7 @@ export const CheckoutInfoSection: React.FC = () => {
               </div>
               <button
                 onClick={() => setIsLoginModalOpen(true)}
-                className="px-3 py-1.5 text-xs font-semibold text-brand-terracotta bg-brand-cream border border-brand-terracotta/30 rounded-xl hover:bg-brand-terracotta hover:text-white transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                className="px-4 py-2 min-h-11 inline-flex items-center justify-center text-xs font-semibold text-brand-terracotta bg-brand-cream border border-brand-terracotta/30 rounded-xl hover:bg-brand-terracotta hover:text-white transition-colors cursor-pointer whitespace-nowrap shrink-0"
               >
                 Sign In
               </button>

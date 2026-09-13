@@ -465,7 +465,7 @@ export const WorkshopDetailSection: React.FC = () => {
                     type="button"
                     disabled={isPrevMonthDisabled}
                     onClick={handlePrevMonth}
-                    className="p-2.5 rounded-xl hover:bg-brand-sand border border-brand-clay disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer text-brand-charcoal"
+                    className="h-11 w-11 flex items-center justify-center rounded-xl hover:bg-brand-sand border border-brand-clay disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer text-brand-charcoal"
                     title="Previous Month"
                   >
                     <ChevronLeft className="h-4 w-4" />
@@ -476,7 +476,7 @@ export const WorkshopDetailSection: React.FC = () => {
                   <button
                     type="button"
                     onClick={handleNextMonth}
-                    className="p-2.5 rounded-xl hover:bg-brand-sand border border-brand-clay cursor-pointer text-brand-charcoal"
+                    className="h-11 w-11 flex items-center justify-center rounded-xl hover:bg-brand-sand border border-brand-clay cursor-pointer text-brand-charcoal"
                     title="Next Month"
                   >
                     <ChevronRight className="h-4 w-4" />
@@ -498,7 +498,7 @@ export const WorkshopDetailSection: React.FC = () => {
                 <div className="grid grid-cols-7 gap-1">
                   {calendarGrid.map((item, idx) => {
                     if (!item) {
-                      return <div key={`empty-${idx}`} className="h-8"></div>;
+                      return <div key={`empty-${idx}`} className="h-11"></div>;
                     }
 
                     const isSelected = selectedDate === item.dateStr;
@@ -507,7 +507,7 @@ export const WorkshopDetailSection: React.FC = () => {
                       return (
                         <div
                           key={item.dateStr}
-                          className="h-8 flex items-center justify-center text-xs text-brand-charcoal/20 rounded-xl cursor-not-allowed select-none"
+                          className="h-11 flex items-center justify-center text-xs text-brand-charcoal/20 rounded-xl cursor-not-allowed select-none"
                         >
                           {item.dayNum}
                         </div>
@@ -522,7 +522,10 @@ export const WorkshopDetailSection: React.FC = () => {
                           setSelectedDate(item.dateStr);
                           setSelectedSlot(null);
                         }}
-                        className={`h-9 rounded-xl text-xs font-semibold flex flex-col items-center justify-center transition-all cursor-pointer relative ${
+                        // h-11 is the 44px touch minimum. The WIDTH cannot reach
+                        // it — seven columns in this card leave ~34px at 375px —
+                        // so the height is taken as far as it goes.
+                        className={`h-11 rounded-xl text-xs font-semibold flex flex-col items-center justify-center transition-all cursor-pointer relative ${
                           isSelected
                             ? 'bg-brand-terracotta text-brand-cream shadow-card-sm font-black'
                             : item.isToday
@@ -633,7 +636,11 @@ export const WorkshopDetailSection: React.FC = () => {
                   <span className="font-semibold uppercase tracking-wider text-[10px] text-brand-sage">Booking Participant</span>
                   <button 
                     onClick={() => setIsEditingInfo(!isEditingInfo)}
-                    className="text-[10px] text-brand-terracotta font-semibold flex items-center gap-1 hover:underline cursor-pointer"
+                    // The tap area is expanded by a transparent pseudo-element
+                    // rather than by growing the button: it sits opposite a
+                    // label in a justify-between row, and a visually larger
+                    // control would unbalance it. 13px of text + 16px each side.
+                    className="relative text-[10px] text-brand-terracotta font-semibold flex items-center gap-1 hover:underline cursor-pointer before:absolute before:-inset-4 before:content-['']"
                   >
                     <Edit className="h-3 w-3" />
                     <span>{isEditingInfo ? 'Save' : 'Edit'}</span>

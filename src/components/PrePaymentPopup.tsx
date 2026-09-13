@@ -49,7 +49,9 @@ export const PrePaymentPopup: React.FC<PrePaymentPopupProps> = ({ config, onConf
             <button
               type="button"
               onClick={onCancel}
-              className="p-1.5 rounded-lg text-brand-charcoal/40 hover:bg-brand-sand cursor-pointer shrink-0"
+              // Tap area expanded by a transparent pseudo-element rather than
+              // by growing the button, which would crowd the heading beside it.
+              className="relative p-1.5 rounded-lg text-brand-charcoal/40 hover:bg-brand-sand cursor-pointer shrink-0 before:absolute before:-inset-2 before:content-['']"
             >
               <X className="h-4 w-4" />
             </button>
