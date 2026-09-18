@@ -5,6 +5,7 @@
 
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { useLanguage } from '../context/LanguageContext';
 import { Calendar, Box, Flame, Compass, Clock, LogIn, Hash , CheckCircle2, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { PotteryPiece, stageCustomerLabel, migrateLegacyPieceStatus } from '../types';
 import Reveal from './ui/Reveal';
@@ -15,6 +16,7 @@ export const MyPiecesSection: React.FC = () => {
     pieces, setCustomerTab, currentUser,
     pipelineStages, workshops
   } = useApp();
+  const { t } = useLanguage();
 
   // Filter pieces strictly for the logged-in customer
   const userPieces = React.useMemo(() => {
@@ -46,7 +48,7 @@ export const MyPiecesSection: React.FC = () => {
 
   const STAGES = customerStages.length > 0
     ? customerStages.map(stageCustomerLabel)
-    : ['Created', 'First Burn and Colored', 'Ready for Pickup'];
+    : [t('Created', 'تم الإنشاء'), t('First Burn and Colored', 'الحرق الأول والتلوين'), t('Ready for Pickup', 'جاهزة للاستلام')];
 
   /**
    * The tracker reads its position from the configured stages rather than a
@@ -114,6 +116,12 @@ export const MyPiecesSection: React.FC = () => {
 
   const [activeTab, setActiveTab] = React.useState<PieceTab>('Ready to collect');
 
+  /** Display label for a piece tab — the underlying tab value never changes. */
+  const pieceTabLabel = (tab: PieceTab) =>
+    tab === 'Ready to collect' ? t('Ready to collect', 'جاهزة للاستلام')
+    : tab === 'In progress' ? t('In progress', 'قيد التنفيذ')
+    : t('Collected', 'تم الاستلام');
+
   const categorizedPieces = React.useMemo(() => {
     const groups: Record<PieceTab, PotteryPiece[]> = {
       'Ready to collect': [],
@@ -168,11 +176,14 @@ export const MyPiecesSection: React.FC = () => {
       {/* Header block */}
       <div className="pb-8 border-b border-brand-clay mb-8">
         <Reveal index={0}>
-          <h1 className="font-display text-3xl font-semibold text-brand-charcoal">My Pottery Creations</h1>
+          <h1 className="font-display text-3xl font-semibold text-brand-charcoal">{t('My Pottery Creations', 'أعمالي الفخارية')}</h1>
         </Reveal>
         <Reveal index={1}>
           <p className="text-sm text-brand-ink mt-1">
-            Track your handcrafted clay pieces from creation through their first burn and coloring, to pickup.
+            {t(
+              'Track your handcrafted clay pieces from creation through their first burn and coloring, to pickup.',
+              'تابع قطعك الفخارية اليدوية من الصنع، مرورًا بالحرق الأول والتلوين، وحتى الاستلام.'
+            )}
           </p>
         </Reveal>
       </div>
@@ -194,9 +205,12 @@ export const MyPiecesSection: React.FC = () => {
             <Flame className="h-7 w-7" />
           </div>
           <div>
-            <h3 className="font-display text-xl font-semibold text-brand-charcoal">Log in to view your pieces</h3>
+            <h3 className="font-display text-xl font-semibold text-brand-charcoal">{t('Log in to view your pieces', 'سجّل الدخول لعرض قطعك')}</h3>
             <p className="text-sm text-brand-ink mt-2 leading-relaxed">
-              Log in with your account or phone number to see live status updates for your ceramic pieces, kiln firing, and pickup dates.
+              {t(
+                'Log in with your account or phone number to see live status updates for your ceramic pieces, kiln firing, and pickup dates.',
+                'سجّل الدخول بحسابك أو رقم جوالك لمشاهدة تحديثات الحالة المباشرة لقطعك الخزفية، وحرق الفرن، ومواعيد الاستلام.'
+              )}
             </p>
           </div>
           <button
@@ -204,7 +218,7 @@ export const MyPiecesSection: React.FC = () => {
             className="inline-flex items-center gap-2 rounded-xl bg-brand-terracotta px-6 py-3 text-xs font-semibold text-brand-cream hover:bg-brand-terracotta-hover shadow-card-sm cursor-pointer"
           >
             <LogIn className="h-4 w-4" />
-            <span>Sign In to Account</span>
+            <span>{t('Sign In to Account', 'تسجيل الدخول إلى الحساب')}</span>
           </button>
         </div>
         </Reveal>
@@ -219,9 +233,12 @@ export const MyPiecesSection: React.FC = () => {
             <Box className="h-7 w-7" />
           </div>
           <div>
-            <h3 className="font-display text-xl font-semibold text-brand-charcoal">No pottery pieces registered yet</h3>
+            <h3 className="font-display text-xl font-semibold text-brand-charcoal">{t('No pottery pieces registered yet', 'لا توجد قطع فخارية مسجلة بعد')}</h3>
             <p className="text-sm text-brand-ink mt-2 leading-relaxed">
-              Your handcrafted pieces will appear here once logged by café staff after your workshop session!
+              {t(
+                'Your handcrafted pieces will appear here once logged by café staff after your workshop session!',
+                'ستظهر قطعك اليدوية هنا بمجرد تسجيلها من فريق المقهى بعد جلسة الورشة!'
+              )}
             </p>
           </div>
           <button
@@ -229,7 +246,7 @@ export const MyPiecesSection: React.FC = () => {
             className="inline-flex items-center gap-2 rounded-xl bg-brand-terracotta px-5 py-3 text-xs font-semibold text-brand-cream hover:bg-brand-terracotta-hover shadow-card-sm cursor-pointer"
           >
             <Compass className="h-4 w-4" />
-            <span>Explore Workshops</span>
+            <span>{t('Explore Workshops', 'استكشف الورش')}</span>
           </button>
         </div>
         </Reveal>
@@ -251,7 +268,7 @@ export const MyPiecesSection: React.FC = () => {
                   : 'border-transparent text-brand-muted hover:text-brand-terracotta'
               }`}
             >
-              <span>{tab}</span>
+              <span>{pieceTabLabel(tab)}</span>
               {categorizedPieces[tab].length > 0 && (
                 <span className="ml-2 inline-flex items-center rounded-full bg-brand-terracotta/10 px-2 py-0.5 text-xs font-semibold text-brand-terracotta">
                   {categorizedPieces[tab].length}
@@ -266,10 +283,13 @@ export const MyPiecesSection: React.FC = () => {
             <div className="bg-white border border-brand-clay rounded-[28px] py-12 px-6 text-center max-w-md mx-auto shadow-card-sm">
               <p className="text-sm text-brand-ink">
                 {activeTab === 'Ready to collect'
-                  ? 'Nothing waiting for you just yet. We will let you know the moment a piece is ready.'
+                  ? t(
+                      'Nothing waiting for you just yet. We will let you know the moment a piece is ready.',
+                      'لا شيء بانتظارك الآن. سنخبرك فور جاهزية القطعة.'
+                    )
                   : activeTab === 'In progress'
-                    ? 'No pieces with us at the moment.'
-                    : 'Nothing collected yet.'}
+                    ? t('No pieces with us at the moment.', 'لا توجد قطع لدينا حاليًا.')
+                    : t('Nothing collected yet.', 'لم يتم استلام شيء بعد.')}
               </p>
             </div>
           </Reveal>
@@ -302,14 +322,14 @@ export const MyPiecesSection: React.FC = () => {
                 {isReady && !isBroken && (
                   <div className="absolute top-0 left-0 right-0 flex items-center justify-center gap-1.5 bg-brand-terracotta text-brand-cream text-center text-xs font-semibold py-2 rounded-t-[30px] tracking-wider">
                     <CheckCircle2 className="h-3.5 w-3.5" />
-                    <span>Ready! Ready for pickup at the Arty Café shelf.</span>
+                    <span>{t('Ready! Ready for pickup at the Arty Café shelf.', 'جاهزة! متاحة للاستلام من رف آرتي كافيه.')}</span>
                   </div>
                 )}
 
                 {/* Broken Banner — states the status plainly, with no internal notes */}
                 {isBroken && (
                   <div className="absolute top-0 left-0 right-0 bg-red-600 text-white text-center text-xs font-semibold py-2 rounded-t-[30px] tracking-wider">
-                    Broken — please contact Arty Café
+                    {t('Broken — please contact Arty Café', 'مكسورة — يرجى التواصل مع آرتي كافيه')}
                   </div>
                 )}
 
@@ -329,16 +349,16 @@ export const MyPiecesSection: React.FC = () => {
                       {p.pieceCode ? (
                         <span className="text-[10px] font-mono font-semibold bg-brand-sand/80 text-brand-terracotta px-2 py-0.5 rounded border border-brand-clay flex items-center gap-1">
                           <Hash className="h-3 w-3" />
-                          Code: {p.pieceCode}
+                          {t('Code', 'الرمز')}: {p.pieceCode}
                         </span>
                       ) : (
                         <span className="text-[9px] font-mono font-semibold bg-brand-sand px-2 py-0.5 rounded border border-brand-clay text-brand-muted">
-                          ID: {p.id}
+                          {t('ID', 'المعرّف')}: {p.id}
                         </span>
                       )}
                       <span className="text-[10px] font-semibold text-brand-sage flex items-center gap-1">
                         <Calendar className="h-3.5 w-3.5" />
-                        Created: {p.dateCreated}
+                        {t('Created', 'تاريخ الإنشاء')}: {p.dateCreated}
                       </span>
                     </div>
 
@@ -349,7 +369,7 @@ export const MyPiecesSection: React.FC = () => {
                     {p.expectedReadyDate && (
                       <div className="pt-2 flex items-center gap-1.5 text-xs text-brand-ink font-semibold bg-brand-sand/30 p-2 rounded-xl border border-brand-clay">
                         <Clock className="h-3.5 w-3.5 text-brand-terracotta" />
-                        <span>Expected Ready: {p.expectedReadyDate}</span>
+                        <span>{t('Expected Ready', 'موعد الجاهزية المتوقع')}: {p.expectedReadyDate}</span>
                       </div>
                     )}
                   </div>
@@ -358,9 +378,12 @@ export const MyPiecesSection: React.FC = () => {
                 {/* Broken status notice — no internal damage note is shown */}
                 {isBroken && (
                   <div className="mt-4 p-3 rounded-2xl bg-red-50 border border-red-200 text-start">
-                    <p className="text-xs font-semibold text-red-800">Status: Broken</p>
+                    <p className="text-xs font-semibold text-red-800">{t('Status', 'الحالة')}: {t('Broken', 'مكسورة')}</p>
                     <p className="text-[11px] text-red-700 mt-0.5 leading-relaxed">
-                      Unfortunately this piece was damaged. Please contact Arty Café so our team can assist you with a replacement.
+                      {t(
+                        'Unfortunately this piece was damaged. Please contact Arty Café so our team can assist you with a replacement.',
+                        'للأسف، تعرضت هذه القطعة للتلف. يرجى التواصل مع آرتي كافيه ليتمكن فريقنا من مساعدتك بشأن الاستبدال.'
+                      )}
                     </p>
                   </div>
                 )}
@@ -445,21 +468,21 @@ export const MyPiecesSection: React.FC = () => {
               type="button"
               onClick={() => setPage(prev => Math.max(1, prev - 1))}
               disabled={currentPage === 1}
-              aria-label="Previous page"
+              aria-label={t('Previous page', 'الصفحة السابقة')}
               className="flex h-10 w-10 items-center justify-center rounded-full border border-brand-clay bg-brand-cream text-brand-charcoal transition-colors hover:bg-brand-clay-soft disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-brand-cream cursor-pointer"
             >
               <ChevronLeft className="h-4 w-4 flip-rtl" />
             </button>
 
             <span aria-live="polite" className="text-sm font-semibold text-brand-charcoal ltr-numerals">
-              Page {currentPage} of {pageCount}
+              {t('Page', 'صفحة')} {currentPage} {t('of', 'من')} {pageCount}
             </span>
 
             <button
               type="button"
               onClick={() => setPage(prev => Math.min(pageCount, prev + 1))}
               disabled={currentPage === pageCount}
-              aria-label="Next page"
+              aria-label={t('Next page', 'الصفحة التالية')}
               className="flex h-10 w-10 items-center justify-center rounded-full border border-brand-clay bg-brand-cream text-brand-charcoal transition-colors hover:bg-brand-clay-soft disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-brand-cream cursor-pointer"
             >
               <ChevronRight className="h-4 w-4 flip-rtl" />

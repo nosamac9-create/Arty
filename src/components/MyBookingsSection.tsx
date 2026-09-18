@@ -5,6 +5,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { useApp, getRiyadhNow, parseBookingDateTimeToRiyadhDate } from '../context/AppContext';
+import { useLanguage } from '../context/LanguageContext';
 import { Calendar, Users, Clock, GraduationCap, AlertCircle, Trash2, CalendarX, Compass, HelpCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Booking } from '../types';
 import { resolveBookingInstructor } from '../utils/queueUtils';
@@ -56,6 +57,7 @@ const hoursUntilStart = (booking: Booking, now: Date): number =>
 
 export const MyBookingsSection: React.FC = () => {
   const { bookings, cancelOwnBooking, setCustomerTab, workshops, currentUser, setAuthScreen, staff, workshopSessions } = useApp();
+  const { t } = useLanguage();
   /** The booking currently being cancelled, so its button can be disabled. */
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'Upcoming' | 'Past' | 'Cancelled'>('Upcoming');
@@ -170,6 +172,30 @@ export const MyBookingsSection: React.FC = () => {
     return ws?.image || '';
   };
 
+  /** Display label for a tab — the underlying tab value never changes. */
+  const tabLabel = (tab: 'Upcoming' | 'Past' | 'Cancelled') =>
+    tab === 'Upcoming' ? t('Upcoming', 'القادمة')
+    : tab === 'Past' ? t('Past', 'السابقة')
+    : t('Cancelled', 'الملغاة');
+
+  /**
+   * Display label for a booking status. Translates only what is shown —
+   * `b.status` itself and getStatusBadgeColor's switch are untouched.
+   * Falls back to the raw English status for any value not among the five
+   * enumerated here, so an unanticipated status still renders instead of
+   * throwing or going blank.
+   */
+  const statusLabel = (status: Booking['status']) => {
+    switch (status) {
+      case 'Pending': return t('Pending', 'قيد الانتظار');
+      case 'Checked In': return t('Checked In', 'تم تسجيل الحضور');
+      case 'In Progress': return t('In Progress', 'جارٍ الآن');
+      case 'Completed': return t('Completed', 'مكتمل');
+      case 'Cancelled': return t('Cancelled', 'ملغى');
+      default: return status;
+    }
+  };
+
   if (!currentUser) {
     return (
       <div className="mx-auto max-w-4xl px-4 py-8 animate-in fade-in duration-300 text-start">
@@ -177,11 +203,11 @@ export const MyBookingsSection: React.FC = () => {
         {/* Title */}
         <div className="pb-8 border-b border-brand-clay mb-8">
           <Reveal index={0}>
-            <h1 className="font-display text-3xl font-semibold text-brand-charcoal">My Reservations</h1>
+            <h1 className="font-display text-3xl font-semibold text-brand-charcoal">{t('My Reservations', 'حجوزاتي')}</h1>
           </Reveal>
           <Reveal index={1}>
             <p className="text-sm text-brand-ink mt-1">
-              Review, reschedule, or cancel your upcoming creative sessions at Arty Café.
+              {t('Review, reschedule, or cancel your upcoming creative sessions at Arty Café.', 'راجع، أو أعد جدولة، أو ألغِ جلساتك الإبداعية القادمة في آرتي كافيه.')}
             </p>
           </Reveal>
         </div>
@@ -196,16 +222,19 @@ export const MyBookingsSection: React.FC = () => {
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-terracotta/10 text-brand-terracotta mx-auto">
             <Calendar className="h-8 w-8" />
           </div>
-          <h2 className="font-display text-xl font-semibold text-brand-charcoal">Sign In to View Your Reservations</h2>
+          <h2 className="font-display text-xl font-semibold text-brand-charcoal">{t('Sign In to View Your Reservations', 'سجّل الدخول لعرض حجوزاتك')}</h2>
           <p className="text-xs text-brand-ink leading-relaxed">
-            Please log in or register an account to manage your workshop bookings, view reservation details, or request cancellations.
+            {t(
+              'Please log in or register an account to manage your workshop bookings, view reservation details, or request cancellations.',
+              'يرجى تسجيل الدخول أو إنشاء حساب لإدارة حجوزات الورش، ومشاهدة تفاصيل الحجز، أو طلب الإلغاء.'
+            )}
           </p>
           <div className="pt-2">
             <button
               onClick={() => { setAuthScreen('login'); setCustomerTab('auth'); }}
               className="cursor-pointer bg-brand-terracotta hover:bg-brand-terracotta-hover text-brand-cream font-semibold py-3 px-6 rounded-2xl shadow-card-sm text-xs transition-colors"
             >
-              Sign In or Create Account
+              {t('Sign In or Create Account', 'تسجيل الدخول أو إنشاء حساب')}
             </button>
           </div>
         </div>
@@ -220,11 +249,11 @@ export const MyBookingsSection: React.FC = () => {
       {/* Title */}
       <div className="pb-8 border-b border-brand-clay mb-8">
         <Reveal index={0}>
-          <h1 className="font-display text-3xl font-semibold text-brand-charcoal">My Reservations</h1>
+          <h1 className="font-display text-3xl font-semibold text-brand-charcoal">{t('My Reservations', 'حجوزاتي')}</h1>
         </Reveal>
         <Reveal index={1}>
           <p className="text-sm text-brand-ink mt-1">
-            Review, reschedule, or cancel your upcoming creative sessions at Arty Café.
+            {t('Review, reschedule, or cancel your upcoming creative sessions at Arty Café.', 'راجع، أو أعد جدولة، أو ألغِ جلساتك الإبداعية القادمة في آرتي كافيه.')}
           </p>
         </Reveal>
       </div>
@@ -247,7 +276,7 @@ export const MyBookingsSection: React.FC = () => {
           >
             {/* The underline already says which one is selected; "Tab" was
                 reading as part of the name. */}
-            <span>{tab}</span>
+            <span>{tabLabel(tab)}</span>
             {categorizedBookings[tab].length > 0 && (
               <span className="ml-2 inline-flex items-center rounded-full bg-brand-terracotta/10 px-2 py-0.5 text-xs font-semibold text-brand-terracotta">
                 {categorizedBookings[tab].length}
@@ -272,17 +301,23 @@ export const MyBookingsSection: React.FC = () => {
             </div>
             <h3 className="font-display text-lg font-semibold text-brand-charcoal">
               {activeTab === 'Past'
-                ? 'No past bookings yet'
+                ? t('No past bookings yet', 'لا توجد حجوزات سابقة بعد')
                 : activeTab === 'Cancelled'
-                ? 'No cancelled bookings'
-                : 'No upcoming bookings'}
+                ? t('No cancelled bookings', 'لا توجد حجوزات ملغاة')
+                : t('No upcoming bookings', 'لا توجد حجوزات قادمة')}
             </h3>
             <p className="text-sm text-brand-ink mt-2 leading-relaxed">
               {activeTab === 'Past'
-                ? "You haven't completed any art classes with us yet. Let's make something beautiful!"
+                ? t(
+                    "You haven't completed any art classes with us yet. Let's make something beautiful!",
+                    'لم تكمل أي ورشة فنية معنا بعد. لنصنع شيئًا جميلًا معًا!'
+                  )
                 : activeTab === 'Cancelled'
-                ? "You don't have any cancelled bookings."
-                : "You don't have any sessions booked. Check our interactive timetable to join."
+                ? t("You don't have any cancelled bookings.", 'ليس لديك أي حجوزات ملغاة.')
+                : t(
+                    "You don't have any sessions booked. Check our interactive timetable to join.",
+                    'ليس لديك أي جلسات محجوزة. تصفح جدولنا التفاعلي للانضمام.'
+                  )
               }
             </p>
             <button
@@ -290,7 +325,7 @@ export const MyBookingsSection: React.FC = () => {
               className="mt-6 inline-flex items-center gap-2 rounded-xl bg-brand-terracotta px-5 py-3 text-xs font-semibold text-brand-cream hover:bg-brand-terracotta-hover shadow-card-sm cursor-pointer"
             >
               <Compass className="h-4 w-4" />
-              <span>Browse Workshops</span>
+              <span>{t('Browse Workshops', 'تصفح الورش')}</span>
             </button>
           </div>
           </Reveal>
@@ -325,11 +360,11 @@ export const MyBookingsSection: React.FC = () => {
                         like the "Paid amount" label rather than as a badge. */}
                     {b.status === 'Pending' ? (
                       <span className="block text-[10px] font-semibold uppercase tracking-wider text-brand-sage">
-                        {b.status}
+                        {statusLabel(b.status)}
                       </span>
                     ) : (
                       <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${getStatusBadgeColor(b.status)}`}>
-                        {b.status}
+                        {statusLabel(b.status)}
                       </span>
                     )}
                     <h3 className="font-display text-lg font-semibold text-brand-charcoal leading-tight line-clamp-1">
@@ -339,11 +374,12 @@ export const MyBookingsSection: React.FC = () => {
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-brand-muted font-medium">
                       <span className="flex items-center gap-1">
                         <Calendar className="h-3.5 w-3.5 text-brand-sage" />
-                        <span>{b.date} at {b.time}</span>
+                        <span>{b.date} {t('at', 'في')} {b.time}</span>
                       </span>
                       <span className="flex items-center gap-1">
                         <Users className="h-3.5 w-3.5 text-brand-sage" />
-                        <span>{b.participants} {b.participants === 1 ? 'guest' : 'guests'}</span>
+                        {/* ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker. */}
+                        <span>{b.participants} {b.participants === 1 ? t('guest', 'ضيف') : t('guests', 'ضيوف')}</span>
                       </span>
                       {/* Tutor resolved from the booked session record */}
                       <span className="flex items-center gap-1">
@@ -363,8 +399,8 @@ export const MyBookingsSection: React.FC = () => {
                 {/* Right block: total price & actions */}
                 <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between sm:justify-center w-full sm:w-auto border-t sm:border-t-0 pt-3 sm:pt-0 border-brand-clay gap-2">
                   <div className="text-start sm:text-right">
-                    <span className="text-[10px] font-semibold text-brand-sage block uppercase tracking-wider">Paid amount</span>
-                    <span className="text-base font-semibold text-brand-charcoal">{b.totalPrice} SAR</span>
+                    <span className="text-[10px] font-semibold text-brand-sage block uppercase tracking-wider">{t('Paid amount', 'المبلغ المدفوع')}</span>
+                    <span className="text-base font-semibold text-brand-charcoal">{b.totalPrice} {t('SAR', 'ريال')}</span>
                   </div>
 
                   {/* Cancel Booking Action Trigger with Hover Tooltip simulation */}
@@ -376,11 +412,15 @@ export const MyBookingsSection: React.FC = () => {
                           <button
                             onMouseEnter={() => setHoveredTooltipId(b.id)}
                             onMouseLeave={() => setHoveredTooltipId(null)}
-                            onClick={() => alert(`Cancellation closed. It is less than 24 hours before class start. Please contact the front desk at ${STUDIO_PHONE}.`)}
+                            /* window.alert() renders as browser chrome and cannot be RTL-styled regardless of translation — translating the text anyway. */
+                            onClick={() => alert(t(
+                              `Cancellation closed. It is less than 24 hours before class start. Please contact the front desk at ${STUDIO_PHONE}.`,
+                              `تم إغلاق باب الإلغاء. تبقّى أقل من 24 ساعة على بدء الورشة. يرجى التواصل مع مكتب الاستقبال على ${STUDIO_PHONE}.`
+                            ))}
                             className="text-xs font-semibold text-gray-400 bg-gray-100 border border-gray-200 px-3 py-2 min-h-11 rounded-lg flex items-center gap-1.5 cursor-not-allowed"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
-                            <span>Cancel booking</span>
+                            <span>{t('Cancel booking', 'إلغاء الحجز')}</span>
                             <HelpCircle className="h-3 w-3 text-brand-terracotta shrink-0" />
                           </button>
 
@@ -389,7 +429,7 @@ export const MyBookingsSection: React.FC = () => {
                             <div className="absolute right-0 bottom-full mb-2 z-50 w-[min(16rem,calc(100vw-2rem))] p-3 bg-brand-charcoal text-brand-cream rounded-xl text-[11px] leading-relaxed shadow-card border border-brand-clay animate-in fade-in slide-in-from-bottom-2 duration-200 font-semibold">
                               <div className="flex items-start gap-1.5">
                                 <AlertCircle className="h-4 w-4 text-brand-terracotta shrink-0 mt-0.5" />
-                                <span>Cancellation closed — less than 24 hours before start</span>
+                                <span>{t('Cancellation closed — less than 24 hours before start', 'الإلغاء مغلق — أقل من 24 ساعة على البدء')}</span>
                               </div>
                               <div className="absolute top-full right-4 w-2 h-2 bg-brand-charcoal rotate-45 -mt-1 border-r border-b border-brand-clay"></div>
                             </div>
@@ -405,9 +445,19 @@ export const MyBookingsSection: React.FC = () => {
                             // then declines to give.
                             const willRefund = isRefundable(b);
                             const consequence = willRefund
-                              ? `Your payment of ${b.totalPrice} SAR will be refunded.`
-                              : 'This booking is within 24 hours of its start, so it is not eligible for a refund.';
-                            if (!window.confirm(`Are you sure you want to cancel your booking for ${b.workshopTitle}? ${consequence}`)) return;
+                              ? t(
+                                  `Your payment of ${b.totalPrice} SAR will be refunded.`,
+                                  `سيتم استرداد مبلغ الدفع البالغ ${b.totalPrice} ريال.`
+                                )
+                              : t(
+                                  'This booking is within 24 hours of its start, so it is not eligible for a refund.',
+                                  'هذا الحجز خلال 24 ساعة من بدايته، لذا فهو غير مؤهل لاسترداد المبلغ.'
+                                );
+                            // window.confirm() renders as browser chrome and cannot be RTL-styled regardless of translation — translating the text anyway.
+                            if (!window.confirm(t(
+                              `Are you sure you want to cancel your booking for ${b.workshopTitle}? ${consequence}`,
+                              `هل أنت متأكد أنك تريد إلغاء حجزك في ${b.workshopTitle}؟ ${consequence}`
+                            ))) return;
 
                             // The result is acted on rather than discarded: the
                             // old call could be refused server-side and the page
@@ -416,13 +466,14 @@ export const MyBookingsSection: React.FC = () => {
                             const result = await cancelOwnBooking(b.id);
                             setCancellingId(null);
                             if (!result.success) {
-                              window.alert(result.error || 'That booking could not be cancelled.');
+                              // window.alert() renders as browser chrome and cannot be RTL-styled regardless of translation — translating the text anyway.
+                              window.alert(result.error || t('That booking could not be cancelled.', 'تعذّر إلغاء هذا الحجز.'));
                             }
                           }}
                           className="text-xs font-semibold text-brand-terracotta hover:text-brand-terracotta-hover hover:underline py-2 px-3 min-h-11 rounded-lg border border-transparent hover:border-brand-clay flex items-center gap-1.5 cursor-pointer"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
-                          <span>Cancel booking</span>
+                          <span>{t('Cancel booking', 'إلغاء الحجز')}</span>
                         </button>
                       )}
                     </div>
@@ -431,7 +482,7 @@ export const MyBookingsSection: React.FC = () => {
                   {/* Cancelled placeholder marker */}
                   {isCancelled && (
                     <span className="text-xs font-semibold text-brand-charcoal/40 italic block py-1">
-                      Refund complete
+                      {t('Refund complete', 'تم استرداد المبلغ')}
                     </span>
                   )}
                 </div>
@@ -452,21 +503,21 @@ export const MyBookingsSection: React.FC = () => {
             type="button"
             onClick={() => setPage(p => Math.max(1, p - 1))}
             disabled={currentPage === 1}
-            aria-label="Previous page"
+            aria-label={t('Previous page', 'الصفحة السابقة')}
             className="flex h-10 w-10 items-center justify-center rounded-full border border-brand-clay bg-brand-cream text-brand-charcoal transition-colors hover:bg-brand-clay-soft disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-brand-cream cursor-pointer"
           >
             <ChevronLeft className="h-4 w-4 flip-rtl" />
           </button>
 
           <span aria-live="polite" className="text-sm font-semibold text-brand-charcoal ltr-numerals">
-            Page {currentPage} of {pageCount}
+            {t('Page', 'صفحة')} {currentPage} {t('of', 'من')} {pageCount}
           </span>
 
           <button
             type="button"
             onClick={() => setPage(p => Math.min(pageCount, p + 1))}
             disabled={currentPage === pageCount}
-            aria-label="Next page"
+            aria-label={t('Next page', 'الصفحة التالية')}
             className="flex h-10 w-10 items-center justify-center rounded-full border border-brand-clay bg-brand-cream text-brand-charcoal transition-colors hover:bg-brand-clay-soft disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-brand-cream cursor-pointer"
           >
             <ChevronRight className="h-4 w-4 flip-rtl" />
