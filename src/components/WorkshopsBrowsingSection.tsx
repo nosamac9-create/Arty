@@ -357,7 +357,11 @@ export const WorkshopsBrowsingSection: React.FC = () => {
 
         {/* LIVE GRID — WORKSHOPS */}
         {!isBirthdayView && filteredWorkshops.length > 0 && (
-          <div className="grid grid-cols-1 gap-4 sm:gap-8 md:grid-cols-3">
+          /* Two-up below md. The card is ~163px there, so the body drops to
+             photo / title / duration / price — the description, ages and
+             instructor are all on the detail page. md:grid-cols-3 is
+             unaffected: it is a different breakpoint and still wins at 768. */
+          <div className="grid grid-cols-2 gap-4 sm:gap-8 md:grid-cols-3">
             {filteredWorkshops.map((ws, cardIndex) => {
               // Fully booked considers every published, upcoming session for
               // this workshop — not just the one date most recently looked at
@@ -395,7 +399,7 @@ export const WorkshopsBrowsingSection: React.FC = () => {
                   {/* Image banner. Shorter than the package panels' at lg,
                       where these sit three to a row rather than two, so the
                       card does not turn tall and narrow. */}
-                  <div className="relative h-60 w-full shrink-0 overflow-hidden bg-brand-sand sm:h-64 lg:h-[17rem]">
+                  <div className="relative aspect-square w-full shrink-0 overflow-hidden bg-brand-sand md:aspect-auto md:h-64 lg:h-[17rem]">
                     {/* The workshop's own photographs, cross-fading inside this
                         frame — unchanged by this layout pass. */}
                     <WorkshopCardSlideshow
@@ -424,28 +428,28 @@ export const WorkshopsBrowsingSection: React.FC = () => {
                         sits on those panels, then the name. The skill level
                         stays appended to the category, as it was on this card
                         before — it is existing content, not new metadata. */}
-                    <div className="absolute inset-x-0 bottom-0 p-6 sm:p-7">
+                    <div className="absolute inset-x-0 bottom-0 p-3 sm:p-7">
                       <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-cream/70">
                         {/* Same wording as the filter's "All Levels" option — the tag
                             and the filter describe the same thing and should read alike. */}
                         {ws.category}{ws.skillLevel ? ` · ${ws.skillLevel === 'All Levels' ? 'Suitable for all levels' : ws.skillLevel}` : ''}
                       </span>
-                      <h3 className="mt-1.5 font-display text-[24px] font-semibold leading-tight text-brand-cream sm:text-[26px] line-clamp-2">
+                      <h3 className="mt-1.5 font-display text-[17px] font-semibold leading-tight text-brand-cream sm:text-[26px] line-clamp-2">
                         {ws.title}
                       </h3>
                     </div>
                   </div>
 
-                  <div className="flex flex-1 flex-col p-6 sm:p-7">
+                  <div className="flex flex-1 flex-col p-3 sm:p-7">
                     {/* The description opens the white area — the title is over
                         the image now and is not repeated here. */}
                     {ws.hook && (
-                      <p className="text-[15px] leading-[1.7] text-brand-ink line-clamp-2">{ws.hook}</p>
+                      <p className="max-md:hidden text-[15px] leading-[1.7] text-brand-ink line-clamp-2">{ws.hook}</p>
                     )}
 
                     {/* The site's meta treatment: lucide at h-4 w-4 in sage,
                         1.5 gap. Same fields as before — nothing added. */}
-                    <div className="mt-4 text-[13px] text-brand-ink space-y-2">
+                    <div className="mt-0 text-[13px] text-brand-ink space-y-2 sm:mt-4">
                       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 min-w-0">
                         {ws.duration && (
                           <span className="inline-flex min-w-0 items-center gap-1.5">
@@ -454,14 +458,14 @@ export const WorkshopsBrowsingSection: React.FC = () => {
                           </span>
                         )}
                         {ws.ageRange && (
-                          <span className="inline-flex min-w-0 items-center gap-1.5">
+                          <span className="max-md:hidden inline-flex min-w-0 items-center gap-1.5">
                             <Sparkles className="h-4 w-4 shrink-0 text-brand-sage" />
                             <span className="truncate ltr-numerals">{ws.ageRange}</span>
                           </span>
                         )}
                       </div>
                       {ws.instructor && (
-                        <p className="inline-flex min-w-0 max-w-full items-center gap-1.5 text-brand-muted">
+                        <p className="max-md:hidden inline-flex min-w-0 max-w-full items-center gap-1.5 text-brand-muted">
                           <Paintbrush className="h-4 w-4 shrink-0 text-brand-sage" />
                           <span className="truncate">Instructor {ws.instructor}</span>
                         </p>
@@ -471,12 +475,18 @@ export const WorkshopsBrowsingSection: React.FC = () => {
                     {/* mt-auto anchors the price to the foot, so prices line up
                         across a row whatever length the descriptions run. No
                         CTA beside it: the whole card is the click target. */}
-                    <div className="mt-auto border-t border-brand-clay pt-5 sm:pt-6">
+                    <div className="mt-auto border-t border-brand-clay pt-3 sm:pt-6">
                       <div className="flex items-baseline gap-1.5">
-                        <span className="font-display text-[32px] font-semibold leading-none text-brand-charcoal ltr-numerals">
+                        {/* brand-ink at every width — the colour the duration
+                            above it inherits — so the price reads as part of
+                            the meta block rather than announcing itself. The
+                            size steps down with it: 20px on a phone, 29px from
+                            sm, which is the same 0.909 ratio applied to the
+                            32px this used to be. */}
+                        <span className="font-display text-[20px] font-semibold leading-none text-brand-ink ltr-numerals sm:text-[29px]">
                           {ws.price}
                         </span>
-                        <span className="text-sm font-medium text-brand-charcoal">SAR</span>
+                        <span className="text-sm font-medium text-brand-ink">SAR</span>
                       </div>
                     </div>
                   </div>
