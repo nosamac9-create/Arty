@@ -5,7 +5,7 @@
 
 import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { CreditCard, Smartphone, ShieldCheck, Check, Lock } from 'lucide-react';
+import { CreditCard, Smartphone, ShieldCheck, Check, Lock, ChevronDown } from 'lucide-react';
 import { PhoneInput } from './PhoneInput';
 import { PrePaymentPopup } from './PrePaymentPopup';
 import { migratePrePaymentPopup } from '../types';
@@ -201,6 +201,41 @@ export const CheckoutPaymentSection: React.FC = () => {
       setCustomerTab('confirmation');
     }, 800);
   };
+
+  const summaryBody = (
+    <>
+            <div className="space-y-1 text-xs text-brand-ink">
+              <p className="text-[10px] font-semibold uppercase text-brand-sage">Customer</p>
+              <p className="font-semibold text-brand-charcoal text-sm">{pendingBooking.customerName}</p>
+              <p>{pendingBooking.customerEmail}</p>
+              <p>{pendingBooking.customerPhone}</p>
+            </div>
+
+            <div className="border-t border-brand-clay pt-3 space-y-2 text-xs text-brand-ink">
+              <div className="flex justify-between">
+                <span>Workshop:</span>
+                <span className="font-semibold text-brand-charcoal">{pendingBooking.workshopTitle}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Date:</span>
+                <span className="font-semibold text-brand-charcoal">{pendingBooking.date}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Time Slot:</span>
+                <span className="font-semibold text-brand-charcoal">{pendingBooking.time}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Participants:</span>
+                <span className="font-semibold text-brand-charcoal">{pendingBooking.participants} {pendingBooking.participants === 1 ? 'guest' : 'guests'}</span>
+              </div>
+            </div>
+
+            <div className="border-t border-brand-clay pt-3 flex justify-between items-center text-brand-charcoal">
+              <span className="font-semibold text-sm">Total Amount:</span>
+              <span className="font-serif text-2xl font-semibold text-brand-terracotta">{pendingBooking.totalPrice} SAR</span>
+            </div>
+    </>
+  );
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-10 animate-in fade-in duration-300 text-start">
@@ -409,6 +444,20 @@ export const CheckoutPaymentSection: React.FC = () => {
               <p className="text-xs text-red-500 font-semibold text-center">{submitError}</p>
             )}
 
+            {/* MOBILE SUMMARY — see CheckoutInfoSection. Open by default here:
+                this is the step that charges the card, so the breakdown should
+                be on screen rather than one tap away. */}
+            <details open className="group lg:hidden rounded-2xl border border-brand-clay bg-brand-sand/30">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 [&::-webkit-details-marker]:hidden">
+                <span className="min-w-0 truncate text-sm font-semibold text-brand-charcoal">{pendingBooking.workshopTitle}</span>
+                <span className="flex shrink-0 items-center gap-2">
+                  <span className="font-serif text-lg font-semibold text-brand-terracotta">{pendingBooking.totalPrice} SAR</span>
+                  <ChevronDown className="h-4 w-4 text-brand-muted transition-transform group-[[open]]:rotate-180" />
+                </span>
+              </summary>
+              <div className="space-y-4 border-t border-brand-clay p-4">{summaryBody}</div>
+            </details>
+
             <button
               type="submit"
               disabled={isProcessing || !!bookingError}
@@ -430,42 +479,13 @@ export const CheckoutPaymentSection: React.FC = () => {
         </div>
 
         {/* Right Summary Column */}
-        <div className="lg:col-span-5">
+        <div className="hidden lg:block lg:col-span-5">
           <div className="bg-brand-sand/30 rounded-[28px] p-6 border border-brand-clay shadow-card space-y-4">
             <h3 className="font-display text-lg font-semibold text-brand-charcoal border-b border-brand-clay pb-3">
               Booking Details
             </h3>
 
-            <div className="space-y-1 text-xs text-brand-ink">
-              <p className="text-[10px] font-semibold uppercase text-brand-sage">Customer</p>
-              <p className="font-semibold text-brand-charcoal text-sm">{pendingBooking.customerName}</p>
-              <p>{pendingBooking.customerEmail}</p>
-              <p>{pendingBooking.customerPhone}</p>
-            </div>
-
-            <div className="border-t border-brand-clay pt-3 space-y-2 text-xs text-brand-ink">
-              <div className="flex justify-between">
-                <span>Workshop:</span>
-                <span className="font-semibold text-brand-charcoal">{pendingBooking.workshopTitle}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Date:</span>
-                <span className="font-semibold text-brand-charcoal">{pendingBooking.date}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Time Slot:</span>
-                <span className="font-semibold text-brand-charcoal">{pendingBooking.time}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Participants:</span>
-                <span className="font-semibold text-brand-charcoal">{pendingBooking.participants} {pendingBooking.participants === 1 ? 'guest' : 'guests'}</span>
-              </div>
-            </div>
-
-            <div className="border-t border-brand-clay pt-3 flex justify-between items-center text-brand-charcoal">
-              <span className="font-semibold text-sm">Total Amount:</span>
-              <span className="font-serif text-2xl font-semibold text-brand-terracotta">{pendingBooking.totalPrice} SAR</span>
-            </div>
+            {summaryBody}
           </div>
         </div>
 

@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { PasswordField } from './PasswordField';
 import { useApp } from '../context/AppContext';
-import { User, Mail, Phone, ArrowRight, ShieldCheck, LogIn, CheckCircle2, Lock , Check } from 'lucide-react';
+import { User, Mail, Phone, ArrowRight, ShieldCheck, LogIn, CheckCircle2, Lock , Check, ChevronDown } from 'lucide-react';
 import { validateSaudiPhone, normaliseSaudiPhone } from '../utils/phoneUtils';
 import { PhoneInput } from './PhoneInput';
 import {
@@ -178,6 +178,64 @@ export const CheckoutInfoSection: React.FC = () => {
       </div>
     );
   }
+
+  const summaryBody = (
+    <>
+            <div className="flex gap-4">
+              <AppImage
+                src={birthday ? (birthdayPackage?.image || workshop.image) : workshop.image}
+                alt={birthday ? (birthdayPackage?.name || 'Birthday package') : workshop.title}
+                className="w-20 h-20 rounded-2xl object-cover shrink-0 bg-brand-sand border border-brand-clay"
+              />
+              <div>
+                <span className="text-[10px] font-semibold text-brand-sage uppercase tracking-wider block">
+                  {birthday ? 'Birthday Package' : workshop.category}
+                </span>
+                <h4 className="font-semibold text-brand-charcoal text-sm leading-tight">{pendingBooking.workshopTitle}</h4>
+                <p className="text-xs text-brand-ink mt-1">
+                  {birthday
+                    ? `${birthdayPackage?.duration || ''}${birthdayPackage?.ageInformation ? ` • ${birthdayPackage.ageInformation}` : ''}`
+                    : `${workshop.duration} • ${workshop.room.split('(')[0]}`}
+                </p>
+              </div>
+            </div>
+
+            <div className="border-t border-brand-clay pt-3 space-y-2 text-xs text-brand-ink">
+              <div className="flex justify-between">
+                <span>Date:</span>
+                <span className="font-semibold text-brand-charcoal">{pendingBooking.date}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Time Slot:</span>
+                <span className="font-semibold text-brand-charcoal">{pendingBooking.time}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>{birthday ? 'Guests:' : 'Participants:'}</span>
+                <span className="font-semibold text-brand-charcoal">{pendingBooking.participants} {pendingBooking.participants === 1 ? 'guest' : 'guests'}</span>
+              </div>
+              <div className="flex justify-between">
+                {/* Fallback only — a package with a pricingLabel shows its own.
+                    "Per child" here disagreed with the "Price per person" beside
+                    it for a workshop, on the same line of the same panel. */}
+                <span>{birthday ? (birthdayPackage?.pricingLabel || 'Per person') : 'Price per person'}:</span>
+                <span className="font-semibold text-brand-charcoal">
+                  {birthday ? (birthdayPackage?.price ?? 0) : workshop.price} SAR
+                </span>
+              </div>
+              {birthday?.birthdayPersonName && (
+                <div className="flex justify-between">
+                  <span>Birthday person:</span>
+                  <span className="font-semibold text-brand-charcoal">{birthday.birthdayPersonName}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-brand-clay pt-3 flex justify-between items-center text-brand-charcoal">
+              <span className="font-semibold text-sm">{birthday ? 'Deposit Due:' : 'Total Due:'}</span>
+              <span className="font-serif text-xl font-semibold text-brand-terracotta">{pendingBooking.totalPrice} SAR</span>
+            </div>
+    </>
+  );
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-10 animate-in fade-in duration-300 text-start">
@@ -355,6 +413,23 @@ export const CheckoutInfoSection: React.FC = () => {
               </>
             )}
 
+            {/* MOBILE SUMMARY — the right-hand card is hidden below lg, so the
+                breakdown would otherwise never be on screen before the customer
+                commits. Native <details> rather than state: it carries the
+                disclosure semantics and keyboard behaviour for free, and `open`
+                expresses the per-step default as markup. Collapsed here; the
+                payment step opens it, where the amount is about to be charged. */}
+            <details className="group lg:hidden rounded-2xl border border-brand-clay bg-brand-sand/30">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 [&::-webkit-details-marker]:hidden">
+                <span className="min-w-0 truncate text-sm font-semibold text-brand-charcoal">{pendingBooking.workshopTitle}</span>
+                <span className="flex shrink-0 items-center gap-2">
+                  <span className="font-serif text-lg font-semibold text-brand-terracotta">{pendingBooking.totalPrice} SAR</span>
+                  <ChevronDown className="h-4 w-4 text-brand-muted transition-transform group-[[open]]:rotate-180" />
+                </span>
+              </summary>
+              <div className="space-y-4 border-t border-brand-clay p-4">{summaryBody}</div>
+            </details>
+
             <div className="pt-4">
               <button
                 type="submit"
@@ -374,65 +449,13 @@ export const CheckoutInfoSection: React.FC = () => {
         </div>
 
         {/* Right Summary Column */}
-        <div className="lg:col-span-5">
+        <div className="hidden lg:block lg:col-span-5">
           <div className="bg-brand-sand/30 rounded-[28px] p-6 border border-brand-clay shadow-card space-y-4">
             <h3 className="font-display text-lg font-semibold text-brand-charcoal border-b border-brand-clay pb-3">
               Order Summary
             </h3>
 
-            <div className="flex gap-4">
-              <AppImage
-                src={birthday ? (birthdayPackage?.image || workshop.image) : workshop.image}
-                alt={birthday ? (birthdayPackage?.name || 'Birthday package') : workshop.title}
-                className="w-20 h-20 rounded-2xl object-cover shrink-0 bg-brand-sand border border-brand-clay"
-              />
-              <div>
-                <span className="text-[10px] font-semibold text-brand-sage uppercase tracking-wider block">
-                  {birthday ? 'Birthday Package' : workshop.category}
-                </span>
-                <h4 className="font-semibold text-brand-charcoal text-sm leading-tight">{pendingBooking.workshopTitle}</h4>
-                <p className="text-xs text-brand-ink mt-1">
-                  {birthday
-                    ? `${birthdayPackage?.duration || ''}${birthdayPackage?.ageInformation ? ` • ${birthdayPackage.ageInformation}` : ''}`
-                    : `${workshop.duration} • ${workshop.room.split('(')[0]}`}
-                </p>
-              </div>
-            </div>
-
-            <div className="border-t border-brand-clay pt-3 space-y-2 text-xs text-brand-ink">
-              <div className="flex justify-between">
-                <span>Date:</span>
-                <span className="font-semibold text-brand-charcoal">{pendingBooking.date}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Time Slot:</span>
-                <span className="font-semibold text-brand-charcoal">{pendingBooking.time}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>{birthday ? 'Guests:' : 'Participants:'}</span>
-                <span className="font-semibold text-brand-charcoal">{pendingBooking.participants} {pendingBooking.participants === 1 ? 'guest' : 'guests'}</span>
-              </div>
-              <div className="flex justify-between">
-                {/* Fallback only — a package with a pricingLabel shows its own.
-                    "Per child" here disagreed with the "Price per person" beside
-                    it for a workshop, on the same line of the same panel. */}
-                <span>{birthday ? (birthdayPackage?.pricingLabel || 'Per person') : 'Price per person'}:</span>
-                <span className="font-semibold text-brand-charcoal">
-                  {birthday ? (birthdayPackage?.price ?? 0) : workshop.price} SAR
-                </span>
-              </div>
-              {birthday?.birthdayPersonName && (
-                <div className="flex justify-between">
-                  <span>Birthday person:</span>
-                  <span className="font-semibold text-brand-charcoal">{birthday.birthdayPersonName}</span>
-                </div>
-              )}
-            </div>
-
-            <div className="border-t border-brand-clay pt-3 flex justify-between items-center text-brand-charcoal">
-              <span className="font-semibold text-sm">{birthday ? 'Deposit Due:' : 'Total Due:'}</span>
-              <span className="font-serif text-xl font-semibold text-brand-terracotta">{pendingBooking.totalPrice} SAR</span>
-            </div>
+            {summaryBody}
           </div>
         </div>
 
