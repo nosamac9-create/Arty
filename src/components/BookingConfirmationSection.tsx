@@ -92,8 +92,10 @@ export const BookingConfirmationSection: React.FC = () => {
       confetti({
         particleCount: 120,
         spread: 80,
-        origin: { y: 0.5 },
-        colors: ['#C85A32', '#627254', '#D0A348', '#8B5A2B', '#EFE6D5']
+        // No colours: the two side bursts below never set any, so they fall
+        // through to the library's bright default. This burst carried a
+        // brand-toned set, which put two palettes on screen at once.
+        origin: { y: 0.5 }
       });
       const timer = setTimeout(() => {
         confetti({
