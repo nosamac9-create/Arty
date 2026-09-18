@@ -313,7 +313,7 @@ export const WorkshopDetailSection: React.FC = () => {
   };
 
   return (
-    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-8 pb-44 lg:pb-8 animate-in fade-in duration-300 text-start">
+    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-8 pb-8 animate-in fade-in duration-300 text-start">
       
       {/* Back button */}
       <BackButton onClick={() => setCustomerTab('workshops')} className="mb-6">
@@ -730,32 +730,6 @@ export const WorkshopDetailSection: React.FC = () => {
 
           </div>
         </div>
-      </div>
-
-      {/* Persistent Mobile Bottom Bar — sits directly above the global tab
-          bar (not on top of it) so both stay reachable on a phone. The
-          offset matches the tab bar's own height, including its safe-area
-          inset, so they never overlap even on notched phones. */}
-      <div className="lg:hidden fixed bottom-[calc(62px+env(safe-area-inset-bottom))] left-0 right-0 z-30 bg-brand-cream border-t border-brand-clay p-4 flex items-center justify-between shadow-2xl animate-in slide-in-from-bottom-24">
-        <div>
-          <span className="text-[10px] font-semibold text-brand-sage uppercase block">Selected Date: {selectedDate.split('-')[2]}/{selectedDate.split('-')[1]}</span>
-          <span className="text-lg font-semibold text-brand-charcoal">
-            {totalPrice} SAR
-          </span>
-          <span className="text-xs text-brand-muted ml-1">({participants} {participants === 1 ? 'ticket' : 'tickets'})</span>
-        </div>
-        
-        <button
-          disabled={!selectedSlot}
-          onClick={handleBook}
-          className={`px-6 py-3 rounded-xl text-xs font-semibold tracking-wide shadow-card-sm ${
-            selectedSlot 
-              ? 'bg-brand-terracotta text-brand-cream hover:bg-brand-terracotta-hover cursor-pointer' 
-              : 'bg-brand-sand text-brand-charcoal/40 border border-brand-clay cursor-not-allowed'
-          }`}
-        >
-          {selectedSlot ? 'Book Now' : 'Choose a Slot'}
-        </button>
       </div>
 
     </div>

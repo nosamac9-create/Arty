@@ -234,6 +234,47 @@ own components — none of it is persisted. So a session that expires while a cu
 checkout takes the draft with it. The M3 fix explains why that happened rather than preventing it.
 Persisting `pendingBooking` is separate work and is not done.
 
+### The workshop info strip has no row logic
+
+The Duration / Ages / Tutor / Location strip (`WorkshopDetailSection.tsx:369`) renders four
+unconditional cells plus one per enabled, customer-visible, non-system workshop field. The cell
+count is therefore `4 + N`, and no cell knows whether it ends a row — the borders are a flat
+`border-b` on every cell plus `border-e` from `sm` up, with `last:border-e-0` clearing only the
+final one.
+
+With an odd count this shows in two places:
+
+- **Mobile** (2 columns): the last row is half empty — one cell, one blank half.
+- **Desktop** (4 columns from `lg`): cells that fall at the end of a row keep their `border-e`,
+  because only the very last cell is cleared, so a stray vertical rule sits against the container
+  edge. The same flat `border-b` also doubles against the container's bottom border on the last
+  row. Both predate the mobile work.
+
+Not currently reachable: the stored `workshopFieldConfig` holds 12 fields, all `system: true`, so
+zero pass the filter and every workshop renders exactly 4 cells. It becomes reachable the moment
+the client adds one custom customer-visible field in Settings.
+
+Fixing it properly means row-aware borders — the cell count is dynamic, so that is either
+`nth-child` arithmetic keyed to each breakpoint's column count, or extending the `gap-px` treatment
+now used below `sm` to all widths. The latter is cleaner but changes the desktop rendering, which
+was explicitly out of scope for the pass that introduced it.
+
+### The migration warning covers the mobile tab bar
+
+`MigrationWarning` (`src/components/MigrationWarning.tsx:32`) is `fixed bottom-4 left-4 right-4`
+at `z-[100]`. The customer tab bar is `z-40`, so while the warning is showing it renders over the
+navigation and covers it — on a phone that is most of the width of the bar.
+
+This is pre-existing and was **not** introduced by the mobile breakpoint pass. Unlike the workshop
+page's CTA bar, this element never had a breakpoint gate or a tab-bar offset, so there was nothing
+to move when the gates went from `lg` to `md`. It is also a dev-time surface: it appears when the
+migration probe finds the schema behind, not on a normal customer page load.
+
+Left alone deliberately. Fixing it means either offsetting it by `--mobile-tabbar-total` the way
+the other bottom-anchored elements now do, or dropping it below `z-40` — and which is right depends
+on whether a schema warning should be allowed to cover navigation, which is a judgement call rather
+than a defect.
+
 ### Modals still overflow on iOS when the software keyboard is up
 
 `PrePaymentPopup` and the sign-in modal in `CheckoutInfoSection` are now capped at
