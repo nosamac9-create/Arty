@@ -103,16 +103,19 @@ export const CustomerNotificationBell: React.FC = () => {
       </button>
 
       {open && (
-        /* Anchored to the trailing edge and width-capped against the viewport,
-           so it cannot run off the side of a narrow phone — the reason the bell
-           can sit in the header bar at every width instead of being folded into
-           the mobile drawer, where a time-sensitive notice would be one tap
-           further away. */
+        /* Below sm the panel spans the viewport under the header (86px = the
+           78px bar plus a gap) rather than hanging off the bell. The previous
+           cap, min(20rem, calc(100vw - 2rem)), measured from the wrong origin:
+           it assumed the panel was centred, but `end-0` anchors it to the bell
+           in a shrink-0 cluster at the header's right edge, so on a narrow
+           phone the left edge still crossed the viewport.
+
+           From sm it is the anchored dropdown again at a plain w-80 — the cap
+           only ever mattered on screens narrower than the panel. */
         <div
           role="dialog"
           aria-label="Notifications"
-          className="absolute end-0 z-50 mt-2 max-h-[70vh] overflow-y-auto rounded-2xl border border-brand-clay bg-white p-4 shadow-xl animate-in fade-in slide-in-from-top-2 duration-150"
-          style={{ width: 'min(20rem, calc(100vw - 2rem))' }}
+          className="fixed inset-x-4 top-[86px] z-50 max-h-[70vh] overflow-y-auto rounded-2xl border border-brand-clay bg-white p-4 shadow-xl animate-in fade-in slide-in-from-top-2 duration-150 sm:absolute sm:inset-x-auto sm:end-0 sm:top-auto sm:mt-2 sm:w-80"
         >
           <div className="flex items-center justify-between border-b border-brand-clay/60 pb-2">
             <span className="text-xs font-bold uppercase tracking-wider text-brand-charcoal">
