@@ -21,7 +21,7 @@ export const CheckoutPaymentSection: React.FC = () => {
     sessionExpired,
     appSettings
   } = useApp();
-  const { lang } = useLanguage();
+  const { lang, t } = useLanguage();
 
   // The guidelines pop-up is configured in Settings -> Booking Pop-up. Reading
   // it live means an admin edit shows up here without a rebuild or a reload.
@@ -78,13 +78,13 @@ export const CheckoutPaymentSection: React.FC = () => {
   if (!pendingBooking) {
     return (
       <div className="mx-auto max-w-xl px-4 py-16 text-center">
-        <h2 className="font-display text-2xl font-semibold text-brand-charcoal">No Workshop Selected</h2>
-        <p className="text-sm text-brand-ink mt-2">Please select a workshop from the catalog to book.</p>
+        <h2 className="font-display text-2xl font-semibold text-brand-charcoal">{t('No Workshop Selected', 'لم يتم اختيار ورشة')}</h2>
+        <p className="text-sm text-brand-ink mt-2">{t('Please select a workshop from the catalog to book.', 'يرجى اختيار ورشة من الكتالوج للحجز.')}</p>
         <button
           onClick={() => setCustomerTab('workshops')}
           className="mt-6 inline-flex items-center gap-2 rounded-xl bg-brand-terracotta px-6 py-3 text-sm font-semibold text-brand-cream"
         >
-          Browse Workshops
+          {t('Browse Workshops', 'تصفح الورش')}
         </button>
       </div>
     );
@@ -184,10 +184,19 @@ export const CheckoutPaymentSection: React.FC = () => {
         const isTimeout = /abort/i.test(raw) || err?.name === 'AbortError';
         setSubmitError(
           isCapacity
-            ? 'That session filled up while you were paying. Nothing has been charged — please choose another date or time.'
+            ? t(
+                'That session filled up while you were paying. Nothing has been charged — please choose another date or time.',
+                'امتلأت هذه الجلسة أثناء عملية الدفع. لم يتم خصم أي مبلغ — يرجى اختيار تاريخ أو وقت آخر.'
+              )
             : isTimeout
-              ? 'That took too long and we could not confirm your booking. Nothing extra will be charged — please press the button again to check and finish.'
-              : 'We could not complete your booking, and nothing has been charged. Please try again.'
+              ? t(
+                  'That took too long and we could not confirm your booking. Nothing extra will be charged — please press the button again to check and finish.',
+                  'استغرقت العملية وقتًا طويلاً ولم نتمكن من تأكيد حجزك. لن يتم خصم أي مبلغ إضافي — يرجى الضغط على الزر مرة أخرى للتحقق وإتمام الحجز.'
+                )
+              : t(
+                  'We could not complete your booking, and nothing has been charged. Please try again.',
+                  'تعذّر إتمام حجزك، ولم يتم خصم أي مبلغ. يرجى المحاولة مرة أخرى.'
+                )
         );
         setIsProcessing(false);
         return;
@@ -207,7 +216,7 @@ export const CheckoutPaymentSection: React.FC = () => {
   const summaryBody = (
     <>
             <div className="space-y-1 text-xs text-brand-ink">
-              <p className="text-[10px] font-semibold uppercase text-brand-sage">Customer</p>
+              <p className="text-[10px] font-semibold uppercase text-brand-sage">{t('Customer', 'العميل')}</p>
               <p className="font-semibold text-brand-charcoal text-sm">{pendingBooking.customerName}</p>
               <p>{pendingBooking.customerEmail}</p>
               <p>{pendingBooking.customerPhone}</p>
@@ -215,26 +224,27 @@ export const CheckoutPaymentSection: React.FC = () => {
 
             <div className="border-t border-brand-clay pt-3 space-y-2 text-xs text-brand-ink">
               <div className="flex justify-between">
-                <span>Workshop:</span>
+                <span>{t('Workshop', 'الورشة')}:</span>
                 <span className="font-semibold text-brand-charcoal">{pendingBooking.workshopTitle}</span>
               </div>
               <div className="flex justify-between">
-                <span>Date:</span>
+                <span>{t('Date', 'التاريخ')}:</span>
                 <span className="font-semibold text-brand-charcoal">{pendingBooking.date}</span>
               </div>
               <div className="flex justify-between">
-                <span>Time Slot:</span>
+                <span>{t('Time Slot', 'الوقت')}:</span>
                 <span className="font-semibold text-brand-charcoal">{pendingBooking.time}</span>
               </div>
               <div className="flex justify-between">
-                <span>Participants:</span>
-                <span className="font-semibold text-brand-charcoal">{pendingBooking.participants} {pendingBooking.participants === 1 ? 'guest' : 'guests'}</span>
+                <span>{t('Participants', 'المشاركون')}:</span>
+                {/* ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker. */}
+                <span className="font-semibold text-brand-charcoal">{pendingBooking.participants} {pendingBooking.participants === 1 ? t('guest', 'ضيف') : t('guests', 'ضيوف')}</span>
               </div>
             </div>
 
             <div className="border-t border-brand-clay pt-3 flex justify-between items-center text-brand-charcoal">
-              <span className="font-semibold text-sm">Total Amount:</span>
-              <span className="font-serif text-2xl font-semibold text-brand-terracotta">{pendingBooking.totalPrice} SAR</span>
+              <span className="font-semibold text-sm">{t('Total Amount', 'الإجمالي')}:</span>
+              <span className="font-serif text-2xl font-semibold text-brand-terracotta">{pendingBooking.totalPrice} {t('SAR', 'ريال')}</span>
             </div>
     </>
   );
@@ -255,23 +265,23 @@ export const CheckoutPaymentSection: React.FC = () => {
       
       {/* Back button */}
       <BackButton onClick={() => setCustomerTab('checkout-info')} className="mb-6">
-        Back to Contact Information
+        {t('Back to Contact Information', 'العودة إلى بيانات التواصل')}
       </BackButton>
 
       {/* Title then stepper — the same header the birthday reservation uses. */}
       <div className="mb-8">
         <span className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-sage">
-          Workshop Booking
+          {t('Workshop Booking', 'حجز الورشة')}
         </span>
         <h1 className="mt-3 font-display text-3xl font-semibold text-brand-charcoal sm:text-[42px]">
-          Payment Method
+          {t('Payment Method', 'طريقة الدفع')}
         </h1>
         <p className="mt-3 text-sm text-brand-ink">
-          Select your preferred payment option.
+          {t('Select your preferred payment option.', 'اختر طريقة الدفع المفضلة لديك.')}
         </p>
       </div>
 
-      <CheckoutStepper steps={['Customer Information', 'Payment']} current={2} />
+      <CheckoutStepper steps={[t('Customer Information', 'بيانات العميل'), t('Payment', 'الدفع')]} current={2} />
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         
@@ -283,7 +293,7 @@ export const CheckoutPaymentSection: React.FC = () => {
             border are untouched; only the lift changes. */}
         <div className="lg:col-span-7 bg-brand-cream rounded-[28px] p-6 sm:p-8 border border-brand-clay shadow-card">
           
-          <h2 className="font-display text-lg font-semibold text-brand-charcoal mb-4">Choose Payment Method</h2>
+          <h2 className="font-display text-lg font-semibold text-brand-charcoal mb-4">{t('Choose Payment Method', 'اختر طريقة الدفع')}</h2>
 
           {/* Payment Method Selector Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
@@ -303,8 +313,8 @@ export const CheckoutPaymentSection: React.FC = () => {
                 {paymentMethod === 'card' && <Check className="h-4 w-4 text-brand-terracotta" />}
               </div>
               <div className="text-start">
-                <p className="font-semibold text-xs">Mada / Credit Card</p>
-                <p className="text-[10px] opacity-70">Visa, Mastercard, Mada</p>
+                <p className="font-semibold text-xs">{t('Mada / Credit Card', 'مدى / بطاقة ائتمان')}</p>
+                <p className="text-[10px] opacity-70">Visa, Mastercard, Mada</p> {/* ⚠ payment-network brand names — flagged, not translated */}
               </div>
             </button>
 
@@ -319,12 +329,12 @@ export const CheckoutPaymentSection: React.FC = () => {
               }`}
             >
               <div className="flex items-center justify-between w-full">
-                <span className="font-semibold text-base">Pay</span>
+                <span className="font-semibold text-base">Pay</span> {/* ⚠ styled to evoke the Apple Pay mark — flagged, not translated */}
                 {paymentMethod === 'applepay' && <Check className="h-4 w-4 text-brand-terracotta" />}
               </div>
               <div className="text-start">
-                <p className="font-semibold text-xs">Apple Pay</p>
-                <p className="text-[10px] opacity-70">Instant 1-Click Pay</p>
+                <p className="font-semibold text-xs">Apple Pay</p> {/* ⚠ brand name — flagged, not translated */}
+                <p className="text-[10px] opacity-70">{t('Instant 1-Click Pay', 'دفع فوري بنقرة واحدة')}</p>
               </div>
             </button>
 
@@ -343,8 +353,8 @@ export const CheckoutPaymentSection: React.FC = () => {
                 {paymentMethod === 'stcpay' && <Check className="h-4 w-4 text-brand-terracotta" />}
               </div>
               <div className="text-start">
-                <p className="font-semibold text-xs">STC Pay</p>
-                <p className="text-[10px] opacity-70">Digital Wallet</p>
+                <p className="font-semibold text-xs">STC Pay</p> {/* ⚠ brand name — flagged, not translated */}
+                <p className="text-[10px] opacity-70">{t('Digital Wallet', 'محفظة رقمية')}</p>
               </div>
             </button>
 
@@ -356,18 +366,18 @@ export const CheckoutPaymentSection: React.FC = () => {
             {paymentMethod === 'card' && (
               <div className="space-y-3 p-4 bg-brand-sand/20 rounded-[22px] border border-brand-clay animate-in fade-in duration-150">
                 <div>
-                  <label className="block text-xs font-semibold text-brand-ink mb-1">Name on Card</label>
+                  <label className="block text-xs font-semibold text-brand-ink mb-1">{t('Name on Card', 'الاسم على البطاقة')}</label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Noura Al-Amri"
+                    placeholder={t('e.g. Noura Al-Amri', 'مثال: نورة العمري')}
                     value={cardName}
                     onChange={e => setCardName(e.target.value)}
                     className="w-full bg-brand-cream border border-brand-clay rounded-xl py-2.5 px-3 text-sm font-semibold text-brand-charcoal"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-brand-ink mb-1">Card Number</label>
+                  <label className="block text-xs font-semibold text-brand-ink mb-1">{t('Card Number', 'رقم البطاقة')}</label>
                   <input
                     type="text"
                     required
@@ -379,7 +389,7 @@ export const CheckoutPaymentSection: React.FC = () => {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-semibold text-brand-ink mb-1">Expiry (MM/YY)</label>
+                    <label className="block text-xs font-semibold text-brand-ink mb-1">{t('Expiry (MM/YY)', 'تاريخ الانتهاء (شهر/سنة)')}</label>
                     <input
                       type="text"
                       required
@@ -408,9 +418,12 @@ export const CheckoutPaymentSection: React.FC = () => {
             {/* Apple Pay Prompt */}
             {paymentMethod === 'applepay' && (
               <div className="p-6 bg-brand-sand/30 rounded-[22px] border border-brand-clay text-center space-y-2 animate-in fade-in duration-150">
-                <span className="font-semibold text-2xl">Pay</span>
+                <span className="font-semibold text-2xl">Pay</span> {/* ⚠ styled to evoke the Apple Pay mark — flagged, not translated */}
                 <p className="text-xs text-brand-ink">
-                  Click the button below to authorize payment securely via Apple Pay on your device.
+                  {t(
+                    'Click the button below to authorize payment securely via Apple Pay on your device.',
+                    'اضغط على الزر أدناه لتفويض الدفع بأمان عبر Apple Pay على جهازك.'
+                  )}
                 </p>
               </div>
             )}
@@ -419,12 +432,15 @@ export const CheckoutPaymentSection: React.FC = () => {
             {paymentMethod === 'stcpay' && (
               <div className="p-4 bg-brand-sand/20 rounded-[22px] border border-brand-clay space-y-3 animate-in fade-in duration-150">
                 <PhoneInput
-                  label="STC Pay Registered Phone Number"
+                  label={`STC Pay ${t('Registered Phone Number', 'رقم الجوال المسجّل')}`}
                   required
                   value={stcPhone}
                   onChange={setStcPhone}
                 />
-                <p className="text-[11px] text-brand-muted">A payment authorization notification will be pushed to your STC Pay app.</p>
+                <p className="text-[11px] text-brand-muted">{t(
+                  'A payment authorization notification will be pushed to your STC Pay app.',
+                  'سيتم إرسال إشعار تفويض الدفع إلى تطبيق STC Pay الخاص بك.'
+                )}</p>
               </div>
             )}
 
@@ -453,7 +469,7 @@ export const CheckoutPaymentSection: React.FC = () => {
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 [&::-webkit-details-marker]:hidden">
                 <span className="min-w-0 truncate text-sm font-semibold text-brand-charcoal">{pendingBooking.workshopTitle}</span>
                 <span className="flex shrink-0 items-center gap-2">
-                  <span className="font-serif text-lg font-semibold text-brand-terracotta">{pendingBooking.totalPrice} SAR</span>
+                  <span className="font-serif text-lg font-semibold text-brand-terracotta">{pendingBooking.totalPrice} {t('SAR', 'ريال')}</span>
                   <ChevronDown className="h-4 w-4 text-brand-muted transition-transform group-[[open]]:rotate-180" />
                 </span>
               </summary>
@@ -467,13 +483,15 @@ export const CheckoutPaymentSection: React.FC = () => {
             >
               <Lock className="h-4 w-4" />
               <span>
-                {isProcessing ? 'Processing Payment...' : `Complete Booking (${pendingBooking.totalPrice} SAR)`}
+                {isProcessing
+                  ? t('Processing Payment...', 'جارٍ معالجة الدفع...')
+                  : `${t('Complete Booking', 'إتمام الحجز')} (${pendingBooking.totalPrice} ${t('SAR', 'ريال')})`}
               </span>
             </button>
 
             <div className="flex items-center justify-center gap-1.5 text-[11px] text-brand-muted pt-1">
               <ShieldCheck className="h-4 w-4 text-brand-sage" />
-              <span>SSL 256-Bit Encrypted Payment • Immediate Admin Sync</span>
+              <span>{t('SSL 256-Bit Encrypted Payment • Immediate Admin Sync', 'دفع مشفّر بتقنية SSL 256-بت • مزامنة فورية مع الإدارة')}</span>
             </div>
 
           </form>
@@ -484,7 +502,7 @@ export const CheckoutPaymentSection: React.FC = () => {
         <div className="hidden lg:block lg:col-span-5">
           <div className="bg-brand-sand/30 rounded-[28px] p-6 border border-brand-clay shadow-card space-y-4">
             <h3 className="font-display text-lg font-semibold text-brand-charcoal border-b border-brand-clay pb-3">
-              Booking Details
+              {t('Booking Details', 'تفاصيل الحجز')}
             </h3>
 
             {summaryBody}

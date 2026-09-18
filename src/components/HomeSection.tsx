@@ -5,6 +5,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { useLanguage } from '../context/LanguageContext';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { PhotoGallery } from './ui/PhotoGallery';
 import { VerticalCutReveal } from './ui/VerticalCutReveal';
@@ -64,6 +65,7 @@ export const HomeSection: React.FC = () => {
     setSelectedBirthdayPackage, publishedBirthdayPackages, setWorkshopsInitialCategory,
     workshopSessions, bookings, queue, todayDateStr, rawWorkshops
   } = useApp();
+  const { t } = useLanguage();
 
   /**
    * Whether the workshops table has come back yet.
@@ -183,20 +185,29 @@ export const HomeSection: React.FC = () => {
   const steps = [
     {
       num: '01',
-      title: 'Choose a Workshop',
-      desc: 'Browse our curated collection of wheel throwing, hand-building, or acrylic canvas painting classes.',
+      title: t('Choose a Workshop', 'اختر ورشة'),
+      desc: t(
+        'Browse our curated collection of wheel throwing, hand-building, or acrylic canvas painting classes.',
+        'تصفح مجموعتنا المختارة من ورش الخزف على العجلة، التشكيل اليدوي، أو رسم الأكريليك على القماش.'
+      ),
       icon: MousePointerClick
     },
     {
       num: '02',
-      title: 'Pick Your Time',
-      desc: 'Select a convenient slot on our live scheduler. Hand-molding seats are limited for high quality tuition.',
+      title: t('Pick Your Time', 'اختر وقتك'),
+      desc: t(
+        'Select a convenient slot on our live scheduler. Hand-molding seats are limited for high quality tuition.',
+        'اختر موعدًا مناسبًا من الجدول المباشر. مقاعد التشكيل اليدوي محدودة لضمان جودة التوجيه.'
+      ),
       icon: CalendarRange
     },
     {
       num: '03',
-      title: 'Book and Create',
-      desc: 'Secure your spot instantly. Show up at our cozy Jeddah venue—all premium materials and drinks are ready.',
+      title: t('Book and Create', 'احجز وابدأ الإبداع'),
+      desc: t(
+        'Secure your spot instantly. Show up at our cozy Jeddah venue—all premium materials and drinks are ready.',
+        'احجز مقعدك فورًا. تعال إلى استوديونا الدافئ في جدة — كل المواد المميزة والمشروبات جاهزة لك.'
+      ),
       icon: Paintbrush
     }
   ];
@@ -219,7 +230,7 @@ export const HomeSection: React.FC = () => {
 
           <Reveal index={0}>
             <p className="text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-sage">
-              Creative Sanctuary in Jeddah
+              {t('Creative Sanctuary in Jeddah', 'ملاذ إبداعي في جدة')}
             </p>
           </Reveal>
 
@@ -236,8 +247,10 @@ export const HomeSection: React.FC = () => {
 
           <Reveal index={1}>
             <p className="mx-auto mt-5 max-w-xl text-center text-base sm:text-lg text-brand-ink leading-[1.7]">
-              Slow down, pour a fresh cup of espresso, and handcraft ceramic pottery or vibrant
-              acrylic art in Jeddah’s favorite creative retreat.
+              {t(
+                'Slow down, pour a fresh cup of espresso, and handcraft ceramic pottery or vibrant acrylic art in Jeddah’s favorite creative retreat.',
+                'خذ وقتك، اصبب فنجانًا من الإسبريسو الطازج، واصنع بيديك أعمال فخارية أو لوحات أكريليك في ملاذ جدة الإبداعي المفضل.'
+              )}
             </p>
           </Reveal>
 
@@ -250,7 +263,7 @@ export const HomeSection: React.FC = () => {
                 }}
                 className="cursor-pointer rounded-full bg-brand-terracotta px-7 py-4 text-base font-semibold text-brand-cream shadow-button hover:bg-brand-terracotta-hover transition-colors duration-200 active:scale-[0.98]"
               >
-                Browse Workshops
+                {t('Browse Workshops', 'تصفح الورش')}
               </button>
               <button
                 onClick={() => {
@@ -259,7 +272,7 @@ export const HomeSection: React.FC = () => {
                 }}
                 className="cursor-pointer rounded-full border border-brand-clay bg-brand-cream px-7 py-4 text-base font-semibold text-brand-charcoal hover:bg-brand-clay-soft transition-colors duration-200"
               >
-                View Top Experience
+                {t('View Top Experience', 'استعرض أفضل التجارب')}
               </button>
             </div>
 
@@ -270,13 +283,13 @@ export const HomeSection: React.FC = () => {
                 <dt className="font-display text-2xl font-semibold text-brand-charcoal ltr-numerals">
                   <CountingNumber target={publishedWorkshops.length} />
                 </dt>
-                <dd className="mt-1 text-[11px] uppercase tracking-[0.1em] text-brand-muted">Workshops running</dd>
+                <dd className="mt-1 text-[11px] uppercase tracking-[0.1em] text-brand-muted">{t('Workshops running', 'ورشة نشطة')}</dd>
               </div>
               <div>
                 <dt className="font-display text-2xl font-semibold text-brand-charcoal ltr-numerals">
                   <CountingNumber target={2} />
                 </dt>
-                <dd className="mt-1 text-[11px] uppercase tracking-[0.1em] text-brand-muted">Kilns firing weekly</dd>
+                <dd className="mt-1 text-[11px] uppercase tracking-[0.1em] text-brand-muted">{t('Kilns firing weekly', 'أفران تعمل أسبوعيًا')}</dd>
               </div>
               <div>
                 <dt className="font-display text-2xl font-semibold text-brand-charcoal ltr-numerals">
@@ -322,13 +335,16 @@ export const HomeSection: React.FC = () => {
                 label would sometimes be false — the same class of claim as the
                 confirmation screen's sent-email line. */}
             <ContainerAnimated className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-sage">
-              Popular right now
+              {t('Popular right now', 'الأكثر رواجًا الآن')}
             </ContainerAnimated>
             <ContainerAnimated className="mt-2 font-display text-3xl md:text-[38px] font-semibold text-brand-charcoal">
-              <h2>Featured Workshops</h2>
+              <h2>{t('Featured Workshops', 'ورش مميزة')}</h2>
             </ContainerAnimated>
             <ContainerAnimated className="mt-3 max-w-xl text-brand-ink">
-              Led by professional artisan tutors. Spaces are kept tight for custom, hands-on feedback.
+              {t(
+                'Led by professional artisan tutors. Spaces are kept tight for custom, hands-on feedback.',
+                'بإشراف حرفيين محترفين. المقاعد محدودة عمدًا لضمان متابعة فردية عن قرب.'
+              )}
             </ContainerAnimated>
           </div>
 
@@ -340,7 +356,7 @@ export const HomeSection: React.FC = () => {
               }}
               className="group inline-flex shrink-0 items-center gap-2 rounded-full border border-brand-clay bg-brand-cream px-5 py-2.5 text-sm font-semibold text-brand-charcoal transition-colors hover:bg-brand-clay-soft cursor-pointer"
             >
-              <span>View All ({publishedWorkshops.length})</span>
+              <span>{t('View All', 'عرض الكل')} ({publishedWorkshops.length})</span>
               <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-1 flip-rtl" />
             </button>
           </ContainerAnimated>
@@ -366,7 +382,7 @@ export const HomeSection: React.FC = () => {
           <div className="mt-8 lg:mt-10">
             <CoverflowCarousel
               slides={featuredSlides}
-              label="Featured workshops"
+              label={t('Featured workshops', 'الورش المميزة')}
               /* No geometry props on purpose. rotate, depth, perspective,
                  falloff, fade, gap and cardWidth are all left at the reference
                  component's own defaults, which are the visual target — this
@@ -433,13 +449,13 @@ export const HomeSection: React.FC = () => {
                   {activeFeatured.instructor && (
                     <span className="inline-flex items-center gap-1.5">
                       <Paintbrush className="h-4 w-4 shrink-0 text-brand-sage" />
-                      <span>Instructor {activeFeatured.instructor}</span>
+                      <span>{t('Instructor', 'المدرّب')} {activeFeatured.instructor}</span>
                     </span>
                   )}
                 </div>
 
                 <p className="mt-4 font-display text-[26px] font-semibold text-brand-charcoal ltr-numerals">
-                  {activeFeatured.price} <span className="text-sm font-medium text-brand-muted">SAR</span>
+                  {activeFeatured.price} <span className="text-sm font-medium text-brand-muted">{t('SAR', 'ريال')}</span>
                 </p>
               </div>
             )}
@@ -454,15 +470,18 @@ export const HomeSection: React.FC = () => {
       <section className="bg-brand-sand border-y border-brand-clay py-16">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
           <div className="max-w-xl mx-auto mb-12">
-            <span className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-sage">Three steps</span>
+            <span className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-sage">{t('Three steps', 'ثلاث خطوات')}</span>
             <Reveal index={0}>
               <h2 className="mt-2 font-display text-3xl md:text-[38px] font-semibold text-brand-charcoal">
-                How Booking Works
+                {t('How Booking Works', 'كيف يتم الحجز')}
               </h2>
             </Reveal>
             <Reveal index={1}>
               <p className="text-brand-ink mt-2">
-                Three simple, effortless steps from clay mud to beautiful glazed pottery.
+                {t(
+                  'Three simple, effortless steps from clay mud to beautiful glazed pottery.',
+                  'ثلاث خطوات بسيطة وسلسة من طين الفخار إلى قطعة خزفية جميلة ومزجّجة.'
+                )}
               </p>
             </Reveal>
           </div>
@@ -533,7 +552,7 @@ export const HomeSection: React.FC = () => {
                     slightly so the pill still separates from the lighter band. */}
                 <div className="inline-flex items-center gap-2 rounded-full bg-brand-cream/15 px-3.5 py-1.5 text-xs font-medium text-brand-cream/90">
                   <Gift className="h-3.5 w-3.5" />
-                  <span>Birthday Celebrations &amp; Private Parties</span>
+                  <span>{t('Birthday Celebrations & Private Parties', 'احتفالات أعياد الميلاد والحفلات الخاصة')}</span>
                 </div>
               </ScrollReveal>
 
@@ -545,7 +564,7 @@ export const HomeSection: React.FC = () => {
               >
                 <ContainerStagger>
                   <ContainerAnimated className="mt-6 font-display text-3xl sm:text-4xl lg:text-[44px] font-semibold text-brand-cream">
-                    <h2>Celebrate your birthday with us</h2>
+                    <h2>{t('Celebrate your birthday with us', 'احتفل بعيد ميلادك معنا')}</h2>
                   </ContainerAnimated>
                 </ContainerStagger>
               </ScrollReveal>
@@ -559,8 +578,10 @@ export const HomeSection: React.FC = () => {
                 {/* /70 measured 4.28:1 on the new ground — under AA for 16px
                     body. /80 is 5.0:1. */}
                 <p className="mt-5 max-w-lg text-base leading-[1.7] text-brand-cream/80">
-                  Make your child's special day unforgettable with creative art sessions, balloons,
-                  customized cakes, and fun hands-on memories in our studio.
+                  {t(
+                    'Make your child’s special day unforgettable with creative art sessions, balloons, customized cakes, and fun hands-on memories in our studio.',
+                    'اجعلوا يوم طفلكم المميز لا يُنسى مع جلسات فنية إبداعية، وبالونات، وكعكات مخصصة، وذكريات ممتعة في استوديونا.'
+                  )}
                 </p>
               </ScrollReveal>
 
@@ -589,7 +610,7 @@ export const HomeSection: React.FC = () => {
                      Inverted for THIS instance only. */
                   className="cursor-pointer rounded-full bg-brand-cream px-6 py-3.5 text-sm font-semibold text-brand-charcoal shadow-button transition-colors hover:bg-brand-clay-soft active:scale-[0.98]"
                 >
-                  See packages
+                  {t('See packages', 'استعرض الباقات')}
                 </button>
               </ScrollReveal>
             </div>
@@ -647,7 +668,8 @@ export const HomeSection: React.FC = () => {
                           on this ground; /75 does. */}
                       <p className="mt-2 text-[13px] leading-relaxed text-brand-cream/75">
                         {[
-                          pkg.maxGuests ? `${pkg.maxGuests} guests` : null,
+                          // ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker.
+                          pkg.maxGuests ? `${pkg.maxGuests} ${t('guests', 'ضيوف')}` : null,
                           pkg.duration || null,
                           pkg.shortDescription || null
                         ].filter(Boolean).join(' · ')}
@@ -670,10 +692,10 @@ export const HomeSection: React.FC = () => {
                         {/* Per person, not per party — the price is multiplied by
                             headcount. The rest of the birthday flow says the same
                             thing, from each package's own pricingLabel. */}
-                        <span className="mt-0.5 block text-[10px] text-brand-cream/80">SAR per person</span>
+                        <span className="mt-0.5 block text-[10px] text-brand-cream/80">{t('SAR per person', 'ريال للشخص')}</span>
                       </div>
                       <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-cream/85 transition-colors group-hover:text-brand-cream sm:mt-3">
-                        See package
+                        {t('See package', 'عرض الباقة')}
                         <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1 flip-rtl" />
                       </span>
                     </div>
@@ -740,7 +762,7 @@ export const HomeSection: React.FC = () => {
                 variants={{ hidden: { opacity: 0 }, visible: { opacity: 1 } }}
               >
                 <span className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-sage">
-                  Custom Events
+                  {t('Custom Events', 'فعاليات مخصصة')}
                 </span>
               </ScrollReveal>
 
@@ -752,7 +774,7 @@ export const HomeSection: React.FC = () => {
               >
                 <ContainerStagger>
                   <ContainerAnimated className="mt-3 font-display text-[34px] leading-[1.1] md:text-[46px] font-semibold text-brand-charcoal">
-                    <h2>Plan your own event</h2>
+                    <h2>{t('Plan your own event', 'خطط لفعاليتك الخاصة')}</h2>
                   </ContainerAnimated>
                 </ContainerStagger>
               </ScrollReveal>
@@ -764,8 +786,10 @@ export const HomeSection: React.FC = () => {
                 variants={{ hidden: { opacity: 0, y: 18 }, visible: { opacity: 1, y: 0 } }}
               >
                 <p className="mt-5 max-w-md text-[15px] text-brand-ink leading-[1.75]">
-                  Adult pottery parties, corporate team-building, birthday celebrations, or anything
-                  outside our fixed packages — talk to us directly and we will design something custom.
+                  {t(
+                    'Adult pottery parties, corporate team-building, birthday celebrations, or anything outside our fixed packages — talk to us directly and we will design something custom.',
+                    'حفلات فخار للبالغين، أنشطة بناء الفريق للشركات، احتفالات أعياد الميلاد، أو أي فكرة خارج باقاتنا الثابتة — تواصلوا معنا مباشرة وسنصمم لكم شيئًا مخصصًا.'
+                  )}
                 </p>
               </ScrollReveal>
 
@@ -781,7 +805,7 @@ export const HomeSection: React.FC = () => {
                   className="group cursor-pointer inline-flex items-center justify-center gap-2.5 rounded-full bg-brand-charcoal px-7 py-4 text-base font-semibold text-brand-cream shadow-button transition-colors duration-200 hover:bg-brand-terracotta active:scale-[0.98]"
                 >
                   <Sparkles className="h-5 w-5 text-brand-terracotta transition-colors group-hover:text-brand-cream" />
-                  <span>Create your own Event</span>
+                  <span>{t('Create your own Event', 'أنشئ فعاليتك الخاصة')}</span>
                   {/* Always the forward chevron now: this button only exists on
                       the pitch face, and the way back is the Back control on
                       the contact face rather than a collapse here. */}
@@ -812,7 +836,7 @@ export const HomeSection: React.FC = () => {
               >
                 <img
                   src={`${import.meta.env.BASE_URL}images/custom-events.jpg`}
-                  alt="The Arty Café studio set up for a private event"
+                  alt={t('The Arty Café studio set up for a private event', 'استوديو آرتي كافيه مجهّز لفعالية خاصة')}
                   className="h-64 w-full object-cover sm:h-80 lg:h-[26rem]"
                   loading="lazy"
                   decoding="async"
@@ -843,10 +867,13 @@ export const HomeSection: React.FC = () => {
                     <UserCheck className="h-6 w-6" />
                   </div>
                   <h3 className="mt-5 font-display text-[28px] leading-tight font-semibold text-brand-charcoal md:text-[34px]">
-                    Talk to Our Events Team
+                    {t('Talk to Our Events Team', 'تحدث إلى فريق الفعاليات لدينا')}
                   </h3>
                   <p className="mt-4 max-w-md text-[15px] leading-[1.75] text-brand-ink">
-                    Talk to our team directly and we will craft custom events, corporate gatherings, or private parties with you.
+                    {t(
+                      'Talk to our team directly and we will craft custom events, corporate gatherings, or private parties with you.',
+                      'تحدث مع فريقنا مباشرة، وسنصمم لك فعاليات مخصصة، أو تجمعات للشركات، أو حفلات خاصة.'
+                    )}
                   </p>
 
                   {/* Reverses the swap — the pitch, button and photograph wipe
@@ -860,7 +887,7 @@ export const HomeSection: React.FC = () => {
                     className="group mt-8 cursor-pointer inline-flex items-center gap-2 rounded-full border border-brand-clay bg-brand-cream px-6 py-3.5 text-sm font-semibold text-brand-ink transition-colors hover:text-brand-charcoal hover:border-brand-muted active:scale-[0.98]"
                   >
                     <ArrowLeft className="h-4 w-4 transition-transform duration-200 group-hover:-translate-x-0.5 flip-rtl" />
-                    <span>Back</span>
+                    <span>{t('Back', 'رجوع')}</span>
                   </button>
                 </div>
 
@@ -872,7 +899,7 @@ export const HomeSection: React.FC = () => {
                     <div className="bg-brand-cream p-5 rounded-2xl border border-brand-clay flex items-start gap-3">
                       <Phone className="h-5 w-5 text-brand-terracotta shrink-0 mt-0.5" />
                       <div className="min-w-0">
-                        <span className="text-[10px] font-semibold text-brand-muted uppercase block">Direct Phone &amp; WhatsApp</span>
+                        <span className="text-[10px] font-semibold text-brand-muted uppercase block">{t('Direct Phone & WhatsApp', 'اتصال مباشر وواتساب')}</span>
                         {/* wa.me rather than tel:, because the label offers WhatsApp
                             and that is how these enquiries actually arrive. The href
                             needs the bare international digits; the visible number
@@ -891,7 +918,7 @@ export const HomeSection: React.FC = () => {
                     <div className="bg-brand-cream p-5 rounded-2xl border border-brand-clay flex items-start gap-3">
                       <Mail className="h-5 w-5 text-brand-terracotta shrink-0 mt-0.5" />
                       <div className="min-w-0">
-                        <span className="text-[10px] font-semibold text-brand-muted uppercase block">Email Us</span>
+                        <span className="text-[10px] font-semibold text-brand-muted uppercase block">{t('Email Us', 'راسلنا عبر البريد الإلكتروني')}</span>
                         <a href="mailto:arty.cafe85@gmail.com" className="mt-1 block break-words font-semibold text-brand-charcoal hover:text-brand-terracotta">
                           arty.cafe85@gmail.com
                         </a>
@@ -902,10 +929,13 @@ export const HomeSection: React.FC = () => {
                   <div className="bg-brand-cream p-5 rounded-2xl border border-brand-clay text-[13px] text-brand-ink space-y-1.5">
                     <p className="font-semibold text-brand-charcoal flex items-center gap-1.5">
                       <Star className="h-3.5 w-3.5 text-brand-terracotta fill-brand-terracotta" />
-                      Bespoke Custom Event Planning
+                      {t('Bespoke Custom Event Planning', 'تخطيط فعاليات مخصص بالكامل')}
                     </p>
                     <p className="leading-[1.7]">
-                      Have a unique theme, adult pottery party, corporate team-building, or birthday celebration in mind? Reach out via WhatsApp or email for custom quotes, private venue buyout availability, and tailored artist arrangements!
+                      {t(
+                        'Have a unique theme, adult pottery party, corporate team-building, or birthday celebration in mind? Reach out via WhatsApp or email for custom quotes, private venue buyout availability, and tailored artist arrangements!',
+                        'هل لديك فكرة مميزة، حفلة فخار للبالغين، نشاط بناء فريق للشركات، أو احتفال عيد ميلاد؟ تواصل معنا عبر واتساب أو البريد الإلكتروني للحصول على عروض أسعار مخصصة، وحجز الاستوديو بالكامل، وترتيبات فنية مصممة خصيصًا لك!'
+                      )}
                     </p>
                   </div>
                 </div>
@@ -931,12 +961,15 @@ export const HomeSection: React.FC = () => {
             <div className="lg:col-span-5 space-y-6">
               <Reveal index={0}>
                 <h2 className="font-display text-3xl md:text-[38px] font-semibold text-brand-charcoal">
-                  Slow down &amp; visit us
+                  {t('Slow down & visit us', 'خذ وقتك وزُرنا')}
                 </h2>
               </Reveal>
               <Reveal index={1}>
                 <p className="text-brand-ink leading-[1.7]">
-                  We are situated in Al Zahra District. Grab a quiet corner, sculpt some clay, and meet friendly creative people.
+                  {t(
+                    'We are situated in Al Zahra District. Grab a quiet corner, sculpt some clay, and meet friendly creative people.',
+                    'نحن نقع في حي الزهراء. اختر ركنًا هادئًا، شكّل الطين، والتقِ بأشخاص مبدعين وودودين.'
+                  )}
                 </p>
               </Reveal>
               
@@ -945,7 +978,7 @@ export const HomeSection: React.FC = () => {
               <dl className="pt-2 text-sm">
                 <Reveal index={2}>
                   <div className="border-t border-brand-clay py-4">
-                    <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-muted">Address</dt>
+                    <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-muted">{t('Address', 'العنوان')}</dt>
                     <dd className="mt-1.5 text-brand-charcoal">
                       3331 Ahmad Al Attas, Al Zahra District, Jeddah 23521, Saudi Arabia
                     </dd>
@@ -954,18 +987,18 @@ export const HomeSection: React.FC = () => {
 
                 <Reveal index={3}>
                   <div className="border-t border-brand-clay py-4">
-                    <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-muted">Opening Hours</dt>
+                    <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-muted">{t('Opening Hours', 'ساعات العمل')}</dt>
                     <dd className="mt-1.5 text-brand-charcoal ltr-numerals">
-                      Every day: 05:00 PM – 12:00 AM
+                      {t('Every day', 'يوميًا')}: 05:00 PM – 12:00 AM
                     </dd>
                   </div>
                 </Reveal>
 
                 <Reveal index={4}>
                   <div className="border-t border-b border-brand-clay py-4">
-                    <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-muted">Call Front Desk</dt>
+                    <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-muted">{t('Call Front Desk', 'اتصل بالاستقبال')}</dt>
                     <dd className="mt-1.5 text-brand-charcoal ltr-numerals">
-                      {STUDIO_PHONE} (Walk-ins welcome!)
+                      {STUDIO_PHONE} ({t('Walk-ins welcome!', 'الزيارات بدون حجز مسبق مرحّب بها!')})
                     </dd>
                   </div>
                 </Reveal>
@@ -998,7 +1031,7 @@ export const HomeSection: React.FC = () => {
               >
                 <AnimatedMap
                   href="https://maps.app.goo.gl/Br4QagaCrPKeJ8EW8"
-                  label="Arty Café Jeddah"
+                  label={t('Arty Café Jeddah', 'آرتي كافيه جدة')}
                   coordinates="21.5897° N, 39.1288° E"
                   className="h-72 md:h-96"
                 />

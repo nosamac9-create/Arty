@@ -5,6 +5,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
+import { useLanguage } from '../context/LanguageContext';
 import Reveal from './ui/Reveal';
 import { Search, SlidersHorizontal, RefreshCw, ChevronDown, Clock, Sparkles, Paintbrush } from 'lucide-react';
 import { BackButton } from './ui/BackButton';
@@ -24,6 +25,7 @@ export const WorkshopsBrowsingSection: React.FC = () => {
     publishedBirthdayPackages, selectedBirthdayPackage, setSelectedBirthdayPackage,
     workshopsInitialCategory, workshopSessions, todayDateStr
   } = useApp();
+  const { t } = useLanguage();
 
   /**
    * Seats for every published upcoming session on the grid, in one call.
@@ -173,26 +175,32 @@ export const WorkshopsBrowsingSection: React.FC = () => {
         {isBirthdayView && (
           <Reveal index={0}>
             <BackButton onClick={() => setSelectedCategory('All')} className="mb-6">
-              Back to Workshops
+              {t('Back to Workshops', 'العودة إلى الورش')}
             </BackButton>
           </Reveal>
         )}
 
         <Reveal index={0}>
           <span className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-sage">
-            {isBirthdayView ? 'Private Parties' : 'Catalogue'}
+            {isBirthdayView ? t('Private Parties', 'حفلات خاصة') : t('Catalogue', 'الكتالوج')}
           </span>
         </Reveal>
         <Reveal index={1}>
           <h1 className="mt-3 font-display text-4xl sm:text-5xl font-semibold text-brand-charcoal max-w-lg">
-            {isBirthdayView ? 'Birthday Packages' : 'Creative Workshops'}
+            {isBirthdayView ? t('Birthday Packages', 'باقات أعياد الميلاد') : t('Creative Workshops', 'ورش إبداعية')}
           </h1>
         </Reveal>
         <Reveal index={2}>
           <p className="text-brand-ink mt-4 max-w-xl text-base leading-[1.7]">
             {isBirthdayView
-              ? "Browse our birthday party packages, see everything that's included, and pick the one that fits before you book."
-              : 'Discover Jeddah’s premier pottery and painting workshops. Center clay on the wheel, explore watercolor glazes, or paint canvases under guidance of Saudi artists.'}
+              ? t(
+                  "Browse our birthday party packages, see everything that's included, and pick the one that fits before you book.",
+                  'تصفح باقات حفلات أعياد الميلاد لدينا، واطّلع على كل ما تتضمنه، واختر الأنسب لك قبل الحجز.'
+                )
+              : t(
+                  'Discover Jeddah’s premier pottery and painting workshops. Center clay on the wheel, explore watercolor glazes, or paint canvases under guidance of Saudi artists.',
+                  'اكتشف أفضل ورش الفخار والرسم في جدة. شكّل الطين على العجلة، أو استكشف تقنيات الألوان المائية، أو ارسم على القماش بإشراف فنانين سعوديين.'
+                )}
           </p>
         </Reveal>
       </div>
@@ -212,7 +220,9 @@ export const WorkshopsBrowsingSection: React.FC = () => {
             <Search className="absolute start-4 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-muted" />
             <input
               type="text"
-              placeholder={isBirthdayView ? 'Search packages...' : 'Search by workshop, theme, or tutor...'}
+              placeholder={isBirthdayView
+                ? t('Search packages...', 'ابحث في الباقات...')
+                : t('Search by workshop, theme, or tutor...', 'ابحث حسب الورشة، الموضوع، أو المدرّب...')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-white border border-brand-clay rounded-full py-3.5 ps-11 pe-4 text-sm font-medium text-brand-charcoal placeholder-brand-muted focus:ring-1 focus:ring-brand-sage"
@@ -231,7 +241,7 @@ export const WorkshopsBrowsingSection: React.FC = () => {
                 <select
                   value={selectedSkillLevel}
                   onChange={(e) => setSelectedSkillLevel(e.target.value)}
-                  aria-label="Skill Level"
+                  aria-label={t('Skill Level', 'المستوى المهاري')}
                   className="appearance-none bg-white border border-brand-clay rounded-full py-3 ps-4 pe-9 text-sm font-medium text-brand-charcoal cursor-pointer focus:ring-1 focus:ring-brand-sage"
                 >
                   {/*
@@ -243,11 +253,11 @@ export const WorkshopsBrowsingSection: React.FC = () => {
                     levels" describes the class, matching how the tag reads on
                     the card itself.
                   */}
-                  <option value="All">Any level</option>
-                  <option value="Beginner">Beginner</option>
-                  <option value="Intermediate">Intermediate</option>
-                  <option value="Advanced">Advanced</option>
-                  <option value="All Levels">Suitable for all levels</option>
+                  <option value="All">{t('Any level', 'أي مستوى')}</option>
+                  <option value="Beginner">{t('Beginner', 'مبتدئ')}</option>
+                  <option value="Intermediate">{t('Intermediate', 'متوسط')}</option>
+                  <option value="Advanced">{t('Advanced', 'متقدم')}</option>
+                  <option value="All Levels">{t('Suitable for all levels', 'مناسب لجميع المستويات')}</option>
                 </select>
                 <ChevronDown className="pointer-events-none absolute end-3 top-1/2 -translate-y-1/2 h-4 w-4 text-brand-muted" />
               </div>
@@ -256,12 +266,12 @@ export const WorkshopsBrowsingSection: React.FC = () => {
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as any)}
-                  aria-label="Sort by"
+                  aria-label={t('Sort by', 'ترتيب حسب')}
                   className="appearance-none bg-white border border-brand-clay rounded-full py-3 ps-4 pe-9 text-sm font-medium text-brand-charcoal cursor-pointer focus:ring-1 focus:ring-brand-sage"
                 >
-                  <option value="Popularity">Popularity (Filling Fast)</option>
-                  <option value="PriceLow">Price: Low to High</option>
-                  <option value="PriceHigh">Price: High to Low</option>
+                  <option value="Popularity">{t('Popularity (Filling Fast)', 'الأكثر رواجًا (يمتلئ بسرعة)')}</option>
+                  <option value="PriceLow">{t('Price: Low to High', 'السعر: من الأقل إلى الأعلى')}</option>
+                  <option value="PriceHigh">{t('Price: High to Low', 'السعر: من الأعلى إلى الأقل')}</option>
                 </select>
                 <ChevronDown className="pointer-events-none absolute end-3 top-1/2 -translate-y-1/2 h-4 w-4 text-brand-muted" />
               </div>
@@ -292,7 +302,8 @@ export const WorkshopsBrowsingSection: React.FC = () => {
         </div>
 
         <span className="hidden sm:block shrink-0 text-[13px] text-brand-muted ltr-numerals">
-          {visibleCount} {isBirthdayView ? 'packages' : 'workshops'}
+          {/* ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker. */}
+          {visibleCount} {isBirthdayView ? t('packages', 'باقات') : t('workshops', 'ورش')}
         </span>
         </div>
       </div>
@@ -323,19 +334,27 @@ export const WorkshopsBrowsingSection: React.FC = () => {
               <SlidersHorizontal className="h-7 w-7" />
             </div>
             <h3 className="font-display text-xl font-semibold text-brand-charcoal">
-              {isBirthdayView ? 'No packages available right now' : 'No workshops match your filters'}
+              {isBirthdayView
+                ? t('No packages available right now', 'لا توجد باقات متاحة حاليًا')
+                : t('No workshops match your filters', 'لا توجد ورش مطابقة لعوامل التصفية')}
             </h3>
             <p className="text-sm text-brand-ink mt-2 max-w-sm mx-auto leading-relaxed">
               {isBirthdayView
-                ? 'Our birthday packages are being updated. Please check back shortly or call the studio.'
-                : 'We couldn’t find any clay or painting classes matching your search query or selected category chip. Try clearing the query.'}
+                ? t(
+                    'Our birthday packages are being updated. Please check back shortly or call the studio.',
+                    'يتم حاليًا تحديث باقات أعياد الميلاد لدينا. يرجى العودة قريبًا أو الاتصال بالاستوديو.'
+                  )
+                : t(
+                    'We couldn’t find any clay or painting classes matching your search query or selected category chip. Try clearing the query.',
+                    'لم نجد أي ورش فخار أو رسم مطابقة لبحثك أو الفئة المختارة. جرّب مسح كلمة البحث.'
+                  )}
             </p>
             <button
               onClick={resetFilters}
               className="mt-6 inline-flex items-center gap-2 rounded-xl bg-brand-terracotta px-5 py-3 text-xs font-semibold text-brand-cream hover:bg-brand-terracotta-hover shadow-card-sm cursor-pointer"
             >
               <RefreshCw className="h-3.5 w-3.5" />
-              <span>Reset All Filters</span>
+              <span>{t('Reset All Filters', 'إعادة تعيين عوامل التصفية')}</span>
             </button>
           </div>
         )}
@@ -419,7 +438,7 @@ export const WorkshopsBrowsingSection: React.FC = () => {
                     {isFull && (
                       <div className="absolute top-4 start-4 z-10">
                         <span className="inline-flex items-center rounded-lg bg-brand-charcoal/85 text-brand-cream px-2.5 py-1 text-xs font-semibold tracking-wide shadow-card-sm">
-                          FULLY BOOKED
+                          {t('FULLY BOOKED', 'مكتمل الحجز')}
                         </span>
                       </div>
                     )}
@@ -432,7 +451,7 @@ export const WorkshopsBrowsingSection: React.FC = () => {
                       <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-cream/70">
                         {/* Same wording as the filter's "All Levels" option — the tag
                             and the filter describe the same thing and should read alike. */}
-                        {ws.category}{ws.skillLevel ? ` · ${ws.skillLevel === 'All Levels' ? 'Suitable for all levels' : ws.skillLevel}` : ''}
+                        {ws.category}{ws.skillLevel ? ` · ${ws.skillLevel === 'All Levels' ? t('Suitable for all levels', 'مناسب لجميع المستويات') : ws.skillLevel}` : ''}
                       </span>
                       <h3 className="mt-1.5 font-display text-[17px] font-semibold leading-tight text-brand-cream sm:text-[26px] line-clamp-2">
                         {ws.title}
@@ -467,7 +486,7 @@ export const WorkshopsBrowsingSection: React.FC = () => {
                       {ws.instructor && (
                         <p className="max-md:hidden inline-flex min-w-0 max-w-full items-center gap-1.5 text-brand-muted">
                           <Paintbrush className="h-4 w-4 shrink-0 text-brand-sage" />
-                          <span className="truncate">Instructor {ws.instructor}</span>
+                          <span className="truncate">{t('Instructor', 'المدرّب')} {ws.instructor}</span>
                         </p>
                       )}
                     </div>
@@ -486,7 +505,7 @@ export const WorkshopsBrowsingSection: React.FC = () => {
                         <span className="font-display text-[20px] font-semibold leading-none text-brand-ink ltr-numerals sm:text-[29px]">
                           {ws.price}
                         </span>
-                        <span className="text-sm font-medium text-brand-ink">SAR</span>
+                        <span className="text-sm font-medium text-brand-ink">{t('SAR', 'ريال')}</span>
                       </div>
                     </div>
                   </div>
@@ -495,7 +514,7 @@ export const WorkshopsBrowsingSection: React.FC = () => {
                   {isFull && (
                     <div className="absolute inset-0 bg-brand-cream/10 flex items-center justify-center pointer-events-none">
                       <div className="bg-brand-charcoal text-brand-cream px-4 py-2 rounded-xl text-xs font-semibold tracking-widest uppercase shadow-card-sm rotate-12">
-                        Class Full
+                        {t('Class Full', 'الفصل مكتمل')}
                       </div>
                     </div>
                   )}

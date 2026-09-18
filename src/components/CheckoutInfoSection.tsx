@@ -22,7 +22,7 @@ export const CheckoutInfoSection: React.FC = () => {
     pendingBooking, setPendingBooking, setCustomerTab, currentUser, setCurrentUser,
     workshops, loginCustomer, registerCustomer, requestPasswordReset, publishedBirthdayPackages
   } = useApp();
-  const { lang } = useLanguage();
+  const { lang, t } = useLanguage();
 
   const workshop = workshops.find(w => w.id === pendingBooking?.workshopId) || workshops[0];
 
@@ -107,11 +107,11 @@ export const CheckoutInfoSection: React.FC = () => {
 
       if (!regRes.success) {
         if (regRes.error?.includes('already exists')) {
-          setFormGlobalError('An account with these details already exists. Please sign in below to continue.');
+          setFormGlobalError(t('An account with these details already exists. Please sign in below to continue.', 'يوجد حساب بهذه البيانات بالفعل. يرجى تسجيل الدخول أدناه للمتابعة.'));
           setLoginEmail(normEmail);
           setIsLoginModalOpen(true);
         } else {
-          setFormGlobalError(regRes.error || 'Registration failed.');
+          setFormGlobalError(regRes.error || t('Registration failed.', 'فشل التسجيل.'));
         }
         return;
       }
@@ -144,10 +144,10 @@ export const CheckoutInfoSection: React.FC = () => {
 
     const res = await requestPasswordReset(loginEmail || email);
     if (!res.success) {
-      setModalError(res.error || 'Could not send the reset link.');
+      setModalError(res.error || t('Could not send the reset link.', 'تعذّر إرسال رابط إعادة التعيين.'));
       return;
     }
-    setResetSent(res.message || 'If an account exists for that address, a reset link is on its way.');
+    setResetSent(res.message || t('If an account exists for that address, a reset link is on its way.', 'إذا كان هناك حساب مرتبط بهذا البريد، فسيصلك رابط إعادة التعيين قريبًا.'));
   };
 
   const handleQuickLogin = async (e: React.FormEvent) => {
@@ -157,7 +157,7 @@ export const CheckoutInfoSection: React.FC = () => {
 
     const res = await loginCustomer(loginEmail, loginPassword);
     if (!res.success) {
-      setModalError(res.error || 'Login failed.');
+      setModalError(res.error || t('Login failed.', 'فشل تسجيل الدخول.'));
       // The record exists but has no password. Sending them to the Login page
       // is where the claim step lives.
       setNeedsPasswordSetup(!!res.needsPasswordSetup);
@@ -170,13 +170,13 @@ export const CheckoutInfoSection: React.FC = () => {
   if (!pendingBooking) {
     return (
       <div className="mx-auto max-w-xl px-4 py-16 text-center">
-        <h2 className="font-display text-2xl font-semibold text-brand-charcoal">No Workshop Selected</h2>
-        <p className="text-sm text-brand-ink mt-2">Please select a workshop from the catalog to book.</p>
+        <h2 className="font-display text-2xl font-semibold text-brand-charcoal">{t('No Workshop Selected', 'لم يتم اختيار ورشة')}</h2>
+        <p className="text-sm text-brand-ink mt-2">{t('Please select a workshop from the catalog to book.', 'يرجى اختيار ورشة من الكتالوج للحجز.')}</p>
         <button
           onClick={() => setCustomerTab('workshops')}
           className="mt-6 inline-flex items-center gap-2 rounded-xl bg-brand-terracotta px-6 py-3 text-sm font-semibold text-brand-cream"
         >
-          Browse Workshops
+          {t('Browse Workshops', 'تصفح الورش')}
         </button>
       </div>
     );
@@ -187,12 +187,12 @@ export const CheckoutInfoSection: React.FC = () => {
             <div className="flex gap-4">
               <AppImage
                 src={birthday ? (birthdayPackage?.image || workshop.image) : workshop.image}
-                alt={birthday ? (birthdayPackage?.name || 'Birthday package') : workshop.title}
+                alt={birthday ? (birthdayPackage?.name || t('Birthday package', 'باقة عيد ميلاد')) : workshop.title}
                 className="w-20 h-20 rounded-2xl object-cover shrink-0 bg-brand-sand border border-brand-clay"
               />
               <div>
                 <span className="text-[10px] font-semibold text-brand-sage uppercase tracking-wider block">
-                  {birthday ? 'Birthday Package' : workshop.category}
+                  {birthday ? t('Birthday Package', 'باقة عيد ميلاد') : workshop.category}
                 </span>
                 <h4 className="font-semibold text-brand-charcoal text-sm leading-tight">{pendingBooking.workshopTitle}</h4>
                 <p className="text-xs text-brand-ink mt-1">
@@ -205,37 +205,38 @@ export const CheckoutInfoSection: React.FC = () => {
 
             <div className="border-t border-brand-clay pt-3 space-y-2 text-xs text-brand-ink">
               <div className="flex justify-between">
-                <span>Date:</span>
+                <span>{t('Date', 'التاريخ')}:</span>
                 <span className="font-semibold text-brand-charcoal">{pendingBooking.date}</span>
               </div>
               <div className="flex justify-between">
-                <span>Time Slot:</span>
+                <span>{t('Time Slot', 'الوقت')}:</span>
                 <span className="font-semibold text-brand-charcoal">{pendingBooking.time}</span>
               </div>
               <div className="flex justify-between">
-                <span>{birthday ? 'Guests:' : 'Participants:'}</span>
-                <span className="font-semibold text-brand-charcoal">{pendingBooking.participants} {pendingBooking.participants === 1 ? 'guest' : 'guests'}</span>
+                <span>{birthday ? t('Guests', 'الضيوف') : t('Participants', 'المشاركون')}:</span>
+                {/* ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker. */}
+                <span className="font-semibold text-brand-charcoal">{pendingBooking.participants} {pendingBooking.participants === 1 ? t('guest', 'ضيف') : t('guests', 'ضيوف')}</span>
               </div>
               <div className="flex justify-between">
                 {/* Fallback only — a package with a pricingLabel shows its own.
                     "Per child" here disagreed with the "Price per person" beside
                     it for a workshop, on the same line of the same panel. */}
-                <span>{birthday ? (birthdayPackage?.pricingLabel || 'Per person') : 'Price per person'}:</span>
+                <span>{birthday ? (birthdayPackage?.pricingLabel || t('Per person', 'للشخص')) : t('Price per person', 'السعر للشخص')}:</span>
                 <span className="font-semibold text-brand-charcoal">
-                  {birthday ? (birthdayPackage?.price ?? 0) : workshop.price} SAR
+                  {birthday ? (birthdayPackage?.price ?? 0) : workshop.price} {t('SAR', 'ريال')}
                 </span>
               </div>
               {birthday?.birthdayPersonName && (
                 <div className="flex justify-between">
-                  <span>Birthday person:</span>
+                  <span>{t('Birthday person', 'صاحب عيد الميلاد')}:</span>
                   <span className="font-semibold text-brand-charcoal">{birthday.birthdayPersonName}</span>
                 </div>
               )}
             </div>
 
             <div className="border-t border-brand-clay pt-3 flex justify-between items-center text-brand-charcoal">
-              <span className="font-semibold text-sm">{birthday ? 'Deposit Due:' : 'Total Due:'}</span>
-              <span className="font-serif text-xl font-semibold text-brand-terracotta">{pendingBooking.totalPrice} SAR</span>
+              <span className="font-semibold text-sm">{birthday ? t('Deposit Due', 'المقدم المستحق') : t('Total Due', 'الإجمالي المستحق')}:</span>
+              <span className="font-serif text-xl font-semibold text-brand-terracotta">{pendingBooking.totalPrice} {t('SAR', 'ريال')}</span>
             </div>
     </>
   );
@@ -246,23 +247,23 @@ export const CheckoutInfoSection: React.FC = () => {
       {/* Back button — a birthday draft returns to its own Review & Deposit
           step, never to a workshop's details page. */}
       <BackButton onClick={() => setCustomerTab(birthday ? 'birthday-booking' : 'detail')} className="mb-6">
-        {birthday ? 'Back to Review & Deposit' : 'Back to Workshop Details'}
+        {birthday ? t('Back to Review & Deposit', 'العودة إلى المراجعة والمقدم') : t('Back to Workshop Details', 'العودة إلى تفاصيل الورشة')}
       </BackButton>
 
       {/* Title then stepper — the same header the birthday reservation uses. */}
       <div className="mb-8">
         <span className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-sage">
-          Workshop Booking
+          {t('Workshop Booking', 'حجز الورشة')}
         </span>
         <h1 className="mt-3 font-display text-3xl font-semibold text-brand-charcoal sm:text-[42px]">
-          Customer Information
+          {t('Customer Information', 'بيانات العميل')}
         </h1>
         <p className="mt-3 text-sm text-brand-ink">
-          Enter your contact details for booking confirmation.
+          {t('Enter your contact details for booking confirmation.', 'أدخل بيانات التواصل لتأكيد الحجز.')}
         </p>
       </div>
 
-      <CheckoutStepper steps={['Customer Information', 'Payment']} current={1} />
+      <CheckoutStepper steps={[t('Customer Information', 'بيانات العميل'), t('Payment', 'الدفع')]} current={1} />
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         
@@ -280,15 +281,15 @@ export const CheckoutInfoSection: React.FC = () => {
               <div className="flex items-center gap-3">
                 <LogIn className="h-5 w-5 text-brand-terracotta shrink-0" />
                 <div className="text-xs">
-                  <p className="font-semibold text-brand-charcoal">Have an account?</p>
-                  <p className="text-brand-ink">Sign in to autofill your details and view saved bookings.</p>
+                  <p className="font-semibold text-brand-charcoal">{t('Have an account?', 'هل لديك حساب؟')}</p>
+                  <p className="text-brand-ink">{t('Sign in to autofill your details and view saved bookings.', 'سجّل الدخول لتعبئة بياناتك تلقائيًا ومشاهدة حجوزاتك المحفوظة.')}</p>
                 </div>
               </div>
               <button
                 onClick={() => setIsLoginModalOpen(true)}
                 className="px-4 py-2 min-h-11 inline-flex items-center justify-center text-xs font-semibold text-brand-terracotta bg-brand-cream border border-brand-terracotta/30 rounded-xl hover:bg-brand-terracotta hover:text-white transition-colors cursor-pointer whitespace-nowrap shrink-0"
               >
-                Sign In
+                {t('Sign In', 'تسجيل الدخول')}
               </button>
             </div>
           ) : (
@@ -301,13 +302,13 @@ export const CheckoutInfoSection: React.FC = () => {
           <form onSubmit={handleContinue} className="space-y-5">
             <div>
               <label className="block text-xs font-semibold text-brand-ink uppercase tracking-wider mb-2">
-                Full Name <span className="text-brand-terracotta">*</span>
+                {t('Full Name', 'الاسم الكامل')} <span className="text-brand-terracotta">*</span>
               </label>
               <div className="relative">
                 <User className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-charcoal/40" />
                 <input
                   type="text"
-                  placeholder="e.g. Noura Al-Amri"
+                  placeholder={t('e.g. Noura Al-Amri', 'مثال: نورة العمري')}
                   value={name}
                   onChange={e => { setName(e.target.value); if (errors.name) setErrors({...errors, name: ''}); }}
                   className="w-full bg-brand-sand/20 border border-brand-clay rounded-2xl py-3 pl-10 pr-4 text-sm font-semibold text-brand-charcoal focus:ring-1 focus:ring-brand-terracotta focus:outline-none"
@@ -318,7 +319,7 @@ export const CheckoutInfoSection: React.FC = () => {
 
             <div>
               <label className="block text-xs font-semibold text-brand-ink uppercase tracking-wider mb-2">
-                Email Address <span className="text-brand-terracotta">*</span>
+                {t('Email Address', 'البريد الإلكتروني')} <span className="text-brand-terracotta">*</span>
               </label>
               <div className="relative">
                 <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-charcoal/40" />
@@ -334,7 +335,7 @@ export const CheckoutInfoSection: React.FC = () => {
                   type="text"
                   inputMode="email"
                   autoComplete="email"
-                  placeholder="e.g. noura@example.com"
+                  placeholder={t('e.g. noura@example.com', 'مثال: noura@example.com')}
                   value={email}
                   onChange={e => { setEmail(e.target.value); if (errors.email) setErrors({...errors, email: ''}); }}
                   className="w-full bg-brand-sand/20 border border-brand-clay rounded-2xl py-3 pl-10 pr-4 text-sm font-semibold text-brand-charcoal focus:ring-1 focus:ring-brand-terracotta focus:outline-none"
@@ -356,7 +357,7 @@ export const CheckoutInfoSection: React.FC = () => {
               rendered is kept in the label instead, so nothing looks optional.
             */}
             <PhoneInput
-              label="Saudi Mobile Phone Number *"
+              label={`${t('Saudi Mobile Phone Number', 'رقم الجوال السعودي')} *`}
               value={phone}
               onChange={val => { setPhone(val); if (errors.phone) setErrors({...errors, phone: ''}); }}
               error={errors.phone}
@@ -366,7 +367,7 @@ export const CheckoutInfoSection: React.FC = () => {
               <>
                 <div>
                   <label className="block text-xs font-semibold text-brand-ink uppercase tracking-wider mb-2">
-                    Account Password <span className="text-brand-terracotta">*</span>
+                    {t('Account Password', 'كلمة مرور الحساب')} <span className="text-brand-terracotta">*</span>
                   </label>
                   <div className="relative">
                     <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-charcoal/40" />
@@ -400,7 +401,7 @@ export const CheckoutInfoSection: React.FC = () => {
 
                 <div>
                   <label className="block text-xs font-semibold text-brand-ink uppercase tracking-wider mb-2">
-                    Confirm Password <span className="text-brand-terracotta">*</span>
+                    {t('Confirm Password', 'تأكيد كلمة المرور')} <span className="text-brand-terracotta">*</span>
                   </label>
                   <div className="relative">
                     <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-charcoal/40" />
@@ -426,7 +427,7 @@ export const CheckoutInfoSection: React.FC = () => {
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 [&::-webkit-details-marker]:hidden">
                 <span className="min-w-0 truncate text-sm font-semibold text-brand-charcoal">{pendingBooking.workshopTitle}</span>
                 <span className="flex shrink-0 items-center gap-2">
-                  <span className="font-serif text-lg font-semibold text-brand-terracotta">{pendingBooking.totalPrice} SAR</span>
+                  <span className="font-serif text-lg font-semibold text-brand-terracotta">{pendingBooking.totalPrice} {t('SAR', 'ريال')}</span>
                   <ChevronDown className="h-4 w-4 text-brand-muted transition-transform group-[[open]]:rotate-180" />
                 </span>
               </summary>
@@ -438,14 +439,14 @@ export const CheckoutInfoSection: React.FC = () => {
                 type="submit"
                 className="w-full cursor-pointer bg-brand-terracotta text-brand-cream font-semibold py-4 rounded-2xl shadow-card-sm hover:bg-brand-terracotta-hover transition-all flex items-center justify-center gap-2 text-base"
               >
-                <span>Continue to Payment</span>
-                <ArrowRight className="h-5 w-5" />
+                <span>{t('Continue to Payment', 'المتابعة إلى الدفع')}</span>
+                <ArrowRight className="h-5 w-5 flip-rtl" />
               </button>
             </div>
 
             <div className="flex items-center justify-center gap-1.5 text-[11px] text-brand-muted pt-2">
               <ShieldCheck className="h-4 w-4 text-brand-sage" />
-              <span>Your contact details are encrypted and used solely for workshop management.</span>
+              <span>{t('Your contact details are encrypted and used solely for workshop management.', 'بياناتك مشفّرة وتُستخدم فقط لإدارة حجوزات الورش.')}</span>
             </div>
           </form>
 
@@ -455,7 +456,7 @@ export const CheckoutInfoSection: React.FC = () => {
         <div className="hidden lg:block lg:col-span-5">
           <div className="bg-brand-sand/30 rounded-[28px] p-6 border border-brand-clay shadow-card space-y-4">
             <h3 className="font-display text-lg font-semibold text-brand-charcoal border-b border-brand-clay pb-3">
-              Order Summary
+              {t('Order Summary', 'ملخص الطلب')}
             </h3>
 
             {summaryBody}
@@ -471,8 +472,8 @@ export const CheckoutInfoSection: React.FC = () => {
               this panel is taller than the visible area, and centring it in a
               fixed overlay clipped it at BOTH ends. */}
           <div className="bg-brand-cream rounded-[28px] p-6 sm:p-8 max-w-sm w-full shadow-2xl border border-brand-clay text-start animate-in zoom-in-95 duration-150 max-h-[calc(100dvh-2rem)] overflow-y-auto">
-            <h3 className="font-display text-xl font-semibold text-brand-charcoal mb-2">Sign In</h3>
-            <p className="text-xs text-brand-ink mb-4">Enter your email to quickly sign in and autofill your details.</p>
+            <h3 className="font-display text-xl font-semibold text-brand-charcoal mb-2">{t('Sign In', 'تسجيل الدخول')}</h3>
+            <p className="text-xs text-brand-ink mb-4">{t('Enter your email to quickly sign in and autofill your details.', 'أدخل بريدك الإلكتروني لتسجيل الدخول بسرعة وتعبئة بياناتك تلقائيًا.')}</p>
             
             {modalError && (
               <div className="mb-3 p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs font-semibold space-y-2">
@@ -486,7 +487,7 @@ export const CheckoutInfoSection: React.FC = () => {
                     }}
                     className="font-semibold underline cursor-pointer"
                   >
-                    Set up your password
+                    {t('Set up your password', 'إعداد كلمة المرور')}
                   </button>
                 )}
               </div>
@@ -494,11 +495,11 @@ export const CheckoutInfoSection: React.FC = () => {
 
             <form onSubmit={handleQuickLogin} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-brand-ink mb-1">Email or phone</label>
+                <label className="block text-xs font-semibold text-brand-ink mb-1">{t('Email or phone', 'البريد الإلكتروني أو الجوال')}</label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. noura@example.com or 0501234567"
+                  placeholder={`${t('e.g.', 'مثال:')} noura@example.com ${t('or', 'أو')} 0501234567`}
                   value={loginEmail}
                   onChange={e => { setLoginEmail(e.target.value); setModalError(null); }}
                   className="w-full bg-brand-sand/20 border border-brand-clay rounded-xl py-2.5 px-3 text-sm font-semibold text-brand-charcoal"
@@ -506,7 +507,7 @@ export const CheckoutInfoSection: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-brand-ink mb-1">Password</label>
+                <label className="block text-xs font-semibold text-brand-ink mb-1">{t('Password', 'كلمة المرور')}</label>
                 <PasswordField
                   placeholder="••••••••"
                   value={loginPassword}
@@ -521,13 +522,13 @@ export const CheckoutInfoSection: React.FC = () => {
                   onClick={() => setIsLoginModalOpen(false)}
                   className="flex-1 py-2.5 rounded-xl border border-brand-clay text-xs font-semibold text-brand-charcoal hover:bg-brand-sand cursor-pointer"
                 >
-                  Cancel
+                  {t('Cancel', 'إلغاء')}
                 </button>
                 <button
                   type="submit"
                   className="flex-1 py-2.5 rounded-xl bg-brand-terracotta text-xs font-semibold text-brand-cream hover:bg-brand-terracotta-hover cursor-pointer"
                 >
-                  Sign In
+                  {t('Sign In', 'تسجيل الدخول')}
                 </button>
               </div>
 
@@ -538,7 +539,7 @@ export const CheckoutInfoSection: React.FC = () => {
                   onClick={handleModalForgotPassword}
                   className="text-[11px] font-semibold text-brand-muted hover:text-brand-terracotta cursor-pointer"
                 >
-                  Forgot password?
+                  {t('Forgot password?', 'هل نسيت كلمة المرور؟')}
                 </button>
                 {/* Worded the same whether or not the address is registered. */}
                 {resetSent && (

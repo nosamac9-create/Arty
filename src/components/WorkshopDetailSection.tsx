@@ -26,7 +26,7 @@ export const WorkshopDetailSection: React.FC = () => {
     // Shared records, narrowed to this workshop below.
     workshopSessions
   } = useApp();
-  const { lang } = useLanguage();
+  const { lang, t } = useLanguage();
 
   const workshop = useMemo(() => {
     return workshops.find(ws => ws.id === selectedWorkshopId) || workshops[0];
@@ -259,10 +259,10 @@ export const WorkshopDetailSection: React.FC = () => {
 
   const priceSubtitle = useMemo(() => {
     if (!workshop) return '';
-    if (workshop.pricingType === 'Per pair') return `${workshop.price} SAR / Pair`;
-    if (workshop.pricingType === 'Fixed price') return `${workshop.price} SAR (Fixed Price)`;
-    return `${workshop.price} SAR / Person`;
-  }, [workshop]);
+    if (workshop.pricingType === 'Per pair') return `${workshop.price} ${t('SAR / Pair', 'ريال / للزوج')}`;
+    if (workshop.pricingType === 'Fixed price') return `${workshop.price} ${t('SAR (Fixed Price)', 'ريال (سعر ثابت)')}`;
+    return `${workshop.price} ${t('SAR / Person', 'ريال / للشخص')}`;
+  }, [workshop, t]);
 
   // Live remaining seats for the chosen session, not an arbitrary cap. Falls
   // back to the session's total capacity while the live count is still
@@ -319,7 +319,7 @@ export const WorkshopDetailSection: React.FC = () => {
       
       {/* Back button */}
       <BackButton onClick={() => setCustomerTab('workshops')} className="mb-6">
-        Back to Workshops
+        {t('Back to Workshops', 'العودة إلى الورش')}
       </BackButton>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 pb-16">
@@ -371,17 +371,17 @@ export const WorkshopDetailSection: React.FC = () => {
               original per-cell borders take over unchanged. */}
           <div className="grid grid-cols-2 gap-px bg-brand-clay sm:grid-cols-2 sm:gap-0 sm:bg-brand-cream lg:grid-cols-4 rounded-[22px] border border-brand-clay overflow-hidden">
             {[
-              { label: 'Duration', value: workshop.duration },
-              { label: 'Ages', value: workshop.ageRange },
-              { label: 'Tutor', value: workshopTutorName },
-              { label: 'Location', value: workshop.room.split('(')[0] },
+              { label: t('Duration', 'المدة'), value: workshop.duration },
+              { label: t('Ages', 'الأعمار'), value: workshop.ageRange },
+              { label: t('Tutor', 'المدرّب'), value: workshopTutorName },
+              { label: t('Location', 'الموقع'), value: workshop.room.split('(')[0] },
               ...customerVisibleFields.map(field => {
                 const raw = workshop?.customFields?.[field.fieldKey];
                 const text = Array.isArray(raw) ? raw.join(', ') : raw;
                 if (text === undefined || text === null || String(text).trim() === '') return null;
                 return {
                   label: field.label,
-                  value: typeof text === 'boolean' ? (text ? 'Yes' : 'No') : String(text)
+                  value: typeof text === 'boolean' ? (text ? t('Yes', 'نعم') : t('No', 'لا')) : String(text)
                 };
               }).filter(Boolean) as { label: string; value: string }[]
             ].map(cell => (
@@ -403,7 +403,7 @@ export const WorkshopDetailSection: React.FC = () => {
           {/* Description details */}
           <div className="space-y-4">
             <Reveal index={0}>
-              <h3 className="font-display text-2xl font-semibold text-brand-charcoal">What you’ll do</h3>
+              <h3 className="font-display text-2xl font-semibold text-brand-charcoal">{t('What you’ll do', 'ماذا ستفعل')}</h3>
             </Reveal>
             <Reveal index={1}>
               <p className="text-brand-ink leading-[1.75] text-[15px]">
@@ -420,7 +420,7 @@ export const WorkshopDetailSection: React.FC = () => {
           {/* Materials Bullet Points List */}
           <div className="space-y-4 pt-6 border-t border-brand-clay">
             <Reveal index={0}>
-              <h3 className="font-display text-2xl font-semibold text-brand-charcoal">Included</h3>
+              <h3 className="font-display text-2xl font-semibold text-brand-charcoal">{t('Included', 'يشمل')}</h3>
             </Reveal>
             <ScrollReveal
               once
@@ -449,17 +449,17 @@ export const WorkshopDetailSection: React.FC = () => {
             
             <div>
               <Reveal index={0}>
-                <span className="text-[10px] font-semibold text-brand-sage uppercase tracking-widest block">SECURE BOOKING</span>
+                <span className="text-[10px] font-semibold text-brand-sage uppercase tracking-widest block">{t('SECURE BOOKING', 'حجز آمن')}</span>
               </Reveal>
               <Reveal index={1}>
-                <h2 className="font-display text-2xl font-semibold text-brand-charcoal">Reserve your workspace</h2>
+                <h2 className="font-display text-2xl font-semibold text-brand-charcoal">{t('Reserve your workspace', 'احجز مساحتك')}</h2>
               </Reveal>
             </div>
 
             {/* 1. Date Selection (Month Calendar) */}
             <div className="space-y-3">
               <label className="text-xs font-semibold uppercase tracking-widest text-brand-charcoal/40 block">
-                1. Select a Date
+                {t('1. Select a Date', '1. اختر تاريخًا')}
               </label>
 
               {/* Full Month Calendar with Forward Navigation */}
@@ -473,9 +473,9 @@ export const WorkshopDetailSection: React.FC = () => {
                     disabled={isPrevMonthDisabled}
                     onClick={handlePrevMonth}
                     className="h-11 w-11 flex items-center justify-center rounded-xl hover:bg-brand-sand border border-brand-clay disabled:opacity-30 disabled:hover:bg-transparent cursor-pointer text-brand-charcoal"
-                    title="Previous Month"
+                    title={t('Previous Month', 'الشهر السابق')}
                   >
-                    <ChevronLeft className="h-4 w-4" />
+                    <ChevronLeft className="h-4 w-4 flip-rtl" />
                   </button>
                   <span className="font-display font-semibold text-sm text-brand-charcoal">
                     {monthNames[calendarMonth.getMonth()]} {calendarMonth.getFullYear()}
@@ -484,21 +484,22 @@ export const WorkshopDetailSection: React.FC = () => {
                     type="button"
                     onClick={handleNextMonth}
                     className="h-11 w-11 flex items-center justify-center rounded-xl hover:bg-brand-sand border border-brand-clay cursor-pointer text-brand-charcoal"
-                    title="Next Month"
+                    title={t('Next Month', 'الشهر التالي')}
                   >
-                    <ChevronRight className="h-4 w-4" />
+                    <ChevronRight className="h-4 w-4 flip-rtl" />
                   </button>
                 </div>
 
                 {/* Day of week headers */}
                 <div className="grid grid-cols-7 text-center text-[10px] font-semibold text-brand-muted uppercase">
-                  <span>Su</span>
-                  <span>Mo</span>
-                  <span>Tu</span>
-                  <span>We</span>
-                  <span>Th</span>
-                  <span>Fr</span>
-                  <span>Sa</span>
+                  {/* ⚠ ARABIC DAY ABBREVIATIONS — best-effort single letters, needs a native speaker's review. */}
+                  <span>{t('Su', 'ح')}</span>
+                  <span>{t('Mo', 'ن')}</span>
+                  <span>{t('Tu', 'ث')}</span>
+                  <span>{t('We', 'ر')}</span>
+                  <span>{t('Th', 'خ')}</span>
+                  <span>{t('Fr', 'ج')}</span>
+                  <span>{t('Sa', 'س')}</span>
                 </div>
 
                 {/* Grid of Days */}
@@ -552,17 +553,20 @@ export const WorkshopDetailSection: React.FC = () => {
                 </div>
 
                 <p className="text-[10px] text-center text-brand-muted pt-1">
-                  Selected: <strong className="text-brand-terracotta">{selectedDate}</strong>
+                  {t('Selected', 'المحدد')}: <strong className="text-brand-terracotta">{selectedDate}</strong>
                 </p>
               </div>
             </div>
 
             {/* 2. Grid of Time-Slot Buttons */}
             <div className="space-y-3">
-              <label className="text-xs font-semibold uppercase tracking-widest text-brand-charcoal/40 block">2. Pick a Time</label>
+              <label className="text-xs font-semibold uppercase tracking-widest text-brand-charcoal/40 block">{t('2. Pick a Time', '2. اختر وقتًا')}</label>
               {slots.length === 0 ? (
                 <div className="p-4 rounded-2xl bg-brand-sand/30 border border-brand-clay text-center text-xs font-medium text-brand-muted">
-                  No active published sessions scheduled for this date. Please select another date.
+                  {t(
+                    'No active published sessions scheduled for this date. Please select another date.',
+                    'لا توجد جلسات منشورة متاحة لهذا التاريخ. يرجى اختيار تاريخ آخر.'
+                  )}
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-3">
@@ -577,7 +581,7 @@ export const WorkshopDetailSection: React.FC = () => {
                           className="px-4 py-3 rounded-[22px] border border-brand-clay/20 text-brand-charcoal/30 font-semibold text-sm flex justify-between items-center cursor-not-allowed bg-brand-sand/10"
                         >
                           <span>{s.time}</span>
-                          <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-700/60 bg-amber-50 px-2 py-0.5 rounded">PASSED / CLOSED</span>
+                          <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-700/60 bg-amber-50 px-2 py-0.5 rounded">{t('PASSED / CLOSED', 'انتهى / مغلق')}</span>
                         </button>
                       );
                     }
@@ -593,7 +597,7 @@ export const WorkshopDetailSection: React.FC = () => {
                           className="px-4 py-3 rounded-[22px] border border-brand-clay/20 text-brand-charcoal/40 font-semibold text-sm flex justify-between items-center cursor-wait"
                         >
                           <span>{s.time}</span>
-                          <span className="text-[10px] font-semibold uppercase tracking-wider text-brand-muted bg-brand-clay/10 px-2 py-0.5 rounded">CHECKING…</span>
+                          <span className="text-[10px] font-semibold uppercase tracking-wider text-brand-muted bg-brand-clay/10 px-2 py-0.5 rounded">{t('CHECKING…', 'جارٍ التحقق…')}</span>
                         </button>
                       );
                     }
@@ -606,7 +610,7 @@ export const WorkshopDetailSection: React.FC = () => {
                           className="px-4 py-3 rounded-[22px] border border-brand-clay/20 text-brand-charcoal/40 font-semibold text-sm flex justify-between items-center cursor-not-allowed bg-red-50/30"
                         >
                           <span>{s.time}</span>
-                          <span className="text-[10px] font-semibold uppercase tracking-wider text-red-600 bg-red-100 px-2 py-0.5 rounded">FULLY BOOKED</span>
+                          <span className="text-[10px] font-semibold uppercase tracking-wider text-red-600 bg-red-100 px-2 py-0.5 rounded">{t('FULLY BOOKED', 'مكتمل الحجز')}</span>
                         </button>
                       );
                     }
@@ -626,9 +630,10 @@ export const WorkshopDetailSection: React.FC = () => {
                       >
                         <div className="text-start">
                           <span className="block font-semibold">{s.time}</span>
-                          {s.instructor && <span className="text-[10px] text-brand-muted block font-normal">Tutor: {s.instructor}</span>}
+                          {s.instructor && <span className="text-[10px] text-brand-muted block font-normal">{t('Tutor', 'المدرّب')}: {s.instructor}</span>}
                         </div>
-                        <span className="text-[10px] font-semibold bg-brand-sage/10 text-brand-sage px-2 py-1 rounded-lg">{s.spots} open seats</span>
+                        {/* ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker. */}
+                        <span className="text-[10px] font-semibold bg-brand-sage/10 text-brand-sage px-2 py-1 rounded-lg">{s.spots} {s.spots === 1 ? t('open seat', 'مقعد متاح') : t('open seats', 'مقاعد متاحة')}</span>
                       </button>
                     );
                   })}
@@ -640,7 +645,7 @@ export const WorkshopDetailSection: React.FC = () => {
             {currentUser ? (
               <div className="p-4 bg-brand-sand/30 rounded-[22px] border border-brand-clay text-xs text-brand-ink space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="font-semibold uppercase tracking-wider text-[10px] text-brand-sage">Booking Participant</span>
+                  <span className="font-semibold uppercase tracking-wider text-[10px] text-brand-sage">{t('Booking Participant', 'مشارك الحجز')}</span>
                   <button 
                     onClick={() => setIsEditingInfo(!isEditingInfo)}
                     // The tap area is expanded by a transparent pseudo-element
@@ -650,7 +655,7 @@ export const WorkshopDetailSection: React.FC = () => {
                     className="relative text-[10px] text-brand-terracotta font-semibold flex items-center gap-1 hover:underline cursor-pointer before:absolute before:-inset-4 before:content-['']"
                   >
                     <Edit className="h-3 w-3" />
-                    <span>{isEditingInfo ? 'Save' : 'Edit'}</span>
+                    <span>{isEditingInfo ? t('Save', 'حفظ') : t('Edit', 'تعديل')}</span>
                   </button>
                 </div>
 
@@ -660,14 +665,14 @@ export const WorkshopDetailSection: React.FC = () => {
                       type="text" 
                       value={custName} 
                       onChange={e => setCustName(e.target.value)} 
-                      placeholder="Name" 
+                      placeholder={t('Name', 'الاسم')}
                       className="w-full bg-brand-cream border border-brand-clay p-2 rounded-xl font-semibold text-xs text-brand-charcoal"
                     />
-                    <input 
-                      type="text" 
-                      value={custPhone} 
-                      onChange={e => setCustPhone(e.target.value)} 
-                      placeholder="Phone" 
+                    <input
+                      type="text"
+                      value={custPhone}
+                      onChange={e => setCustPhone(e.target.value)}
+                      placeholder={t('Phone', 'الجوال')}
                       className="w-full bg-brand-cream border border-brand-clay p-2 rounded-xl font-semibold text-xs text-brand-charcoal"
                     />
                   </div>
@@ -681,7 +686,7 @@ export const WorkshopDetailSection: React.FC = () => {
 
             {/* 3. Participant stepper */}
             <div className="flex items-center justify-between py-1">
-              <label className="text-xs font-semibold uppercase tracking-widest text-brand-charcoal/40">3. Participants</label>
+              <label className="text-xs font-semibold uppercase tracking-widest text-brand-charcoal/40">{t('3. Participants', '3. المشاركون')}</label>
               <div className="flex items-center gap-4 bg-brand-sand/40 rounded-full px-4 py-2 border border-brand-clay/20">
                 <button
                   disabled={participants <= 1}
@@ -705,9 +710,9 @@ export const WorkshopDetailSection: React.FC = () => {
             <div className="pt-6 border-t border-brand-clay/35 space-y-3 text-sm text-brand-charcoal/95">
               <div className="flex justify-between items-end">
                 <div>
-                  <p className="text-xs text-brand-charcoal/40">Total Amount</p>
+                  <p className="text-xs text-brand-charcoal/40">{t('Total Amount', 'المبلغ الإجمالي')}</p>
                   <p className="text-2xl font-serif font-semibold text-brand-terracotta">
-                    {totalPrice} <span className="text-sm font-sans font-normal">SAR</span>
+                    {totalPrice} <span className="text-sm font-sans font-normal">{t('SAR', 'ريال')}</span>
                   </p>
                 </div>
                 <p className="text-[10px] text-brand-charcoal/40 italic font-medium">{priceSubtitle}</p>
@@ -728,11 +733,11 @@ export const WorkshopDetailSection: React.FC = () => {
                   : 'bg-brand-sand text-brand-charcoal/40 border border-brand-clay cursor-not-allowed shadow-none'
               }`}
             >
-              {selectedSlot ? 'Confirm Booking' : 'Select a Time Slot'}
+              {selectedSlot ? t('Confirm Booking', 'تأكيد الحجز') : t('Select a Time Slot', 'اختر وقتًا')}
             </button>
 
             <p className="text-[10px] text-center text-brand-charcoal/40 italic">
-              Free cancellation up to 24h before session starts.
+              {t('Free cancellation up to 24h before session starts.', 'إلغاء مجاني حتى 24 ساعة قبل بدء الجلسة.')}
             </p>
 
           </div>
