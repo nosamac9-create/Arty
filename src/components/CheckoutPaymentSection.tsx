@@ -5,6 +5,7 @@
 
 import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
+import { useLanguage } from '../context/LanguageContext';
 import { CreditCard, Smartphone, ShieldCheck, Check, Lock, ChevronDown } from 'lucide-react';
 import { PhoneInput } from './PhoneInput';
 import { PrePaymentPopup } from './PrePaymentPopup';
@@ -20,6 +21,7 @@ export const CheckoutPaymentSection: React.FC = () => {
     sessionExpired,
     appSettings
   } = useApp();
+  const { lang } = useLanguage();
 
   // The guidelines pop-up is configured in Settings -> Booking Pop-up. Reading
   // it live means an admin edit shows up here without a rebuild or a reload.
@@ -99,7 +101,7 @@ export const CheckoutPaymentSection: React.FC = () => {
     const bookingErrors = await validateBookingForm({
       sessionId: pendingBooking.sessionId,
       participants: pendingBooking.participants
-    });
+    }, undefined, undefined, lang);
     // A birthday package has no workshop session; its own rules apply below.
     const isBirthday = pendingBooking.workshopId === 'birthday-party-event' ||
       pendingBooking.workshopTitle.toLowerCase().includes('birthday');
@@ -118,7 +120,7 @@ export const CheckoutPaymentSection: React.FC = () => {
         date: pendingBooking.date,
         time: pendingBooking.time,
         totalPeople: pendingBooking.participants
-      });
+      }, undefined, undefined, lang);
       const birthdayError = Object.values(birthdayErrors)[0];
       if (birthdayError) {
         setBookingError(birthdayError);

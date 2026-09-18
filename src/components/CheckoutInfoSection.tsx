@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { PasswordField } from './PasswordField';
 import { useApp } from '../context/AppContext';
+import { useLanguage } from '../context/LanguageContext';
 import { User, Mail, Phone, ArrowRight, ShieldCheck, LogIn, CheckCircle2, Lock , Check, ChevronDown } from 'lucide-react';
 import { validateSaudiPhone, normaliseSaudiPhone } from '../utils/phoneUtils';
 import { PhoneInput } from './PhoneInput';
@@ -21,6 +22,7 @@ export const CheckoutInfoSection: React.FC = () => {
     pendingBooking, setPendingBooking, setCustomerTab, currentUser, setCurrentUser,
     workshops, loginCustomer, registerCustomer, requestPasswordReset, publishedBirthdayPackages
   } = useApp();
+  const { lang } = useLanguage();
 
   const workshop = workshops.find(w => w.id === pendingBooking?.workshopId) || workshops[0];
 
@@ -76,7 +78,8 @@ export const CheckoutInfoSection: React.FC = () => {
       {
         requirePassword: !currentUser,
         excludeId: currentUser?.id,
-        allowExistingCustomer: !!currentUser
+        allowExistingCustomer: !!currentUser,
+        lang
       }
     );
 
@@ -376,7 +379,7 @@ export const CheckoutInfoSection: React.FC = () => {
                   </div>
                   {/* Live checklist, updating as they type. */}
                   <ul className="space-y-0.5 mt-1.5">
-                    {passwordChecklist(password).map(item => (
+                    {passwordChecklist(password, lang).map(item => (
                       <li
                         key={item.label}
                         className={`text-[11px] font-semibold flex items-center gap-1.5 ${

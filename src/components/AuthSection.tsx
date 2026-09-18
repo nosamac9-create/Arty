@@ -6,6 +6,7 @@
 import React, { useState } from 'react';
 import { PasswordField } from './PasswordField';
 import { useApp } from '../context/AppContext';
+import { useLanguage } from '../context/LanguageContext';
 import { ScrollReveal } from './ui/ScrollReveal';
 import Reveal from './ui/Reveal';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
@@ -66,8 +67,9 @@ export const AuthSection: React.FC = () => {
   const { 
     authScreen, setAuthScreen, currentUser, setCurrentUser, setCustomerTab, sessionExpired, 
     loginCustomer, claimCustomerAccount, registerCustomer, requestPasswordReset,
-    logoutCustomer, pendingBooking, changeCustomerPassword 
+    logoutCustomer, pendingBooking, changeCustomerPassword
   } = useApp();
+  const { lang } = useLanguage();
 
   // Common Inputs
   const [email, setEmail] = useState('');
@@ -115,7 +117,7 @@ export const AuthSection: React.FC = () => {
     setPasswordError(null);
     setPasswordMsg(null);
 
-    const match = validatePasswordConfirmation(newPassword, confirmNewPassword);
+    const match = validatePasswordConfirmation(newPassword, confirmNewPassword, lang);
     if (!match.valid) {
       setPasswordError(match.error!);
       return;
@@ -179,7 +181,7 @@ export const AuthSection: React.FC = () => {
     e.preventDefault();
     setErrorMsg(null);
 
-    const match = validatePasswordConfirmation(claimPassword, claimConfirm);
+    const match = validatePasswordConfirmation(claimPassword, claimConfirm, lang);
     if (!match.valid) {
       setErrorMsg(match.error!);
       return;
@@ -215,7 +217,7 @@ export const AuthSection: React.FC = () => {
     // duplicate phone/email checks against the customers table.
     const fieldErrors = await validateCustomerForm(
       { name: fullName, email, phone, password: registerPassword, confirmPassword },
-      { requirePassword: true }
+      { requirePassword: true, lang }
     );
     setErrors(fieldErrors);
     if (Object.keys(fieldErrors).length > 0) return;
@@ -397,7 +399,7 @@ export const AuthSection: React.FC = () => {
                       className="w-full bg-brand-cream border border-brand-clay rounded-xl py-3 px-4 text-sm font-semibold text-brand-charcoal"
                     />
                     <ul className="space-y-0.5 pt-0.5">
-                      {passwordChecklist(newPassword).map(item => (
+                      {passwordChecklist(newPassword, lang).map(item => (
                         <li
                           key={item.label}
                           className={`text-[11px] font-semibold flex items-center gap-1.5 ${
@@ -805,7 +807,7 @@ export const AuthSection: React.FC = () => {
                         className="w-full bg-brand-cream border border-brand-clay rounded-xl py-3 px-4 text-sm font-semibold text-brand-charcoal"
                       />
                       <ul className="space-y-0.5 pt-0.5">
-                        {passwordChecklist(claimPassword).map(item => (
+                        {passwordChecklist(claimPassword, lang).map(item => (
                           <li
                             key={item.label}
                             className={`text-[11px] font-semibold flex items-center gap-1.5 ${
@@ -924,7 +926,7 @@ export const AuthSection: React.FC = () => {
                     />
                     {/* Live checklist, updating as they type. */}
                     <ul className="space-y-0.5 pt-0.5">
-                      {passwordChecklist(registerPassword).map(item => (
+                      {passwordChecklist(registerPassword, lang).map(item => (
                         <li
                           key={item.label}
                           className={`text-[11px] font-semibold flex items-center gap-1.5 ${

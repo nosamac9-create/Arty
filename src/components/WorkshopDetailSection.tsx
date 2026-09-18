@@ -5,6 +5,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
+import { useLanguage } from '../context/LanguageContext';
 import { ImageSlider } from './ui/ImageSlider';
 import Reveal from './ui/Reveal';
 import { ScrollReveal } from './ui/ScrollReveal';
@@ -25,6 +26,7 @@ export const WorkshopDetailSection: React.FC = () => {
     // Shared records, narrowed to this workshop below.
     workshopSessions
   } = useApp();
+  const { lang } = useLanguage();
 
   const workshop = useMemo(() => {
     return workshops.find(ws => ws.id === selectedWorkshopId) || workshops[0];
@@ -285,7 +287,7 @@ export const WorkshopDetailSection: React.FC = () => {
     const bookingErrors = await validateBookingForm({
       sessionId: selectedSessionId,
       participants
-    });
+    }, undefined, undefined, lang);
     if (Object.keys(bookingErrors).length > 0) {
       setBookingError(bookingErrors.sessionId || bookingErrors.participants || null);
       return;

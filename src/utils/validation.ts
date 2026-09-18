@@ -31,6 +31,16 @@ import {
 } from '../lib/sessionSeats';
 import { parseArabicDigits } from './phoneUtils';
 import { getMinBirthdayBookingDateStr } from './dateUtils';
+import type { Lang } from '../context/LanguageContext';
+
+/**
+ * validation.ts has no React context access, so this mirrors LanguageContext's
+ * t(en, ar) as a plain function instead. Every caller that doesn't pass `lang`
+ * gets exactly today's English text — this is additive, not a behavior change.
+ */
+function translate(en: string, ar: string, lang: Lang = 'en'): string {
+  return lang === 'ar' ? ar : en;
+}
 
 export interface ValidationResult {
   valid: boolean;
@@ -105,46 +115,66 @@ export function canonicalEmail(input?: string | null): string {
 // CUSTOMER / ACCOUNT — pure rules
 // ==========================================================
 
-export function validateRequired(value: any, fieldLabel: string): ValidationResult {
+export function validateRequired(value: any, fieldLabel: string, lang: Lang = 'en'): ValidationResult {
   const empty = Array.isArray(value)
     ? value.length === 0
     : value === undefined || value === null || String(value).trim() === '';
-  return empty ? fail(`${fieldLabel} is required.`) : OK;
+  return empty
+    ? fail(translate(`${fieldLabel} is required.`, `${fieldLabel} مطلوب.`, lang))
+    : OK;
 }
 
 /**
  * Saudi mobile number: `+966` followed by 9 digits starting with 5, or the
  * local `05XXXXXXXX` form which normalises to the same number.
  */
-export function validatePhoneRule(phone?: string | null): ValidationResult {
+export function validatePhoneRule(phone?: string | null, lang: Lang = 'en'): ValidationResult {
   const raw = parseArabicDigits(String(phone ?? '')).trim();
-  if (!raw) return fail('Phone number is required.');
+  if (!raw) return fail(translate('Phone number is required.', 'رقم الجوال مطلوب.', lang));
 
   // Formatting is allowed and simply stripped: a leading +, spaces, dashes,
   // dots and brackets. Only what is left must be digits, so a valid number
   // written as +966 50-123 4567 passes the format rule and goes on to the
   // duplicate check.
   const stripped = raw.replace(/^\+/, '').replace(/[\s()\-.]/g, '');
-  if (!stripped) return fail('Phone number is required.');
-  if (!/^\d+$/.test(stripped)) return fail('Phone number must contain digits only.');
+  if (!stripped) return fail(translate('Phone number is required.', 'رقم الجوال مطلوب.', lang));
+  if (!/^\d+$/.test(stripped)) {
+    return fail(translate('Phone number must contain digits only.', 'يجب أن يحتوي رقم الجوال على أرقام فقط.', lang));
+  }
 
   const national = normalizeCustomerPhone(raw);
-  if (!national) return fail('Phone number is required.');
+  if (!national) return fail(translate('Phone number is required.', 'رقم الجوال مطلوب.', lang));
   if (!national.startsWith('5')) {
-    return fail('Enter a Saudi mobile number starting with 5, e.g. 0501234567 or +966501234567.');
+    return fail(translate(
+      'Enter a Saudi mobile number starting with 5, e.g. 0501234567 or +966501234567.',
+      'أدخل رقم جوال سعودي يبدأ بالرقم 5، مثال: 0501234567 أو +966501234567.',
+      lang
+    ));
   }
   if (national.length !== 9) {
-    return fail('A Saudi mobile number has 9 digits after the country code, e.g. +966501234567.');
+    return fail(translate(
+      'A Saudi mobile number has 9 digits after the country code, e.g. +966501234567.',
+      'يتكون رقم الجوال السعودي من 9 أرقام بعد رمز الدولة، مثال: +966501234567.',
+      lang
+    ));
   }
   return OK;
 }
 
-export function validateEmailRule(email?: string | null, required = true): ValidationResult {
+export function validateEmailRule(email?: string | null, required = true, lang: Lang = 'en'): ValidationResult {
   const value = canonicalEmail(email);
-  if (!value) return required ? fail('Email address is required.') : OK;
+  if (!value) {
+    return required
+      ? fail(translate('Email address is required.', 'البريد الإلكتروني مطلوب.', lang))
+      : OK;
+  }
   // Deliberately simple: one @, something either side, a dot in the domain.
   if (!/^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/.test(value)) {
-    return fail('Enter a valid email address, e.g. name@example.com.');
+    return fail(translate(
+      'Enter a valid email address, e.g. name@example.com.',
+      'أدخل بريدًا إلكترونيًا صحيحًا، مثال: name@example.com.',
+      lang
+    ));
   }
   return OK;
 }
@@ -155,30 +185,37 @@ export interface PasswordChecklistItem {
 }
 
 /** The live checklist a sign-up form renders as the customer types. */
-export function passwordChecklist(password?: string | null): PasswordChecklistItem[] {
+export function passwordChecklist(password?: string | null, lang: Lang = 'en'): PasswordChecklistItem[] {
   const value = String(password ?? '');
   return [
-    { label: 'At least 8 characters', met: value.length >= 8 },
-    { label: 'Contains a letter', met: /[a-zA-Z]/.test(value) },
-    { label: 'Contains a number', met: /\d/.test(value) }
+    { label: translate('At least 8 characters', '8 أحرف على الأقل', lang), met: value.length >= 8 },
+    { label: translate('Contains a letter', 'يحتوي على حرف', lang), met: /[a-zA-Z]/.test(value) },
+    { label: translate('Contains a number', 'يحتوي على رقم', lang), met: /\d/.test(value) }
   ];
 }
 
-export function validatePasswordRule(password?: string | null): ValidationResult {
-  const unmet = passwordChecklist(password).filter(item => !item.met);
-  if (!String(password ?? '')) return fail('Password is required.');
+export function validatePasswordRule(password?: string | null, lang: Lang = 'en'): ValidationResult {
+  const unmet = passwordChecklist(password, lang).filter(item => !item.met);
+  if (!String(password ?? '')) return fail(translate('Password is required.', 'كلمة المرور مطلوبة.', lang));
   if (unmet.length === 0) return OK;
-  return fail(`Password must have: ${unmet.map(u => u.label.toLowerCase()).join(', ')}.`);
+  return fail(translate(
+    `Password must have: ${unmet.map(u => u.label.toLowerCase()).join(', ')}.`,
+    `يجب أن تحتوي كلمة المرور على: ${unmet.map(u => u.label).join('، ')}.`,
+    lang
+  ));
 }
 
 export function validatePasswordConfirmation(
   password?: string | null,
-  confirmation?: string | null
+  confirmation?: string | null,
+  lang: Lang = 'en'
 ): ValidationResult {
-  if (!String(confirmation ?? '')) return fail('Please confirm your password.');
+  if (!String(confirmation ?? '')) {
+    return fail(translate('Please confirm your password.', 'يرجى تأكيد كلمة المرور.', lang));
+  }
   return String(password ?? '') === String(confirmation ?? '')
     ? OK
-    : fail('The two passwords do not match.');
+    : fail(translate('The two passwords do not match.', 'كلمتا المرور غير متطابقتين.', lang));
 }
 
 // ==========================================================
@@ -192,7 +229,8 @@ export function validatePasswordConfirmation(
 export async function checkDuplicateCustomerPhone(
   phone?: string | null,
   excludeId?: string,
-  source: ValidationDb = db
+  source: ValidationDb = db,
+  lang: Lang = 'en'
 ): Promise<ValidationResult> {
   const key = phoneMatchKey(phone);
   if (!key) return OK;
@@ -201,13 +239,19 @@ export async function checkDuplicateCustomerPhone(
   const existing = customers.find(c => c.id !== excludeId && customerPhoneKey(c) === key);
   if (!existing) return OK;
 
-  return fail(`This number already has an account under ${existing.name || 'another customer'}.`);
+  const holder = existing.name || translate('another customer', 'عميل آخر', lang);
+  return fail(translate(
+    `This number already has an account under ${holder}.`,
+    `هذا الرقم مسجّل بالفعل باسم ${holder}.`,
+    lang
+  ));
 }
 
 export async function checkDuplicateCustomerEmail(
   email?: string | null,
   excludeId?: string,
-  source: ValidationDb = db
+  source: ValidationDb = db,
+  lang: Lang = 'en'
 ): Promise<ValidationResult> {
   const value = canonicalEmail(email);
   if (!value) return OK;
@@ -216,7 +260,12 @@ export async function checkDuplicateCustomerEmail(
   const existing = customers.find(c => c.id !== excludeId && canonicalEmail(c.email) === value);
   if (!existing) return OK;
 
-  return fail(`This email already has an account under ${existing.name || 'another customer'}.`);
+  const holder = existing.name || translate('another customer', 'عميل آخر', lang);
+  return fail(translate(
+    `This email already has an account under ${holder}.`,
+    `هذا البريد الإلكتروني مسجّل بالفعل باسم ${holder}.`,
+    lang
+  ));
 }
 
 export interface CustomerInput {
@@ -240,6 +289,7 @@ export interface CustomerValidationOptions {
   allowExistingCustomer?: boolean;
   /** Database to read for the duplicate checks. Defaults to the live one. */
   source?: ValidationDb;
+  lang?: Lang;
 }
 
 /** Every customer-creating form runs this before writing to Dexie. */
@@ -252,27 +302,28 @@ export async function validateCustomerForm(
     requirePassword = false,
     requireEmail = true,
     allowExistingCustomer = false,
-    source = db
+    source = db,
+    lang = 'en'
   } = options;
 
   const fields: Record<string, ValidationResult> = {
-    name: validateRequired(input.name, 'Name'),
-    phone: validatePhoneRule(input.phone),
-    email: validateEmailRule(input.email, requireEmail)
+    name: validateRequired(input.name, translate('Name', 'الاسم', lang), lang),
+    phone: validatePhoneRule(input.phone, lang),
+    email: validateEmailRule(input.email, requireEmail, lang)
   };
 
   if (requirePassword) {
-    fields.password = validatePasswordRule(input.password);
-    fields.confirmPassword = validatePasswordConfirmation(input.password, input.confirmPassword);
+    fields.password = validatePasswordRule(input.password, lang);
+    fields.confirmPassword = validatePasswordConfirmation(input.password, input.confirmPassword, lang);
   }
 
   // Duplicate checks only run once the value itself is well formed.
   if (!allowExistingCustomer) {
     if (fields.phone.valid) {
-      fields.phone = await checkDuplicateCustomerPhone(input.phone, excludeId, source);
+      fields.phone = await checkDuplicateCustomerPhone(input.phone, excludeId, source, lang);
     }
     if (fields.email.valid) {
-      fields.email = await checkDuplicateCustomerEmail(input.email, excludeId, source);
+      fields.email = await checkDuplicateCustomerEmail(input.email, excludeId, source, lang);
     }
   }
 
@@ -286,7 +337,8 @@ export async function validateCustomerForm(
 export async function checkDuplicateStaffPhone(
   phone?: string | null,
   excludeId?: string,
-  source: ValidationDb = db
+  source: ValidationDb = db,
+  lang: Lang = 'en'
 ): Promise<ValidationResult> {
   const key = phoneMatchKey(phone);
   if (!key) return OK;
@@ -297,13 +349,19 @@ export async function checkDuplicateStaffPhone(
   );
   if (!existing) return OK;
 
-  return fail(`This number is already registered to ${existing.name || 'another staff member'}.`);
+  const holder = existing.name || translate('another staff member', 'موظف آخر', lang);
+  return fail(translate(
+    `This number is already registered to ${holder}.`,
+    `هذا الرقم مسجّل بالفعل لدى ${holder}.`,
+    lang
+  ));
 }
 
 export async function checkDuplicateStaffEmail(
   email?: string | null,
   excludeId?: string,
-  source: ValidationDb = db
+  source: ValidationDb = db,
+  lang: Lang = 'en'
 ): Promise<ValidationResult> {
   const value = canonicalEmail(email);
   if (!value) return OK;
@@ -312,7 +370,12 @@ export async function checkDuplicateStaffEmail(
   const existing = staff.find(s => s.id !== excludeId && canonicalEmail(s.email) === value);
   if (!existing) return OK;
 
-  return fail(`This email is already registered to ${existing.name || 'another staff member'}.`);
+  const holder = existing.name || translate('another staff member', 'موظف آخر', lang);
+  return fail(translate(
+    `This email is already registered to ${holder}.`,
+    `هذا البريد الإلكتروني مسجّل بالفعل لدى ${holder}.`,
+    lang
+  ));
 }
 
 export interface StaffInput {
@@ -325,17 +388,18 @@ export interface StaffInput {
 export async function validateStaffForm(
   input: StaffInput,
   excludeId?: string,
-  source: ValidationDb = db
+  source: ValidationDb = db,
+  lang: Lang = 'en'
 ): Promise<Record<string, string>> {
   const fields: Record<string, ValidationResult> = {
-    name: validateRequired(input.name, 'Name'),
-    position: validateRequired(input.position, 'Position'),
-    phone: validatePhoneRule(input.phone),
-    email: validateEmailRule(input.email, true)
+    name: validateRequired(input.name, translate('Name', 'الاسم', lang), lang),
+    position: validateRequired(input.position, translate('Position', 'المسمى الوظيفي', lang), lang),
+    phone: validatePhoneRule(input.phone, lang),
+    email: validateEmailRule(input.email, true, lang)
   };
 
-  if (fields.phone.valid) fields.phone = await checkDuplicateStaffPhone(input.phone, excludeId, source);
-  if (fields.email.valid) fields.email = await checkDuplicateStaffEmail(input.email, excludeId, source);
+  if (fields.phone.valid) fields.phone = await checkDuplicateStaffPhone(input.phone, excludeId, source, lang);
+  if (fields.email.valid) fields.email = await checkDuplicateStaffEmail(input.email, excludeId, source, lang);
 
   return collectErrors(fields);
 }
@@ -410,18 +474,34 @@ export function makeLocalSeatReader(source: ValidationDb): SeatReader {
 export async function getSessionAvailability(
   sessionId?: string,
   source: ValidationDb = db,
-  readSeats: SeatReader = fetchSessionSeats
+  readSeats: SeatReader = fetchSessionSeats,
+  lang: Lang = 'en'
 ): Promise<SessionAvailability> {
   if (!sessionId) {
-    return { remaining: 0, error: 'Select a date and time for this booking.' };
+    return { remaining: 0, error: translate('Select a date and time for this booking.', 'اختر تاريخًا ووقتًا لهذا الحجز.', lang) };
   }
 
   const session = await source.workshopSessions.get(sessionId);
   if (!session) {
-    return { remaining: 0, error: 'That session is no longer available. Please choose another date or time.' };
+    return {
+      remaining: 0,
+      error: translate(
+        'That session is no longer available. Please choose another date or time.',
+        'هذه الجلسة لم تعد متاحة. يرجى اختيار تاريخ أو وقت آخر.',
+        lang
+      )
+    };
   }
   if (session.status !== 'Published') {
-    return { session, remaining: 0, error: 'That session is no longer open for booking. Please choose another date or time.' };
+    return {
+      session,
+      remaining: 0,
+      error: translate(
+        'That session is no longer open for booking. Please choose another date or time.',
+        'هذه الجلسة لم تعد مفتوحة للحجز. يرجى اختيار تاريخ أو وقت آخر.',
+        lang
+      )
+    };
   }
 
   const seats = await readSeats(String(sessionId));
@@ -429,7 +509,11 @@ export async function getSessionAvailability(
     return {
       session,
       remaining: 0,
-      error: 'We could not confirm how many seats are left. Please try again in a moment.'
+      error: translate(
+        'We could not confirm how many seats are left. Please try again in a moment.',
+        'تعذّر التأكد من عدد المقاعد المتبقية. يرجى المحاولة مرة أخرى بعد قليل.',
+        lang
+      )
     };
   }
 
@@ -448,27 +532,39 @@ export interface BookingInput {
 export async function validateBookingForm(
   input: BookingInput,
   source: ValidationDb = db,
-  readSeats: SeatReader = fetchSessionSeats
+  readSeats: SeatReader = fetchSessionSeats,
+  lang: Lang = 'en'
 ): Promise<Record<string, string>> {
   const fields: Record<string, ValidationResult> = {};
 
   const participants = Number(input.participants);
   if (!input.participants || Number.isNaN(participants) || participants < 1) {
-    fields.participants = fail('Enter at least 1 participant.');
+    fields.participants = fail(translate('Enter at least 1 participant.', 'أدخل مشاركًا واحدًا على الأقل.', lang));
   }
 
-  const availability = await getSessionAvailability(input.sessionId, source, readSeats);
+  const availability = await getSessionAvailability(input.sessionId, source, readSeats, lang);
   if (availability.error) {
     fields.sessionId = fail(availability.error);
     return collectErrors(fields);
   }
 
   if (availability.remaining <= 0) {
-    fields.sessionId = fail('This session is now fully booked. Please choose another date or time.');
+    fields.sessionId = fail(translate(
+      'This session is now fully booked. Please choose another date or time.',
+      'هذه الجلسة مكتملة العدد الآن. يرجى اختيار تاريخ أو وقت آخر.',
+      lang
+    ));
   } else if (!fields.participants && participants > availability.remaining) {
-    fields.participants = fail(
-      `Only ${availability.remaining} ${availability.remaining === 1 ? 'spot is' : 'spots are'} left for this session.`
-    );
+    // ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker.
+    // Arabic distinguishes singular/dual/plural(3-10)/plural(11+), collapsed
+    // here to a simple singular/plural split, same shape as the English.
+    fields.participants = fail(translate(
+      `Only ${availability.remaining} ${availability.remaining === 1 ? 'spot is' : 'spots are'} left for this session.`,
+      availability.remaining === 1
+        ? `يتبقى مكان واحد فقط في هذه الجلسة.`
+        : `يتبقى ${availability.remaining} أماكن فقط في هذه الجلسة.`,
+      lang
+    ));
   }
 
   return collectErrors(fields);
@@ -507,29 +603,36 @@ export type BirthdayCountsReader = (
 export async function validateBirthdayBookingForm(
   input: BirthdayBookingInput,
   source: ValidationDb = db,
-  readBirthdayCounts: BirthdayCountsReader = fetchBirthdayCounts
+  readBirthdayCounts: BirthdayCountsReader = fetchBirthdayCounts,
+  lang: Lang = 'en'
 ): Promise<Record<string, string>> {
   const fields: Record<string, ValidationResult> = {};
 
   const totalPeople = Number(input.totalPeople);
   if (!input.totalPeople || Number.isNaN(totalPeople) || totalPeople < 1) {
-    fields.numberOfPeople = fail('Enter at least 1 person.');
+    fields.numberOfPeople = fail(translate('Enter at least 1 person.', 'أدخل شخصًا واحدًا على الأقل.', lang));
   }
 
   if (!input.date) {
-    fields.bookingDate = fail('Select a date for this celebration.');
+    fields.bookingDate = fail(translate('Select a date for this celebration.', 'اختر تاريخًا لهذا الاحتفال.', lang));
   }
   if (!input.time) {
-    fields.bookingTime = fail('Select a time slot for this celebration.');
+    fields.bookingTime = fail(translate('Select a time slot for this celebration.', 'اختر وقتًا لهذا الاحتفال.', lang));
   }
   if (Object.keys(fields).length > 0) return collectErrors(fields);
 
   const requiredNotice = minBirthdayNoticeDays(totalPeople);
   const minDate = getMinBirthdayBookingDateStr(requiredNotice);
   if (input.date! < minDate) {
-    fields.bookingDate = fail(
-      `Birthday bookings for ${totalPeople} ${totalPeople === 1 ? 'guest' : 'guests'} need at least ${requiredNotice} day${requiredNotice === 1 ? '' : 's'} notice.`
-    );
+    // ⚠ ARABIC PLURALIZATION — TWO independent plural decisions in one
+    // sentence (guest count, day count). Placeholder singular/plural split
+    // only; needs a native speaker before shipping — Arabic's dual and
+    // 3-10-vs-11+ plural forms are not represented here.
+    fields.bookingDate = fail(translate(
+      `Birthday bookings for ${totalPeople} ${totalPeople === 1 ? 'guest' : 'guests'} need at least ${requiredNotice} day${requiredNotice === 1 ? '' : 's'} notice.`,
+      `تتطلب حجوزات أعياد الميلاد لعدد ${totalPeople} ${totalPeople === 1 ? 'ضيف' : 'ضيوف'} إشعارًا مسبقًا لا يقل عن ${requiredNotice} ${requiredNotice === 1 ? 'يوم' : 'أيام'}.`,
+      lang
+    ));
     return collectErrors(fields);
   }
 
@@ -542,19 +645,29 @@ export async function validateBirthdayBookingForm(
     // Fails CLOSED. A maximum that cannot be evaluated must not be treated as
     // satisfied: allowing the booking here is precisely the behaviour being
     // fixed, and nothing downstream would catch it.
-    fields.bookingDate = fail(
-      'We could not confirm availability for that date. Please try again in a moment.'
-    );
+    fields.bookingDate = fail(translate(
+      'We could not confirm availability for that date. Please try again in a moment.',
+      'تعذّر التأكد من التوفر لهذا التاريخ. يرجى المحاولة مرة أخرى بعد قليل.',
+      lang
+    ));
     return collectErrors(fields);
   }
 
   if (counts.onDate >= BIRTHDAY_DAILY_MAX) {
-    fields.bookingDate = fail('This date is fully booked for birthday celebrations. Please choose another date.');
+    fields.bookingDate = fail(translate(
+      'This date is fully booked for birthday celebrations. Please choose another date.',
+      'هذا التاريخ مكتمل الحجز لاحتفالات أعياد الميلاد. يرجى اختيار تاريخ آخر.',
+      lang
+    ));
     return collectErrors(fields);
   }
 
   if ((counts.byTime.get(input.time!) || 0) >= BIRTHDAY_SAME_SLOT_MAX) {
-    fields.bookingTime = fail('This time slot is fully booked for birthday celebrations. Please choose another time.');
+    fields.bookingTime = fail(translate(
+      'This time slot is fully booked for birthday celebrations. Please choose another time.',
+      'هذا الوقت مكتمل الحجز لاحتفالات أعياد الميلاد. يرجى اختيار وقت آخر.',
+      lang
+    ));
   }
 
   return collectErrors(fields);
@@ -582,22 +695,22 @@ export interface WorkshopInput {
   images?: unknown[];
 }
 
-export function validatePrice(price?: number | string): ValidationResult {
+export function validatePrice(price?: number | string, lang: Lang = 'en'): ValidationResult {
   if (price === undefined || price === null || String(price).trim() === '') {
-    return fail('Price is required.');
+    return fail(translate('Price is required.', 'السعر مطلوب.', lang));
   }
   const value = Number(price);
-  if (Number.isNaN(value)) return fail('Price must be a number.');
-  return value >= 0 ? OK : fail('Price cannot be negative.');
+  if (Number.isNaN(value)) return fail(translate('Price must be a number.', 'يجب أن يكون السعر رقمًا.', lang));
+  return value >= 0 ? OK : fail(translate('Price cannot be negative.', 'لا يمكن أن يكون السعر بالسالب.', lang));
 }
 
-export function validateCapacity(capacity?: number | string): ValidationResult {
+export function validateCapacity(capacity?: number | string, lang: Lang = 'en'): ValidationResult {
   if (capacity === undefined || capacity === null || String(capacity).trim() === '') {
-    return fail('Capacity is required.');
+    return fail(translate('Capacity is required.', 'السعة مطلوبة.', lang));
   }
   const value = Number(capacity);
-  if (Number.isNaN(value)) return fail('Capacity must be a number.');
-  return value >= 1 ? OK : fail('Capacity must be at least 1.');
+  if (Number.isNaN(value)) return fail(translate('Capacity must be a number.', 'يجب أن تكون السعة رقمًا.', lang));
+  return value >= 1 ? OK : fail(translate('Capacity must be at least 1.', 'يجب ألا تقل السعة عن 1.', lang));
 }
 
 /**
@@ -609,26 +722,28 @@ export function validateCapacity(capacity?: number | string): ValidationResult {
  */
 export const MIN_WORKSHOP_PHOTOS = 3;
 
-export function validateWorkshopForm(input: WorkshopInput): Record<string, string> {
+export function validateWorkshopForm(input: WorkshopInput, lang: Lang = 'en'): Record<string, string> {
   const photoCount = (input.images || []).length;
 
   return collectErrors({
-    title: validateRequired(input.title, 'Workshop title'),
-    category: validateRequired(input.category, 'Category'),
-    price: validatePrice(input.price),
-    capacity: validateCapacity(input.capacity),
-    ageRange: validateRequired(input.ageRange, 'Age range'),
+    title: validateRequired(input.title, translate('Workshop title', 'عنوان الورشة', lang), lang),
+    category: validateRequired(input.category, translate('Category', 'الفئة', lang), lang),
+    price: validatePrice(input.price, lang),
+    capacity: validateCapacity(input.capacity, lang),
+    ageRange: validateRequired(input.ageRange, translate('Age range', 'الفئة العمرية', lang), lang),
     sessions: (input.sessions || []).length > 0
       ? OK
-      : fail('Add at least one session date before publishing.'),
+      : fail(translate('Add at least one session date before publishing.', 'أضف موعد جلسة واحدًا على الأقل قبل النشر.', lang)),
     // Only enforced when the caller passes a list — publishing does, saving a
     // draft does not.
     images: input.images === undefined || photoCount >= MIN_WORKSHOP_PHOTOS
       ? OK
-      : fail(
+      : fail(translate(
           `Add at least ${MIN_WORKSHOP_PHOTOS} photos before publishing — this workshop has ` +
-          `${photoCount === 0 ? 'none' : photoCount}.`
-        )
+          `${photoCount === 0 ? 'none' : photoCount}.`,
+          `أضف ${MIN_WORKSHOP_PHOTOS} صور على الأقل قبل النشر — هذه الورشة تحتوي حاليًا على ${photoCount === 0 ? 'لا شيء' : photoCount}.`,
+          lang
+        ))
   });
 }
 
@@ -636,14 +751,14 @@ export interface EventInput extends WorkshopInput {
   date?: string;
 }
 
-export function validateEventForm(input: EventInput): Record<string, string> {
+export function validateEventForm(input: EventInput, lang: Lang = 'en'): Record<string, string> {
   return collectErrors({
-    title: validateRequired(input.title, 'Event title'),
-    category: validateRequired(input.category, 'Category'),
-    price: validatePrice(input.price),
-    capacity: validateCapacity(input.capacity),
-    ageRequirement: validateRequired(input.ageRange, 'Age requirement'),
-    date: validateRequired(input.date, 'Event date')
+    title: validateRequired(input.title, translate('Event title', 'عنوان الفعالية', lang), lang),
+    category: validateRequired(input.category, translate('Category', 'الفئة', lang), lang),
+    price: validatePrice(input.price, lang),
+    capacity: validateCapacity(input.capacity, lang),
+    ageRequirement: validateRequired(input.ageRange, translate('Age requirement', 'الشرط العمري', lang), lang),
+    date: validateRequired(input.date, translate('Event date', 'تاريخ الفعالية', lang), lang)
   });
 }
 

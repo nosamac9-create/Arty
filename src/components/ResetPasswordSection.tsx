@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
+import { useLanguage } from '../context/LanguageContext';
 import { KeyRound, CheckCircle2, AlertCircle , Check } from 'lucide-react';
 import { PasswordField } from './PasswordField';
 import { passwordChecklist, validatePasswordRule, validatePasswordConfirmation } from '../utils/validation';
@@ -22,6 +23,7 @@ export const ResetPasswordSection: React.FC = () => {
     completePasswordReset, requestPasswordReset, hasRecoverySession, recoveryLinkError,
     logoutCustomer, setCustomerTab, setAuthScreen
   } = useApp();
+  const { lang } = useLanguage();
 
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -89,12 +91,12 @@ export const ResetPasswordSection: React.FC = () => {
     if (isSaving) return;
     setError(null);
 
-    const strength = validatePasswordRule(password);
+    const strength = validatePasswordRule(password, lang);
     if (!strength.valid) {
       setError(strength.error!);
       return;
     }
-    const match = validatePasswordConfirmation(password, confirmPassword);
+    const match = validatePasswordConfirmation(password, confirmPassword, lang);
     if (!match.valid) {
       setError(match.error!);
       return;
@@ -172,7 +174,7 @@ export const ResetPasswordSection: React.FC = () => {
                   className={inputClass}
                 />
                 <ul className="space-y-0.5 pt-1">
-                  {passwordChecklist(password).map(item => (
+                  {passwordChecklist(password, lang).map(item => (
                     <li
                       key={item.label}
                       className={`text-[11px] font-semibold flex items-center gap-1.5 ${

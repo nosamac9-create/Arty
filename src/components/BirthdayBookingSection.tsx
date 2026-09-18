@@ -6,6 +6,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { useApp } from '../context/AppContext';
+import { useLanguage } from '../context/LanguageContext';
 import {
   ArrowLeft, Cake, Upload, Check, ChevronDown,
   ShieldAlert, CalendarDays, Clock, PartyPopper
@@ -71,6 +72,7 @@ export const BirthdayBookingSection: React.FC = () => {
     publishedBirthdayPackages,
     birthdayFormFields
   } = useApp();
+  const { lang } = useLanguage();
 
   const prefersReducedMotion = useReducedMotion();
   const ease = [0.22, 1, 0.36, 1] as const;
@@ -300,7 +302,7 @@ export const BirthdayBookingSection: React.FC = () => {
       } else {
         // The one shared phone rule, so this form agrees with sign-up, the
         // walk-in modal and every admin form.
-        const result = validatePhoneRule(phone);
+        const result = validatePhoneRule(phone, lang);
         if (!result.valid) errs.phone = result.error!;
       }
     }
