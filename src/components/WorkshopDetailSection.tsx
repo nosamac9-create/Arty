@@ -362,7 +362,12 @@ export const WorkshopDetailSection: React.FC = () => {
             variants={{ hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0 } }}
             transition={{ duration: 0.5, ease: 'easeOut' }}
           >
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 rounded-[22px] border border-brand-clay bg-brand-cream overflow-hidden">
+          {/* Below sm the cross rules are drawn by a 1px grid gap over a clay
+              background, not by per-cell borders: the cell count is 4 plus
+              however many custom fields the client has enabled, so no cell can
+              know whether it ends a row. From sm up the gap closes and the
+              original per-cell borders take over unchanged. */}
+          <div className="grid grid-cols-2 gap-px bg-brand-clay sm:grid-cols-2 sm:gap-0 sm:bg-brand-cream lg:grid-cols-4 rounded-[22px] border border-brand-clay overflow-hidden">
             {[
               { label: 'Duration', value: workshop.duration },
               { label: 'Ages', value: workshop.ageRange },
@@ -380,7 +385,7 @@ export const WorkshopDetailSection: React.FC = () => {
             ].map(cell => (
               <div
                 key={cell.label}
-                className="border-b sm:border-e border-brand-clay p-5 last:border-e-0 text-start"
+                className="bg-brand-cream p-3.5 sm:border-b sm:border-e sm:p-5 border-brand-clay last:border-e-0 text-start"
               >
                 <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-muted">
                   {cell.label}
