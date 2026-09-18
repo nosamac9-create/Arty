@@ -245,7 +245,7 @@ export const DateInput: React.FC<DateInputProps> = ({
         <div
           ref={popupRef}
           style={popupStyle}
-          className="z-[120] overflow-y-auto always-scrollbar rounded-2xl border border-brand-clay bg-white p-3 text-left shadow-xl animate-in fade-in duration-100"
+          className="z-[120] overflow-y-auto always-scrollbar rounded-2xl border border-brand-clay bg-white p-3 text-start shadow-xl animate-in fade-in duration-100"
         >
 
           {/* Month / year navigation */}

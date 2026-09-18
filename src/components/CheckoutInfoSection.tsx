@@ -305,13 +305,13 @@ export const CheckoutInfoSection: React.FC = () => {
                 {t('Full Name', 'الاسم الكامل')} <span className="text-brand-terracotta">*</span>
               </label>
               <div className="relative">
-                <User className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-charcoal/40" />
+                <User className="absolute start-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-charcoal/40" />
                 <input
                   type="text"
                   placeholder={t('e.g. Noura Al-Amri', 'مثال: نورة العمري')}
                   value={name}
                   onChange={e => { setName(e.target.value); if (errors.name) setErrors({...errors, name: ''}); }}
-                  className="w-full bg-brand-sand/20 border border-brand-clay rounded-2xl py-3 pl-10 pr-4 text-sm font-semibold text-brand-charcoal focus:ring-1 focus:ring-brand-terracotta focus:outline-none"
+                  className="w-full bg-brand-sand/20 border border-brand-clay rounded-2xl py-3 ps-10 pe-4 text-sm font-semibold text-brand-charcoal focus:ring-1 focus:ring-brand-terracotta focus:outline-none"
                 />
               </div>
               {errors.name && <p className="text-xs text-red-500 mt-1 font-medium">{errors.name}</p>}
@@ -322,7 +322,7 @@ export const CheckoutInfoSection: React.FC = () => {
                 {t('Email Address', 'البريد الإلكتروني')} <span className="text-brand-terracotta">*</span>
               </label>
               <div className="relative">
-                <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-charcoal/40" />
+                <Mail className="absolute start-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-charcoal/40" />
                 {/*
                   type="text", not type="email". The browser validates an
                   type="email" field itself and pops its own tooltip before the
@@ -338,7 +338,7 @@ export const CheckoutInfoSection: React.FC = () => {
                   placeholder={t('e.g. noura@example.com', 'مثال: noura@example.com')}
                   value={email}
                   onChange={e => { setEmail(e.target.value); if (errors.email) setErrors({...errors, email: ''}); }}
-                  className="w-full bg-brand-sand/20 border border-brand-clay rounded-2xl py-3 pl-10 pr-4 text-sm font-semibold text-brand-charcoal focus:ring-1 focus:ring-brand-terracotta focus:outline-none"
+                  className="w-full bg-brand-sand/20 border border-brand-clay rounded-2xl py-3 ps-10 pe-4 text-sm font-semibold text-brand-charcoal focus:ring-1 focus:ring-brand-terracotta focus:outline-none"
                 />
               </div>
               {errors.email && <p className="text-xs text-red-500 mt-1 font-medium">{errors.email}</p>}
@@ -370,12 +370,12 @@ export const CheckoutInfoSection: React.FC = () => {
                     {t('Account Password', 'كلمة مرور الحساب')} <span className="text-brand-terracotta">*</span>
                   </label>
                   <div className="relative">
-                    <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-charcoal/40" />
+                    <Lock className="absolute start-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-charcoal/40" />
                     <PasswordField
                       placeholder="••••••••"
                       value={password}
                       onChange={ v => { setPassword(v); if (errors.password) setErrors({...errors, password: ''}); }}
-                      className="w-full bg-brand-sand/20 border border-brand-clay rounded-2xl py-3 pl-10 pr-4 text-sm font-semibold text-brand-charcoal focus:ring-1 focus:ring-brand-terracotta focus:outline-none"
+                      className="w-full bg-brand-sand/20 border border-brand-clay rounded-2xl py-3 ps-10 pe-4 text-sm font-semibold text-brand-charcoal focus:ring-1 focus:ring-brand-terracotta focus:outline-none"
                     />
                   </div>
                   {/* Live checklist, updating as they type. */}
@@ -404,12 +404,12 @@ export const CheckoutInfoSection: React.FC = () => {
                     {t('Confirm Password', 'تأكيد كلمة المرور')} <span className="text-brand-terracotta">*</span>
                   </label>
                   <div className="relative">
-                    <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-charcoal/40" />
+                    <Lock className="absolute start-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-brand-charcoal/40" />
                     <PasswordField
                       placeholder="••••••••"
                       value={confirmPassword}
                       onChange={ v => { setConfirmPassword(v); if (errors.confirmPassword) setErrors({...errors, confirmPassword: ''}); }}
-                      className="w-full bg-brand-sand/20 border border-brand-clay rounded-2xl py-3 pl-10 pr-4 text-sm font-semibold text-brand-charcoal focus:ring-1 focus:ring-brand-terracotta focus:outline-none"
+                      className="w-full bg-brand-sand/20 border border-brand-clay rounded-2xl py-3 ps-10 pe-4 text-sm font-semibold text-brand-charcoal focus:ring-1 focus:ring-brand-terracotta focus:outline-none"
                     />
                   </div>
                   {errors.confirmPassword && <p className="text-xs text-red-500 mt-1 font-medium">{errors.confirmPassword}</p>}

@@ -270,7 +270,7 @@ export const MyPiecesSection: React.FC = () => {
             >
               <span>{pieceTabLabel(tab)}</span>
               {categorizedPieces[tab].length > 0 && (
-                <span className="ml-2 inline-flex items-center rounded-full bg-brand-terracotta/10 px-2 py-0.5 text-xs font-semibold text-brand-terracotta">
+                <span className="ms-2 inline-flex items-center rounded-full bg-brand-terracotta/10 px-2 py-0.5 text-xs font-semibold text-brand-terracotta">
                   {categorizedPieces[tab].length}
                 </span>
               )}
@@ -393,7 +393,7 @@ export const MyPiecesSection: React.FC = () => {
                   <div className="relative flex items-center justify-between">
                     <div className="absolute left-2.5 right-2.5 top-1/2 -translate-y-1/2 h-1 bg-brand-sand rounded-full"></div>
                     <div
-                      className="absolute left-2.5 top-1/2 -translate-y-1/2 h-1 bg-brand-terracotta rounded-full transition-all duration-500"
+                      className="absolute start-2.5 top-1/2 -translate-y-1/2 h-1 bg-brand-terracotta rounded-full transition-all duration-500"
                       style={{
                         // A picked-up piece reports an index past the last dot
                         // (see getStageIndex) — the fill still stops at the

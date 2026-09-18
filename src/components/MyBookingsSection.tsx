@@ -278,7 +278,7 @@ export const MyBookingsSection: React.FC = () => {
                 reading as part of the name. */}
             <span>{tabLabel(tab)}</span>
             {categorizedBookings[tab].length > 0 && (
-              <span className="ml-2 inline-flex items-center rounded-full bg-brand-terracotta/10 px-2 py-0.5 text-xs font-semibold text-brand-terracotta">
+              <span className="ms-2 inline-flex items-center rounded-full bg-brand-terracotta/10 px-2 py-0.5 text-xs font-semibold text-brand-terracotta">
                 {categorizedBookings[tab].length}
               </span>
             )}
@@ -398,7 +398,7 @@ export const MyBookingsSection: React.FC = () => {
 
                 {/* Right block: total price & actions */}
                 <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between sm:justify-center w-full sm:w-auto border-t sm:border-t-0 pt-3 sm:pt-0 border-brand-clay gap-2">
-                  <div className="text-start sm:text-right">
+                  <div className="text-start sm:text-end">
                     <span className="text-[10px] font-semibold text-brand-sage block uppercase tracking-wider">{t('Paid amount', 'المبلغ المدفوع')}</span>
                     <span className="text-base font-semibold text-brand-charcoal">{b.totalPrice} {t('SAR', 'ريال')}</span>
                   </div>
@@ -426,12 +426,12 @@ export const MyBookingsSection: React.FC = () => {
 
                           {/* Hover Tooltip - requested in the prompt */}
                           {hoveredTooltipId === b.id && (
-                            <div className="absolute right-0 bottom-full mb-2 z-50 w-[min(16rem,calc(100vw-2rem))] p-3 bg-brand-charcoal text-brand-cream rounded-xl text-[11px] leading-relaxed shadow-card border border-brand-clay animate-in fade-in slide-in-from-bottom-2 duration-200 font-semibold">
+                            <div className="absolute end-0 bottom-full mb-2 z-50 w-[min(16rem,calc(100vw-2rem))] p-3 bg-brand-charcoal text-brand-cream rounded-xl text-[11px] leading-relaxed shadow-card border border-brand-clay animate-in fade-in slide-in-from-bottom-2 duration-200 font-semibold">
                               <div className="flex items-start gap-1.5">
                                 <AlertCircle className="h-4 w-4 text-brand-terracotta shrink-0 mt-0.5" />
                                 <span>{t('Cancellation closed — less than 24 hours before start', 'الإلغاء مغلق — أقل من 24 ساعة على البدء')}</span>
                               </div>
-                              <div className="absolute top-full right-4 w-2 h-2 bg-brand-charcoal rotate-45 -mt-1 border-r border-b border-brand-clay"></div>
+                              <div className="absolute top-full end-4 w-2 h-2 bg-brand-charcoal rotate-45 -mt-1 border-e border-b border-brand-clay"></div>
                             </div>
                           )}
                         </div>

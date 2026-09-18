@@ -99,7 +99,7 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
   });
 
   return (
-    <div className={`space-y-1 text-left ${className}`}>
+    <div className={`space-y-1 text-start ${className}`}>
       {label && (
         <label htmlFor={id} className="block text-xs font-bold text-brand-charcoal/80">
           {label} {required && <span className="text-red-500">*</span>}
@@ -114,7 +114,7 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
             type="button"
             disabled={disabled}
             onClick={() => setIsOpen(!isOpen)}
-            className="flex items-center gap-1.5 h-full px-3 py-3 border-r border-brand-clay bg-brand-sand/40 rounded-l-xl text-xs font-bold text-brand-charcoal hover:bg-brand-sand/70 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+            className="flex items-center gap-1.5 h-full px-3 py-3 border-e border-brand-clay bg-brand-sand/40 rounded-s-xl text-xs font-bold text-brand-charcoal hover:bg-brand-sand/70 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <span className="text-base leading-none">{country.flag}</span>
             <span>{country.code}</span>
@@ -123,19 +123,19 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
 
           {/* Searchable Country Code Dropdown */}
           {isOpen && (
-            <div className="absolute left-0 top-full mt-1.5 w-[min(18rem,calc(100vw-2rem))] bg-white border border-brand-clay rounded-2xl shadow-xl z-50 overflow-hidden animate-in fade-in duration-150">
+            <div className="absolute start-0 top-full mt-1.5 w-[min(18rem,calc(100vw-2rem))] bg-white border border-brand-clay rounded-2xl shadow-xl z-50 overflow-hidden animate-in fade-in duration-150">
               
               {/* Search Header */}
               <div className="p-2.5 border-b border-brand-clay/50 bg-brand-sand/20">
                 <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-brand-charcoal/40" />
+                  <Search className="absolute start-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-brand-charcoal/40" />
                   <input
                     type="text"
                     autoFocus
                     placeholder="Search country name or +code..."
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
-                    className="w-full bg-white border border-brand-clay rounded-xl py-1.5 pl-8 pr-3 text-xs font-semibold text-brand-charcoal focus:outline-none focus:ring-2 focus:ring-brand-terracotta"
+                    className="w-full bg-white border border-brand-clay rounded-xl py-1.5 ps-8 pe-3 text-xs font-semibold text-brand-charcoal focus:outline-none focus:ring-2 focus:ring-brand-terracotta"
                   />
                 </div>
               </div>
@@ -150,7 +150,7 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
                         key={c.code + c.abbr}
                         type="button"
                         onClick={() => handleCountrySelect(c)}
-                        className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-brand-sand/40 transition-colors cursor-pointer ${
+                        className={`w-full flex items-center justify-between px-3 py-2 text-xs text-start hover:bg-brand-sand/40 transition-colors cursor-pointer ${
                           isSelected ? 'bg-brand-sand/60 font-bold text-brand-terracotta' : 'text-brand-charcoal font-medium'
                         }`}
                       >

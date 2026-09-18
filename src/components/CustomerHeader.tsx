@@ -43,7 +43,7 @@ export const CustomerHeader: React.FC = () => {
           {/* Wordmark */}
           <button
             onClick={() => handleNavClick('home')}
-            className="flex items-center gap-3 text-left group focus:outline-none cursor-pointer shrink-0"
+            className="flex items-center gap-3 text-start group focus:outline-none cursor-pointer shrink-0"
           >
             <img
               src={`${import.meta.env.BASE_URL}images/arty-logo-wordmark.png`}
