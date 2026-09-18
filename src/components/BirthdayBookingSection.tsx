@@ -580,7 +580,7 @@ export const BirthdayBookingSection: React.FC = () => {
               {isDisabled ? (
                 <span className="block text-[11px] font-medium text-brand-muted">{t('Full', 'ممتلئ')}</span>
               ) : price !== undefined && (
-                <span className="block text-[11px] font-medium text-brand-muted ltr-numerals">{price} SAR</span>
+                <span className="block text-[11px] font-medium text-brand-muted ltr-numerals">{price} {t('SAR', 'ريال')}</span>
               )}
             </span>
             {isOn && !isDisabled && <Check className="h-4 w-4 shrink-0 text-brand-terracotta" />}
@@ -969,13 +969,13 @@ export const BirthdayBookingSection: React.FC = () => {
             <span className={`ltr-numerals ${
               estimatedTotal ? 'font-semibold text-brand-charcoal' : 'text-brand-muted'
             }`}>
-              {estimatedTotal ? `${estimatedTotal} SAR` : '—'}
+              {estimatedTotal ? `${estimatedTotal} ${t('SAR', 'ريال')}` : '—'}
             </span>
           </div>
           <div className="flex items-center justify-between gap-4">
             <span className="font-semibold text-brand-charcoal">{t('Deposit due today', 'العربون المستحق اليوم')}</span>
             <span className="font-display text-xl font-semibold text-brand-terracotta ltr-numerals">
-              {depositAmount} SAR
+              {depositAmount} {t('SAR', 'ريال')}
             </span>
           </div>
           <p className="text-[11px] leading-relaxed text-brand-muted">
