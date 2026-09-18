@@ -69,7 +69,7 @@ export const AuthSection: React.FC = () => {
     loginCustomer, claimCustomerAccount, registerCustomer, requestPasswordReset,
     logoutCustomer, pendingBooking, changeCustomerPassword
   } = useApp();
-  const { lang } = useLanguage();
+  const { lang, t } = useLanguage();
 
   // Common Inputs
   const [email, setEmail] = useState('');
@@ -127,15 +127,15 @@ export const AuthSection: React.FC = () => {
     try {
       const res = await changeCustomerPassword(newPassword);
       if (!res.success) {
-        setPasswordError(res.error || 'Could not change your password.');
+        setPasswordError(res.error || t('Could not change your password.', 'تعذّر تغيير كلمة المرور.'));
         return;
       }
       setShowPasswordForm(false);
       setNewPassword('');
       setConfirmNewPassword('');
-      setPasswordMsg('Your password has been changed. Use it next time you sign in.');
+      setPasswordMsg(t('Your password has been changed. Use it next time you sign in.', 'تم تغيير كلمة المرور. استخدمها في المرة القادمة لتسجيل الدخول.'));
     } catch {
-      setPasswordError('Something went wrong. Please try again.');
+      setPasswordError(t('Something went wrong. Please try again.', 'حدث خطأ ما. يرجى المحاولة مرة أخرى.'));
     } finally {
       setIsSavingPassword(false);
     }
@@ -295,9 +295,9 @@ export const AuthSection: React.FC = () => {
           >
             <div className="text-start">
               <h1 className="font-display text-3xl sm:text-4xl font-semibold text-brand-charcoal">
-                Account Details
+                {t('Account Details', 'تفاصيل الحساب')}
               </h1>
-              <p className="mt-2 text-brand-ink">Manage your Arty Café profile</p>
+              <p className="mt-2 text-brand-ink">{t('Manage your Arty Café profile', 'إدارة ملفك الشخصي في آرتي كافيه')}</p>
             </div>
           </ScrollReveal>
 
@@ -317,7 +317,7 @@ export const AuthSection: React.FC = () => {
               </div>
               <div className="min-w-0">
                 <p className="font-display text-xl font-semibold text-brand-charcoal truncate">
-                  {currentUser.name || 'Your account'}
+                  {currentUser.name || t('Your account', 'حسابك')}
                 </p>
                 <p className="mt-0.5 text-sm text-brand-muted truncate">{currentUser.email}</p>
               </div>
@@ -334,23 +334,23 @@ export const AuthSection: React.FC = () => {
             index={2}
           >
             <div className="rounded-[28px] border border-brand-clay bg-white p-6 sm:p-7 shadow-card-sm text-start">
-              <h2 className="font-display text-lg font-semibold text-brand-charcoal">Profile</h2>
+              <h2 className="font-display text-lg font-semibold text-brand-charcoal">{t('Profile', 'الملف الشخصي')}</h2>
               <p className="mt-1 text-xs text-brand-muted">
-                Ask the studio if any of these need changing.
+                {t('Ask the studio if any of these need changing.', 'اسأل الاستوديو إذا كنت بحاجة لتغيير أي من هذه البيانات.')}
               </p>
 
               <dl className="mt-5 text-sm">
                 {[
-                  { label: 'Full Name', value: currentUser.name },
-                  { label: 'Email Address', value: currentUser.email },
-                  { label: 'Phone Number', value: currentUser.phone }
+                  { label: t('Full Name', 'الاسم الكامل'), value: currentUser.name },
+                  { label: t('Email Address', 'البريد الإلكتروني'), value: currentUser.email },
+                  { label: t('Phone Number', 'رقم الجوال'), value: currentUser.phone }
                 ].map(row => (
                   <div key={row.label} className="border-t border-brand-clay py-4 last:border-b">
                     <dt className="text-[10px] font-semibold uppercase tracking-[0.14em] text-brand-muted">
                       {row.label}
                     </dt>
                     <dd className={`mt-1.5 break-words ${row.value ? 'text-brand-charcoal ltr-numerals' : 'text-brand-muted italic'}`}>
-                      {row.value || 'Not on file'}
+                      {row.value || t('Not on file', 'غير مسجّل')}
                     </dd>
                   </div>
                 ))}
@@ -367,9 +367,9 @@ export const AuthSection: React.FC = () => {
             <div className="rounded-[28px] border border-brand-clay bg-white p-6 sm:p-7 shadow-card-sm text-start">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <h2 className="font-display text-lg font-semibold text-brand-charcoal">Password</h2>
+                  <h2 className="font-display text-lg font-semibold text-brand-charcoal">{t('Password', 'كلمة المرور')}</h2>
                   <p className="mt-1 text-xs text-brand-muted">
-                    Choose a new password for signing in.
+                    {t('Choose a new password for signing in.', 'اختر كلمة مرور جديدة لتسجيل الدخول.')}
                   </p>
                 </div>
                 {!showPasswordForm && (
@@ -382,7 +382,7 @@ export const AuthSection: React.FC = () => {
                     }}
                     className="shrink-0 cursor-pointer rounded-full border border-brand-clay bg-brand-cream px-5 py-2.5 text-sm font-semibold text-brand-charcoal transition-colors hover:bg-brand-clay-soft"
                   >
-                    Change Password
+                    {t('Change Password', 'تغيير كلمة المرور')}
                   </button>
                 )}
               </div>
@@ -390,7 +390,7 @@ export const AuthSection: React.FC = () => {
               {showPasswordForm && (
                 <form onSubmit={handleChangePassword} className="mt-5 space-y-4">
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-brand-ink">New password *</label>
+                    <label className="text-xs font-semibold text-brand-ink">{t('New password', 'كلمة المرور الجديدة')} *</label>
                     <PasswordField
                       required
                       placeholder="••••••••"
@@ -418,7 +418,7 @@ export const AuthSection: React.FC = () => {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-brand-ink">Confirm new password *</label>
+                    <label className="text-xs font-semibold text-brand-ink">{t('Confirm new password', 'تأكيد كلمة المرور الجديدة')} *</label>
                     <PasswordField
                       required
                       placeholder="••••••••"
@@ -438,7 +438,7 @@ export const AuthSection: React.FC = () => {
                       disabled={isSavingPassword}
                       className="cursor-pointer rounded-full bg-brand-terracotta px-6 py-3 text-sm font-semibold text-brand-cream shadow-button transition-colors hover:bg-brand-terracotta-hover disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {isSavingPassword ? 'Saving…' : 'Save new password'}
+                      {isSavingPassword ? t('Saving…', 'جارٍ الحفظ…') : t('Save new password', 'حفظ كلمة المرور الجديدة')}
                     </button>
                     <button
                       type="button"
@@ -451,7 +451,7 @@ export const AuthSection: React.FC = () => {
                       }}
                       className="cursor-pointer rounded-full border border-brand-clay px-5 py-3 text-sm font-semibold text-brand-muted transition-colors hover:bg-brand-sand/40 disabled:opacity-50"
                     >
-                      Cancel
+                      {t('Cancel', 'إلغاء')}
                     </button>
                   </div>
                 </form>
@@ -477,7 +477,7 @@ export const AuthSection: React.FC = () => {
               {pendingBooking && (
                 <div className="rounded-[22px] border border-brand-clay bg-brand-sand/40 p-4 text-xs font-semibold text-brand-charcoal text-start">
                   <Pin className="inline h-3.5 w-3.5 me-1 align-[-2px]" />
-                  You have an active booking draft for:{' '}
+                  {t('You have an active booking draft for:', 'لديك مسودة حجز نشطة لـ:')}{' '}
                   <span className="text-brand-terracotta">{pendingBooking.workshopTitle}</span> ({pendingBooking.date})
                 </div>
               )}
@@ -499,7 +499,7 @@ export const AuthSection: React.FC = () => {
                     onClick={() => setCustomerTab('checkout-info')}
                     className="cursor-pointer rounded-full bg-brand-terracotta px-6 py-3.5 text-sm font-semibold text-brand-cream shadow-button transition-colors hover:bg-brand-terracotta-hover sm:min-w-[220px]"
                   >
-                    Continue Booking
+                    {t('Continue Booking', 'متابعة الحجز')}
                   </button>
                 )}
                 <button
@@ -509,7 +509,7 @@ export const AuthSection: React.FC = () => {
                   }}
                   className="cursor-pointer rounded-full border border-brand-clay bg-brand-cream px-6 py-3.5 text-sm font-semibold text-brand-charcoal transition-colors hover:bg-brand-clay-soft sm:min-w-[220px]"
                 >
-                  Log Out
+                  {t('Log Out', 'تسجيل الخروج')}
                 </button>
               </div>
             </div>
@@ -629,12 +629,12 @@ export const AuthSection: React.FC = () => {
           {(authScreen === 'login' || authScreen === 'register') && (
             <div
               role="tablist"
-              aria-label="Account"
+              aria-label={t('Account', 'الحساب')}
               className="mb-8 grid grid-cols-2 gap-1 rounded-full border border-brand-clay bg-brand-sand/50 p-1"
             >
               {([
-                { screen: 'login' as const, label: 'Sign In' },
-                { screen: 'register' as const, label: 'Create Account' }
+                { screen: 'login' as const, label: t('Sign In', 'تسجيل الدخول') },
+                { screen: 'register' as const, label: t('Create Account', 'إنشاء حساب') }
               ]).map(tab => {
                 const isOn = authScreen === tab.screen;
                 return (
@@ -683,7 +683,7 @@ export const AuthSection: React.FC = () => {
             {sessionExpired && !errorMsg && (
               <div className="mb-6 p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold flex items-start gap-2.5">
                 <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-amber-600" />
-                <p>Your session expired, please sign in again.</p>
+                <p>{t('Your session expired, please sign in again.', 'انتهت جلستك، يرجى تسجيل الدخول مرة أخرى.')}</p>
               </div>
             )}
 
@@ -698,7 +698,7 @@ export const AuthSection: React.FC = () => {
                       onClick={() => { setErrorMsg(null); setAuthScreen('login'); }}
                       className="mt-2 text-xs font-semibold text-red-800 underline cursor-pointer"
                     >
-                      Click here to Sign In
+                      {t('Click here to Sign In', 'اضغط هنا لتسجيل الدخول')}
                     </button>
                   )}
                 </div>
@@ -709,19 +709,19 @@ export const AuthSection: React.FC = () => {
             {authScreen === 'login' && (
               <div className="space-y-6">
                 <div>
-                  <h2 className="font-display text-3xl font-semibold text-brand-charcoal">Welcome back</h2>
+                  <h2 className="font-display text-3xl font-semibold text-brand-charcoal">{t('Welcome back', 'مرحبًا بعودتك')}</h2>
                   <p className="mt-1.5 text-sm text-brand-ink">
-                    Access your bookings and pottery pieces tracker.
+                    {t('Access your bookings and pottery pieces tracker.', 'اطّلع على حجوزاتك ومتتبع قطعك الفخارية.')}
                   </p>
                 </div>
 
                 <form onSubmit={handleLogin} className="space-y-4">
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-brand-charcoal/80">Email address or Phone number</label>
+                    <label className="text-xs font-bold text-brand-charcoal/80">{t('Email address or Phone number', 'البريد الإلكتروني أو رقم الجوال')}</label>
                     <input
                       type="text"
                       required
-                      placeholder="e.g. noura@amri.sa or +966501234567"
+                      placeholder={`${t('e.g.', 'مثال:')} noura@amri.sa ${t('or', 'أو')} +966501234567`}
                       value={loginIdentifier}
                       onChange={e => { setLoginIdentifier(e.target.value); setErrorMsg(null); }}
                       className="w-full bg-brand-cream border border-brand-clay rounded-xl py-3.5 px-4 text-sm font-semibold text-brand-charcoal shadow-2xs"
@@ -730,17 +730,17 @@ export const AuthSection: React.FC = () => {
 
                   <div className="space-y-1">
                     <div className="flex justify-between items-center">
-                      <label className="text-xs font-bold text-brand-charcoal/80">Password</label>
+                      <label className="text-xs font-bold text-brand-charcoal/80">{t('Password', 'كلمة المرور')}</label>
                       <button
                         type="button"
-                        onClick={() => { 
-                          setErrorMsg(null); 
-                          setAuthScreen('forgot'); 
+                        onClick={() => {
+                          setErrorMsg(null);
+                          setAuthScreen('forgot');
                           setResetSent(null);
                         }}
                         className="text-xs font-semibold text-brand-terracotta hover:underline cursor-pointer"
                       >
-                        Forgot password?
+                        {t('Forgot password?', 'هل نسيت كلمة المرور؟')}
                       </button>
                     </div>
                     <PasswordField
@@ -758,7 +758,7 @@ export const AuthSection: React.FC = () => {
                     className="w-full cursor-pointer rounded-full bg-brand-terracotta py-3.5 text-sm font-semibold text-brand-cream hover:bg-brand-terracotta-hover transition-colors shadow-card-sm mt-2 flex items-center justify-center gap-2"
                   >
                     <LogIn className="h-4 w-4" />
-                    <span>{isSubmitting ? 'Signing in...' : 'Log In'}</span>
+                    <span>{isSubmitting ? t('Signing in...', 'جارٍ تسجيل الدخول...') : t('Log In', 'تسجيل الدخول')}</span>
                   </button>
                 </form>
 
@@ -768,10 +768,12 @@ export const AuthSection: React.FC = () => {
                 {claimIdentifier && (
                   <form onSubmit={handleClaimAccount} className="space-y-3 p-4 bg-brand-sand/30 border border-brand-clay rounded-2xl">
                     <div>
-                      <h3 className="text-sm font-semibold text-brand-charcoal">Set up your password</h3>
+                      <h3 className="text-sm font-semibold text-brand-charcoal">{t('Set up your password', 'إعداد كلمة المرور')}</h3>
                       <p className="text-[11px] text-brand-muted mt-0.5 leading-relaxed">
-                        We already have <span className="font-semibold">{claimIdentifier}</span> on file from a
-                        visit or booking. Choose a password to claim that account — your history stays with it.
+                        {t('We already have', 'لدينا بالفعل')} <span className="font-semibold">{claimIdentifier}</span> {t(
+                          'on file from a visit or booking. Choose a password to claim that account — your history stays with it.',
+                          'مسجل من زيارة أو حجز سابق. اختر كلمة مرور للمطالبة بهذا الحساب — سجلك سيبقى معه.'
+                        )}
                       </p>
                     </div>
 
@@ -780,7 +782,7 @@ export const AuthSection: React.FC = () => {
                         It has to be the address already on the record. */}
                     {!claimIdentifier.includes('@') && (
                       <div className="space-y-1">
-                        <label className="text-xs font-bold text-brand-charcoal/80">Your email address *</label>
+                        <label className="text-xs font-bold text-brand-charcoal/80">{t('Your email address', 'بريدك الإلكتروني')} *</label>
                         <input
                           type="email"
                           required
@@ -791,14 +793,20 @@ export const AuthSection: React.FC = () => {
                         />
                         <p className="text-[11px] text-brand-muted leading-relaxed">
                           {claimEmailHint
-                            ? `Use the address on your record — it looks like ${claimEmailHint}. We will send a confirmation link to it.`
-                            : 'We will send a confirmation link to this address to finish claiming your account.'}
+                            ? t(
+                                `Use the address on your record — it looks like ${claimEmailHint}. We will send a confirmation link to it.`,
+                                `استخدم البريد المسجل لديك — يبدو أنه ${claimEmailHint}. سنرسل رابط تأكيد إليه.`
+                              )
+                            : t(
+                                'We will send a confirmation link to this address to finish claiming your account.',
+                                'سنرسل رابط تأكيد إلى هذا البريد لإتمام المطالبة بحسابك.'
+                              )}
                         </p>
                       </div>
                     )}
 
                     <div className="space-y-1">
-                      <label className="text-xs font-bold text-brand-charcoal/80">New password *</label>
+                      <label className="text-xs font-bold text-brand-charcoal/80">{t('New password', 'كلمة المرور الجديدة')} *</label>
                       <PasswordField
                         required
                         placeholder="••••••••"
@@ -826,7 +834,7 @@ export const AuthSection: React.FC = () => {
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-xs font-bold text-brand-charcoal/80">Confirm password *</label>
+                      <label className="text-xs font-bold text-brand-charcoal/80">{t('Confirm password', 'تأكيد كلمة المرور')} *</label>
                       <PasswordField
                         required
                         placeholder="••••••••"
@@ -842,14 +850,14 @@ export const AuthSection: React.FC = () => {
                         disabled={isSubmitting}
                         className="flex-1 cursor-pointer rounded-full bg-brand-terracotta py-3 text-sm font-semibold text-brand-cream hover:bg-brand-terracotta-hover transition-colors disabled:opacity-50"
                       >
-                        {isSubmitting ? 'Saving...' : 'Set password & continue'}
+                        {isSubmitting ? t('Saving...', 'جارٍ الحفظ...') : t('Set password & continue', 'تعيين كلمة المرور والمتابعة')}
                       </button>
                       <button
                         type="button"
                         onClick={() => { setClaimIdentifier(null); setErrorMsg(null); }}
                         className="px-4 rounded-full border border-brand-clay text-xs font-semibold text-brand-muted cursor-pointer hover:bg-brand-sand/40"
                       >
-                        Cancel
+                        {t('Cancel', 'إلغاء')}
                       </button>
                     </div>
                   </form>
@@ -857,12 +865,12 @@ export const AuthSection: React.FC = () => {
 
                 <div className="text-center pt-2">
                   <p className="text-xs font-medium text-brand-ink">
-                    New here?{' '}
+                    {t('New here?', 'جديد هنا؟')}{' '}
                     <button
                       onClick={() => { setErrorMsg(null); setAuthScreen('register'); }}
                       className="text-brand-terracotta font-semibold hover:underline cursor-pointer"
                     >
-                      Create an account
+                      {t('Create an account', 'إنشاء حساب')}
                     </button>
                   </p>
                 </div>
@@ -873,19 +881,19 @@ export const AuthSection: React.FC = () => {
             {authScreen === 'register' && (
               <div className="space-y-6">
                 <div>
-                  <h2 className="font-display text-3xl font-semibold text-brand-charcoal">Join the Café</h2>
+                  <h2 className="font-display text-3xl font-semibold text-brand-charcoal">{t('Join the Café', 'انضم إلى المقهى')}</h2>
                   <p className="mt-1.5 text-sm text-brand-ink">
-                    Create an account to begin tracking mud creations.
+                    {t('Create an account to begin tracking mud creations.', 'أنشئ حسابًا لتبدأ بتتبع أعمالك الفخارية.')}
                   </p>
                 </div>
 
                 <form onSubmit={handleRegister} className="space-y-4">
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-brand-charcoal/80">Full name *</label>
+                    <label className="text-xs font-bold text-brand-charcoal/80">{t('Full name', 'الاسم الكامل')} *</label>
                     <input
                       type="text"
                       required
-                      placeholder="Noura Al-Amri"
+                      placeholder={t('Noura Al-Amri', 'نورة العمري')}
                       value={fullName}
                       onChange={e => { setFullName(e.target.value); setErrorMsg(null); clearError('name'); }}
                       className="w-full bg-brand-cream border border-brand-clay rounded-xl py-3.5 px-4 text-sm font-semibold text-brand-charcoal shadow-2xs"
@@ -894,7 +902,7 @@ export const AuthSection: React.FC = () => {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-brand-charcoal/80">Email address *</label>
+                    <label className="text-xs font-bold text-brand-charcoal/80">{t('Email address', 'البريد الإلكتروني')} *</label>
                     <input
                       type="email"
                       required
@@ -908,7 +916,7 @@ export const AuthSection: React.FC = () => {
 
                   {/* Phone with Country Code Dropdown */}
                   <PhoneInput
-                    label="Phone number"
+                    label={t('Phone number', 'رقم الجوال')}
                     required
                     value={phone}
                     error={errors.phone}
@@ -916,7 +924,7 @@ export const AuthSection: React.FC = () => {
                   />
 
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-brand-charcoal/80">Password *</label>
+                    <label className="text-xs font-bold text-brand-charcoal/80">{t('Password', 'كلمة المرور')} *</label>
                     <PasswordField
                       required
                       placeholder="••••••••"
@@ -946,7 +954,7 @@ export const AuthSection: React.FC = () => {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-brand-charcoal/80">Confirm password *</label>
+                    <label className="text-xs font-bold text-brand-charcoal/80">{t('Confirm password', 'تأكيد كلمة المرور')} *</label>
                     <PasswordField
                       required
                       placeholder="••••••••"
@@ -964,18 +972,18 @@ export const AuthSection: React.FC = () => {
                     disabled={isSubmitting}
                     className="w-full cursor-pointer rounded-full bg-brand-terracotta py-3.5 text-sm font-semibold text-brand-cream hover:bg-brand-terracotta-hover transition-colors shadow-card-sm mt-4"
                   >
-                    {isSubmitting ? 'Creating account...' : 'Create Account'}
+                    {isSubmitting ? t('Creating account...', 'جارٍ إنشاء الحساب...') : t('Create Account', 'إنشاء حساب')}
                   </button>
                 </form>
 
                 <div className="text-center pt-2">
                   <p className="text-xs font-medium text-brand-ink">
-                    Already have an account?{' '}
+                    {t('Already have an account?', 'هل لديك حساب بالفعل؟')}{' '}
                     <button
                       onClick={() => { setErrorMsg(null); setAuthScreen('login'); }}
                       className="text-brand-terracotta font-semibold hover:underline cursor-pointer"
                     >
-                      Log in
+                      {t('Log in', 'تسجيل الدخول')}
                     </button>
                   </p>
                 </div>
@@ -990,14 +998,14 @@ export const AuthSection: React.FC = () => {
                   onClick={() => { setErrorMsg(null); setAuthScreen('login'); setResetSent(null); }}
                   className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-terracotta hover:underline cursor-pointer"
                 >
-                  <ArrowLeft className="h-4 w-4" />
-                  <span>Back to login</span>
+                  <ArrowLeft className="h-4 w-4 flip-rtl" />
+                  <span>{t('Back to login', 'العودة لتسجيل الدخول')}</span>
                 </button>
 
                 <div>
-                  <h2 className="font-display text-3xl font-semibold text-brand-charcoal">Password Recovery</h2>
+                  <h2 className="font-display text-3xl font-semibold text-brand-charcoal">{t('Password Recovery', 'استعادة كلمة المرور')}</h2>
                   <p className="text-xs text-brand-muted mt-1">
-                    We will email you a secure link to set a new password.
+                    {t('We will email you a secure link to set a new password.', 'سنرسل إليك رابطًا آمنًا عبر البريد الإلكتروني لتعيين كلمة مرور جديدة.')}
                   </p>
                 </div>
 
@@ -1010,7 +1018,7 @@ export const AuthSection: React.FC = () => {
                       forgotMethod === 'email' ? 'bg-brand-cream text-brand-terracotta shadow-card-sm' : 'text-brand-muted'
                     }`}
                   >
-                    Email Recovery
+                    {t('Email Recovery', 'استعادة عبر البريد الإلكتروني')}
                   </button>
                   <button
                     type="button"
@@ -1019,18 +1027,18 @@ export const AuthSection: React.FC = () => {
                       forgotMethod === 'phone' ? 'bg-brand-cream text-brand-terracotta shadow-card-sm' : 'text-brand-muted'
                     }`}
                   >
-                    Phone Recovery
+                    {t('Phone Recovery', 'استعادة عبر الجوال')}
                   </button>
                 </div>
 
                 {forgotMethod === 'email' ? (
                   <form onSubmit={handleRequestPasswordReset} className="space-y-4">
                     <div className="space-y-1">
-                      <label className="text-xs font-bold text-brand-charcoal/80">Registered Email Address</label>
+                      <label className="text-xs font-bold text-brand-charcoal/80">{t('Registered Email Address', 'البريد الإلكتروني المسجّل')}</label>
                       <input
                         type="email"
                         required
-                        placeholder="e.g. noura@amri.sa"
+                        placeholder={`${t('e.g.', 'مثال:')} noura@amri.sa`}
                         value={email}
                         onChange={e => { setEmail(e.target.value); setResetSent(null); setErrorMsg(null); }}
                         className="w-full bg-brand-cream border border-brand-clay rounded-xl py-3.5 px-4 text-sm font-semibold text-brand-charcoal shadow-2xs"
@@ -1052,7 +1060,7 @@ export const AuthSection: React.FC = () => {
                       className="w-full cursor-pointer rounded-full bg-brand-terracotta py-3.5 text-sm font-semibold text-brand-cream hover:bg-brand-terracotta-hover transition-colors shadow-card-sm mt-2 flex items-center justify-center gap-2 disabled:opacity-50"
                     >
                       <KeyRound className="h-4 w-4" />
-                      <span>{isSubmitting ? 'Sending reset link...' : 'Email me a reset link'}</span>
+                      <span>{isSubmitting ? t('Sending reset link...', 'جارٍ إرسال رابط إعادة التعيين...') : t('Email me a reset link', 'أرسل لي رابط إعادة التعيين')}</span>
                     </button>
                   </form>
                 ) : (
@@ -1070,11 +1078,12 @@ export const AuthSection: React.FC = () => {
                    */
                   <div className="space-y-4">
                     <div className="p-4 bg-brand-sand/40 border border-brand-clay rounded-2xl text-xs text-brand-ink space-y-1.5">
-                      <p className="font-semibold text-brand-charcoal">Phone recovery — coming soon</p>
+                      <p className="font-semibold text-brand-charcoal">{t('Phone recovery — coming soon', 'استعادة عبر الجوال — قريبًا')}</p>
                       <p className="leading-relaxed">
-                        We can only reset a password once we can confirm the account is yours.
-                        SMS verification is not switched on yet, so please use email recovery.
-                        If there is no email on your record, call the studio on {STUDIO_PHONE}.
+                        {t(
+                          'We can only reset a password once we can confirm the account is yours. SMS verification is not switched on yet, so please use email recovery. If there is no email on your record, call the studio on ',
+                          'يمكننا إعادة تعيين كلمة المرور فقط بعد التأكد من ملكية الحساب. التحقق عبر الرسائل النصية غير مفعّل بعد، لذا يرجى استخدام الاستعادة عبر البريد الإلكتروني. إذا لم يكن هناك بريد إلكتروني مسجّل، يرجى الاتصال بالاستوديو على '
+                        )}{STUDIO_PHONE}.
                       </p>
                     </div>
                     <button
@@ -1082,7 +1091,7 @@ export const AuthSection: React.FC = () => {
                       onClick={() => { setForgotMethod('email'); setErrorMsg(null); }}
                       className="w-full cursor-pointer rounded-full bg-brand-terracotta py-3.5 text-sm font-semibold text-brand-cream hover:bg-brand-terracotta-hover transition-colors"
                     >
-                      Use email recovery instead
+                      {t('Use email recovery instead', 'استخدم الاستعادة عبر البريد الإلكتروني بدلاً من ذلك')}
                     </button>
                   </div>
                 )}

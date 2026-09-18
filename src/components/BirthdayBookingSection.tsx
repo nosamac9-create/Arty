@@ -72,7 +72,7 @@ export const BirthdayBookingSection: React.FC = () => {
     publishedBirthdayPackages,
     birthdayFormFields
   } = useApp();
-  const { lang } = useLanguage();
+  const { lang, t } = useLanguage();
 
   const prefersReducedMotion = useReducedMotion();
   const ease = [0.22, 1, 0.36, 1] as const;
@@ -293,12 +293,12 @@ export const BirthdayBookingSection: React.FC = () => {
     const errs: Record<string, string> = {};
 
     if (isActive('bookingName') && isRequired('bookingName') && !bookingName.trim()) {
-      errs.bookingName = `${labelFor('bookingName', 'Booking name')} is required`;
+      errs.bookingName = `${labelFor('bookingName', t('Booking name', 'اسم الحجز'))} ${t('is required', 'مطلوب')}`;
     }
 
     if (isActive('phone')) {
       if (!phone) {
-        if (isRequired('phone')) errs.phone = 'Phone number is required';
+        if (isRequired('phone')) errs.phone = t('Phone number is required', 'رقم الجوال مطلوب');
       } else {
         // The one shared phone rule, so this form agrees with sign-up, the
         // walk-in modal and every admin form.
@@ -309,18 +309,18 @@ export const BirthdayBookingSection: React.FC = () => {
 
     if (isActive('numberOfPeople')) {
       if (!numberOfPeople || numberOfPeople < 1) {
-        errs.numberOfPeople = 'At least 1 person is required';
+        errs.numberOfPeople = t('At least 1 person is required', 'مطلوب شخص واحد على الأقل');
       } else if (selectedPackage) {
         if (numberOfPeople < selectedPackage.minGuests) {
-          errs.numberOfPeople = `This package requires at least ${selectedPackage.minGuests} guests`;
+          errs.numberOfPeople = `${t('This package requires at least', 'تتطلب هذه الباقة ما لا يقل عن')} ${selectedPackage.minGuests} ${t('guests', 'ضيوف')}`;
         } else if (numberOfPeople > selectedPackage.maxGuests) {
-          errs.numberOfPeople = `This package allows up to ${selectedPackage.maxGuests} guests`;
+          errs.numberOfPeople = `${t('This package allows up to', 'تسمح هذه الباقة بحد أقصى')} ${selectedPackage.maxGuests} ${t('guests', 'ضيوف')}`;
         }
       }
     }
 
     if (isActive('package') && !selectedPackage) {
-      errs.package = 'Please select a package';
+      errs.package = t('Please select a package', 'يرجى اختيار باقة');
     }
 
     if (isActive('bookingDate')) {
@@ -329,24 +329,39 @@ export const BirthdayBookingSection: React.FC = () => {
       const noticeForCount = minBirthdayNoticeDays(Number(numberOfPeople) || 0);
       const currentMinDate = getMinBirthdayBookingDateStr(noticeForCount);
       if (!bookingDate) {
-        errs.bookingDate = 'Please select a date';
+        errs.bookingDate = t('Please select a date', 'يرجى اختيار تاريخ');
       } else if (numberOfPeople && bookingDate < currentMinDate) {
-        errs.bookingDate = `Birthday bookings for ${numberOfPeople} guests need at least ${noticeForCount} day${noticeForCount === 1 ? '' : 's'} notice.`;
+        // ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker. Also
+        // note: this duplicates validateBirthdayBookingForm's own rule in
+        // validation.ts (Phase B), but without that function's guest-count
+        // singular/plural fork — a pre-existing inconsistency, not fixed here.
+        errs.bookingDate = t(
+          `Birthday bookings for ${numberOfPeople} guests need at least ${noticeForCount} day${noticeForCount === 1 ? '' : 's'} notice.`,
+          `تتطلب حجوزات أعياد الميلاد لعدد ${numberOfPeople} ضيوف إشعارًا مسبقًا لا يقل عن ${noticeForCount} ${noticeForCount === 1 ? 'يوم' : 'أيام'}.`
+        );
       } else if (bookingDate && dateIsFull) {
-        errs.bookingDate = 'This date is fully booked for birthday celebrations. Please choose another date.';
+        // Reusing validation.ts's exact translation (Phase B) — identical English string.
+        errs.bookingDate = t(
+          'This date is fully booked for birthday celebrations. Please choose another date.',
+          'هذا التاريخ مكتمل الحجز لاحتفالات أعياد الميلاد. يرجى اختيار تاريخ آخر.'
+        );
       }
     }
 
     if (isActive('bookingTime')) {
       if (!bookingTime) {
-        errs.bookingTime = 'Please select a time slot';
+        errs.bookingTime = t('Please select a time slot', 'يرجى اختيار وقت');
       } else if (bookingDate && !errs.bookingDate && slotIsFull(bookingTime)) {
-        errs.bookingTime = 'This time slot is fully booked for birthday celebrations. Please choose another time.';
+        // Reusing validation.ts's exact translation (Phase B) — identical English string.
+        errs.bookingTime = t(
+          'This time slot is fully booked for birthday celebrations. Please choose another time.',
+          'هذا الوقت مكتمل الحجز لاحتفالات أعياد الميلاد. يرجى اختيار وقت آخر.'
+        );
       }
     }
 
     if (isActive('birthdayPersonName') && isRequired('birthdayPersonName') && !birthdayPersonName.trim()) {
-      errs.birthdayPersonName = `${labelFor('birthdayPersonName', 'Name of the birthday person')} is required`;
+      errs.birthdayPersonName = `${labelFor('birthdayPersonName', t('Name of the birthday person', 'اسم صاحب عيد الميلاد'))} ${t('is required', 'مطلوب')}`;
     }
 
     // Configurable fields added in Settings
@@ -354,12 +369,12 @@ export const BirthdayBookingSection: React.FC = () => {
       if (!field.required) return;
       if (['bookingName', 'phone', 'numberOfPeople', 'package', 'bookingDate', 'bookingTime', 'birthdayPersonName', 'cakePhoto'].includes(field.key)) return;
       if (!String(valueOf(field)).trim()) {
-        errs[field.key] = `${field.label} is required`;
+        errs[field.key] = `${field.label} ${t('is required', 'مطلوب')}`;
       }
     });
 
     if (!termsAccepted) {
-      errs.terms = 'Please read and accept the event terms and guidelines to continue.';
+      errs.terms = t('Please read and accept the event terms and guidelines to continue.', 'يرجى قراءة شروط الفعالية والموافقة عليها للمتابعة.');
     }
 
     return errs;
@@ -563,7 +578,7 @@ export const BirthdayBookingSection: React.FC = () => {
             <span className="text-start">
               {option}
               {isDisabled ? (
-                <span className="block text-[11px] font-medium text-brand-muted">Full</span>
+                <span className="block text-[11px] font-medium text-brand-muted">{t('Full', 'ممتلئ')}</span>
               ) : price !== undefined && (
                 <span className="block text-[11px] font-medium text-brand-muted ltr-numerals">{price} SAR</span>
               )}
@@ -593,7 +608,7 @@ export const BirthdayBookingSection: React.FC = () => {
               type="text"
               value={bookingName}
               onChange={e => setBookingName(e.target.value)}
-              placeholder={field.placeholder || 'e.g. Noura Al-Amri'}
+              placeholder={field.placeholder || t('e.g. Noura Al-Amri', 'مثال: نورة العمري')}
               className={inputClass(errors.bookingName)}
             />
             {fieldError('bookingName')}
@@ -624,7 +639,7 @@ export const BirthdayBookingSection: React.FC = () => {
             <div className="flex items-center gap-3">
               <button
                 type="button"
-                aria-label="Fewer guests"
+                aria-label={t('Fewer guests', 'ضيوف أقل')}
                 onClick={() => setNumberOfPeople(n => Math.max(min, (n || min) - 1))}
                 className="h-12 w-12 shrink-0 rounded-full border border-brand-clay bg-white text-lg font-semibold text-brand-charcoal transition-colors hover:bg-brand-sand/50 cursor-pointer"
               >
@@ -648,7 +663,7 @@ export const BirthdayBookingSection: React.FC = () => {
               />
               <button
                 type="button"
-                aria-label="More guests"
+                aria-label={t('More guests', 'ضيوف أكثر')}
                 onClick={() => setNumberOfPeople(n => Math.min(max, (n || min) + 1))}
                 className="h-12 w-12 shrink-0 rounded-full border border-brand-clay bg-white text-lg font-semibold text-brand-charcoal transition-colors hover:bg-brand-sand/50 cursor-pointer"
               >
@@ -656,11 +671,12 @@ export const BirthdayBookingSection: React.FC = () => {
               </button>
             </div>
             <p className="mt-1.5 text-[11px] font-semibold text-brand-muted">
-              Include the birthday person in the total.
+              {t('Include the birthday person in the total.', 'اشمل صاحب عيد الميلاد ضمن العدد الإجمالي.')}
             </p>
             {selectedPackage && (
               <p className="mt-1 text-[11px] font-semibold text-brand-muted">
-                This package hosts {selectedPackage.minGuests}–{selectedPackage.maxGuests} guests.
+                {/* ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker. */}
+                {t('This package hosts', 'تستضيف هذه الباقة')} {selectedPackage.minGuests}–{selectedPackage.maxGuests} {t('guests', 'ضيوف')}.
               </p>
             )}
             {fieldError('numberOfPeople')}
@@ -684,13 +700,20 @@ export const BirthdayBookingSection: React.FC = () => {
             />
             <p className="mt-1.5 text-[11px] font-semibold text-brand-terracotta">
               <Info className="inline h-3.5 w-3.5 me-1 align-[-2px]" />
+              {/* ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker. */}
               {numberOfPeople
-                ? `For ${numberOfPeople} guests, book at least ${minBirthdayNoticeDays(Number(numberOfPeople))} day${minBirthdayNoticeDays(Number(numberOfPeople)) === 1 ? '' : 's'} in advance.`
-                : 'Parties of 3–4 need 1 day notice; 5 or more need 4 days notice.'}
+                ? t(
+                    `For ${numberOfPeople} guests, book at least ${minBirthdayNoticeDays(Number(numberOfPeople))} day${minBirthdayNoticeDays(Number(numberOfPeople)) === 1 ? '' : 's'} in advance.`,
+                    `لعدد ${numberOfPeople} ضيوف، يرجى الحجز قبل ${minBirthdayNoticeDays(Number(numberOfPeople))} ${minBirthdayNoticeDays(Number(numberOfPeople)) === 1 ? 'يوم' : 'أيام'} على الأقل.`
+                  )
+                : t(
+                    'Parties of 3–4 need 1 day notice; 5 or more need 4 days notice.',
+                    'الحفلات من 3 إلى 4 أشخاص تحتاج إشعارًا قبل يوم واحد؛ 5 أشخاص أو أكثر تحتاج إشعارًا قبل 4 أيام.'
+                  )}
             </p>
             {selectedPackage?.availableDays?.length ? (
               <p className="mt-0.5 text-[11px] font-semibold text-brand-muted">
-                Available days: {selectedPackage.availableDays.join(', ')}
+                {t('Available days', 'الأيام المتاحة')}: {selectedPackage.availableDays.join(', ')}
               </p>
             ) : null}
             {fieldError('bookingDate')}
@@ -714,7 +737,7 @@ export const BirthdayBookingSection: React.FC = () => {
             />
             {dateFull && (
               <p className="mt-1.5 text-[11px] font-semibold text-red-500">
-                This date is fully booked for birthday celebrations. Please choose another date.
+                {t('This date is fully booked for birthday celebrations. Please choose another date.', 'هذا التاريخ مكتمل الحجز لاحتفالات أعياد الميلاد. يرجى اختيار تاريخ آخر.')}
               </p>
             )}
             {fieldError('bookingTime')}
@@ -730,7 +753,7 @@ export const BirthdayBookingSection: React.FC = () => {
               type="text"
               value={birthdayPersonName}
               onChange={e => setBirthdayPersonName(e.target.value)}
-              placeholder={field.placeholder || 'e.g. Maya (Turning 8!)'}
+              placeholder={field.placeholder || t('e.g. Maya (Turning 8!)', 'مثال: مايا (تكمل 8 سنوات!)')}
               className={inputClass(errors.birthdayPersonName)}
             />
             {fieldError('birthdayPersonName')}
@@ -744,7 +767,7 @@ export const BirthdayBookingSection: React.FC = () => {
             <div className="flex flex-col items-center gap-4 rounded-[28px] border-2 border-dashed border-brand-clay bg-white p-5 transition-colors hover:bg-brand-sand/20 sm:flex-row">
               {cakePhotoUrl ? (
                 <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl ring-1 ring-brand-clay">
-                  <img src={cakePhotoUrl} alt="Cake Design" className="h-full w-full object-cover" />
+                  <img src={cakePhotoUrl} alt={t('Cake Design', 'تصميم الكعكة')} className="h-full w-full object-cover" />
                 </div>
               ) : (
                 <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-brand-sand/60 text-brand-muted">
@@ -765,10 +788,10 @@ export const BirthdayBookingSection: React.FC = () => {
                   className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-brand-clay bg-brand-cream px-4 py-2.5 text-xs font-semibold text-brand-terracotta transition-colors hover:bg-brand-sand/50"
                 >
                   <Upload className="h-3.5 w-3.5" />
-                  <span>{cakePhotoUrl ? 'Change cake photo' : 'Upload cake design image'}</span>
+                  <span>{cakePhotoUrl ? t('Change cake photo', 'تغيير صورة الكعكة') : t('Upload cake design image', 'رفع صورة تصميم الكعكة')}</span>
                 </label>
                 <p className="mt-1.5 text-[11px] text-brand-muted">
-                  {field.helpText || 'Send us your customized cake design photo and we will prepare it for you!'}
+                  {field.helpText || t('Send us your customized cake design photo and we will prepare it for you!', 'أرسل لنا صورة تصميم الكعكة المخصص وسنقوم بتحضيرها لك!')}
                 </p>
               </div>
             </div>
@@ -814,7 +837,7 @@ export const BirthdayBookingSection: React.FC = () => {
                 {valueOf(field).toLowerCase().includes('custom') && (
                   <input
                     type="text"
-                    placeholder="Please specify"
+                    placeholder={t('Please specify', 'يرجى التحديد')}
                     value={balloonColorCustom}
                     onChange={e => setBalloonColorCustom(e.target.value)}
                     className={`${inputClass()} mt-2.5`}
@@ -885,12 +908,12 @@ export const BirthdayBookingSection: React.FC = () => {
    * booked one.
    */
   const ticketRows: Array<{ label: string; value: string }> = [
-    { label: 'Booked by', value: bookingName.trim() },
-    { label: 'Phone', value: phone.trim() },
-    { label: 'Birthday person', value: birthdayPersonName.trim() },
-    { label: 'Guests', value: numberOfPeople === '' ? '' : String(numberOfPeople) },
-    { label: 'Date', value: prettyDate },
-    { label: 'Time', value: bookingTime },
+    { label: t('Booked by', 'باسم'), value: bookingName.trim() },
+    { label: t('Phone', 'الجوال'), value: phone.trim() },
+    { label: t('Birthday person', 'صاحب عيد الميلاد'), value: birthdayPersonName.trim() },
+    { label: t('Guests', 'الضيوف'), value: numberOfPeople === '' ? '' : String(numberOfPeople) },
+    { label: t('Date', 'التاريخ'), value: prettyDate },
+    { label: t('Time', 'الوقت'), value: bookingTime },
     ...chosenExtras
   ];
 
@@ -907,18 +930,18 @@ export const BirthdayBookingSection: React.FC = () => {
           </div>
         ) : (
           <div className="flex h-32 w-full items-center justify-center rounded-2xl bg-brand-sand/60 text-xs font-semibold text-brand-muted">
-            No package chosen yet
+            {t('No package chosen yet', 'لم يتم اختيار باقة بعد')}
           </div>
         )}
 
         <div>
           <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-sage">
-            Your celebration
+            {t('Your celebration', 'احتفالك')}
           </span>
           <p className={`mt-1 font-display text-xl font-semibold ${
             selectedPackage ? 'text-brand-charcoal' : 'text-brand-muted'
           }`}>
-            {selectedPackage?.name || 'No package selected'}
+            {selectedPackage?.name || t('No package selected', 'لم يتم اختيار باقة')}
           </p>
         </div>
 
@@ -938,7 +961,7 @@ export const BirthdayBookingSection: React.FC = () => {
         <div className="space-y-2 border-t border-brand-clay pt-4 text-sm">
           <div className="flex items-center justify-between gap-4">
             <span className="text-brand-muted">
-              Estimated total
+              {t('Estimated total', 'الإجمالي التقديري')}
               {selectedPackage && numberOfPeople !== '' && (
                 <span className="ltr-numerals"> ({selectedPackage.price} × {numberOfPeople})</span>
               )}
@@ -950,13 +973,13 @@ export const BirthdayBookingSection: React.FC = () => {
             </span>
           </div>
           <div className="flex items-center justify-between gap-4">
-            <span className="font-semibold text-brand-charcoal">Deposit due today</span>
+            <span className="font-semibold text-brand-charcoal">{t('Deposit due today', 'العربون المستحق اليوم')}</span>
             <span className="font-display text-xl font-semibold text-brand-terracotta ltr-numerals">
               {depositAmount} SAR
             </span>
           </div>
           <p className="text-[11px] leading-relaxed text-brand-muted">
-            The balance is settled at the studio. Any cake upgrade is added to the final bill.
+            {t('The balance is settled at the studio. Any cake upgrade is added to the final bill.', 'يُسدد باقي المبلغ في الاستوديو. أي ترقية للكعكة تُضاف إلى الفاتورة النهائية.')}
           </p>
         </div>
       </div>
@@ -993,20 +1016,20 @@ export const BirthdayBookingSection: React.FC = () => {
     <div className="mx-auto max-w-6xl px-4 py-8 pb-32 text-start lg:pb-8">
 
       <BackButton onClick={() => setCustomerTab('home')} className="mb-6">
-        Back to Home
+        {t('Back to Home', 'العودة إلى الرئيسية')}
       </BackButton>
 
       <div className="mb-8">
         <span className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-sage">
-          Private Celebration
+          {t('Private Celebration', 'احتفال خاص')}
         </span>
         <h1 className="mt-3 font-display text-3xl font-semibold text-brand-charcoal sm:text-[42px]">
-          Reserve your party
+          {t('Reserve your party', 'احجز حفلتك')}
         </h1>
       </div>
 
       {/* STEPPER */}
-      <nav aria-label="Reservation steps" className="mb-10 border-b border-brand-clay pb-5">
+      <nav aria-label={t('Reservation steps', 'خطوات الحجز')} className="mb-10 border-b border-brand-clay pb-5">
         <ol className="flex items-center gap-2 overflow-x-auto no-scrollbar sm:gap-4">
           {STEPS.map(({ n, label }) => {
             const isCurrent = n === step;
@@ -1059,10 +1082,10 @@ export const BirthdayBookingSection: React.FC = () => {
                 <header className="mb-6">
                   <h2 className="flex items-center gap-2 font-display text-2xl font-semibold text-brand-charcoal">
                     <PartyPopper className="h-6 w-6 text-brand-terracotta" />
-                    Review your booking
+                    {t('Review your booking', 'راجع حجزك')}
                   </h2>
                   <p className="mt-1.5 text-sm text-brand-ink">
-                    Check everything below, then pay the deposit to hold your date.
+                    {t('Check everything below, then pay the deposit to hold your date.', 'راجع كل ما هو أدناه، ثم ادفع العربون لتثبيت تاريخك.')}
                   </p>
                 </header>
 
@@ -1088,10 +1111,10 @@ export const BirthdayBookingSection: React.FC = () => {
                   <section className="space-y-5">
                     <header>
                       <h2 className="font-display text-2xl font-semibold text-brand-charcoal">
-                        Which celebration?
+                        {t('Which celebration?', 'أي احتفال؟')}
                       </h2>
                       <p className="mt-1.5 text-sm text-brand-ink">
-                        Pick the package for your party. You can change it before you pay.
+                        {t('Pick the package for your party. You can change it before you pay.', 'اختر الباقة لحفلتك. يمكنك تغييرها قبل الدفع.')}
                       </p>
                     </header>
 
@@ -1143,13 +1166,14 @@ export const BirthdayBookingSection: React.FC = () => {
                                 )}
                               </div>
                               <p className="mt-1.5 text-xs text-brand-ink">
-                                {[pkg.duration, `${pkg.minGuests}–${pkg.maxGuests} guests`, pkg.ageInformation]
+                                {/* ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker. */}
+                                {[pkg.duration, `${pkg.minGuests}–${pkg.maxGuests} ${t('guests', 'ضيوف')}`, pkg.ageInformation]
                                   .filter(Boolean).join(' · ')}
                               </p>
                               <p className="mt-3 font-display text-xl font-semibold text-brand-charcoal ltr-numerals">
                                 {pkg.price}
                                 <span className="ms-1.5 text-xs font-medium text-brand-muted">
-                                  SAR {pkg.pricingLabel || pkg.pricingType}
+                                  {t('SAR', 'ريال')} {pkg.pricingLabel || pkg.pricingType}
                                 </span>
                               </p>
                             </div>
@@ -1167,10 +1191,10 @@ export const BirthdayBookingSection: React.FC = () => {
                     <header>
                       <h2 className="flex items-center gap-2 font-display text-2xl font-semibold text-brand-charcoal">
                         <CalendarDays className="h-6 w-6 text-brand-terracotta" />
-                        Party details
+                        {t('Party details', 'تفاصيل الحفلة')}
                       </h2>
                       <p className="mt-1.5 text-sm text-brand-ink">
-                        Who the party is for, when it is, and how to reach you.
+                        {t('Who the party is for, when it is, and how to reach you.', 'لمن الحفلة، متى ستُقام، وكيفية التواصل معك.')}
                       </p>
                     </header>
                     <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
@@ -1185,10 +1209,10 @@ export const BirthdayBookingSection: React.FC = () => {
                     <header>
                       <h2 className="flex items-center gap-2 font-display text-2xl font-semibold text-brand-charcoal">
                         <Cake className="h-6 w-6 text-brand-terracotta" />
-                        The finishing touches
+                        {t('The finishing touches', 'اللمسات الأخيرة')}
                       </h2>
                       <p className="mt-1.5 text-sm text-brand-ink">
-                        Colours, cake and anything else that makes the day theirs.
+                        {t('Colours, cake and anything else that makes the day theirs.', 'الألوان، الكعكة، وكل ما يجعل اليوم مميزًا لهم.')}
                       </p>
                     </header>
                     {extraFields.length > 0 ? (
@@ -1197,7 +1221,7 @@ export const BirthdayBookingSection: React.FC = () => {
                       </div>
                     ) : (
                       <p className="rounded-[28px] bg-brand-sand/50 p-6 text-sm text-brand-ink">
-                        Nothing to choose here — your package already covers everything.
+                        {t('Nothing to choose here — your package already covers everything.', 'لا يوجد شيء لاختياره هنا — باقتك تغطي كل شيء بالفعل.')}
                       </p>
                     )}
                   </section>
@@ -1255,7 +1279,7 @@ export const BirthdayBookingSection: React.FC = () => {
                           className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-brand-terracotta"
                         />
                         <span className="text-xs font-semibold text-brand-charcoal">
-                          I have read and accept the event terms and guidelines.{' '}
+                          {t('I have read and accept the event terms and guidelines.', 'لقد قرأت شروط الفعالية وإرشاداتها ووافقت عليها.')}{' '}
                           <span className="text-red-500">*</span>
                         </span>
                       </label>
@@ -1278,7 +1302,7 @@ export const BirthdayBookingSection: React.FC = () => {
                   className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-full border border-brand-clay bg-white px-6 py-3.5 text-sm font-semibold text-brand-ink transition-colors hover:text-brand-charcoal"
                 >
                   <ArrowLeft className="h-4 w-4 flip-rtl" />
-                  Back
+                  {t('Back', 'رجوع')}
                 </button>
               ) : <span className="hidden sm:block" />}
 
@@ -1288,14 +1312,14 @@ export const BirthdayBookingSection: React.FC = () => {
                   onClick={() => goToStep(step + 1)}
                   className="cursor-pointer rounded-full bg-brand-terracotta px-8 py-4 text-sm font-semibold text-brand-cream shadow-button transition-colors hover:bg-brand-terracotta-hover active:scale-[0.99]"
                 >
-                  Continue
+                  {t('Continue', 'متابعة')}
                 </button>
               ) : (
                 <button
                   type="submit"
                   className="cursor-pointer rounded-full bg-brand-terracotta px-8 py-4 text-base font-semibold text-brand-cream shadow-button transition-colors hover:bg-brand-terracotta-hover active:scale-[0.99]"
                 >
-                  Pay {depositAmount} SAR Deposit
+                  {t('Pay', 'ادفع')} {depositAmount} {t('SAR Deposit', 'ريال عربون')}
                 </button>
               )}
             </div>
@@ -1350,7 +1374,7 @@ export const BirthdayBookingSection: React.FC = () => {
         >
           <span className="min-w-0">
             <span className="block truncate text-xs font-semibold text-brand-ink">
-              {selectedPackage?.name || 'Select a package'}
+              {selectedPackage?.name || t('Select a package', 'اختر باقة')}
             </span>
             <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-brand-muted">
               <Clock className="h-3 w-3" />
@@ -1359,7 +1383,7 @@ export const BirthdayBookingSection: React.FC = () => {
           </span>
           <span className="flex shrink-0 items-center gap-2">
             <span className="font-display text-lg font-semibold text-brand-terracotta ltr-numerals">
-              {depositAmount} SAR
+              {depositAmount} {t('SAR', 'ريال')}
             </span>
             <ChevronDown className={`h-4 w-4 text-brand-muted transition-transform ${mobileSummaryOpen ? '' : 'rotate-180'}`} />
           </span>

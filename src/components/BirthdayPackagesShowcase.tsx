@@ -5,6 +5,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
+import { useLanguage } from '../context/LanguageContext';
 import {
   Cake, CalendarRange, CheckCircle2, Clock, Compass,
   Paintbrush, Sparkles, Users, ArrowLeft, ScrollText
@@ -74,6 +75,7 @@ const TICKET_PERFORATION = 'rgba(255, 250, 240, 0.55)';
 export const BirthdayPackagesShowcase: React.FC<Props> = ({
   packages, initialPackageId, onChoose, onFocusChange
 }) => {
+  const { t } = useLanguage();
   const prefersReducedMotion = useReducedMotion();
   const [focusedId, setFocusedId] = useState<string | null>(
     // With reduced motion there is no travel to wait for, so the requested
@@ -124,10 +126,10 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                   onClick={() => onChoose(focused.id)}
                   className="mt-6 w-full cursor-pointer rounded-full bg-brand-terracotta px-6 py-4 text-sm font-semibold text-brand-cream shadow-button transition-colors hover:bg-brand-terracotta-hover active:scale-[0.99]"
                 >
-                  Choose this package
+                  {t('Choose this package', 'اختر هذه الباقة')}
                 </button>
                 <p className="mt-2.5 text-center text-[11px] text-brand-muted">
-                  {focused.depositAmount ?? DEFAULT_DEPOSIT_AMOUNT} SAR deposit confirms your date.
+                  {focused.depositAmount ?? DEFAULT_DEPOSIT_AMOUNT} {t('SAR deposit confirms your date.', 'ريال عربون يؤكد حجز تاريخك.')}
                 </p>
     </>
   );
@@ -152,7 +154,7 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
               className="inline-flex items-center gap-1.5 rounded-full border border-brand-clay bg-white px-4 py-2.5 text-xs font-semibold text-brand-ink transition-colors hover:text-brand-charcoal cursor-pointer"
             >
               <ArrowLeft className="h-3.5 w-3.5 flip-rtl" />
-              <span>All packages</span>
+              <span>{t('All packages', 'كل الباقات')}</span>
             </button>
 
             {packages.map(pkg => {
@@ -203,10 +205,13 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
             className="relative mx-auto max-w-[900px]"
           >
             <h2 className="font-display text-[22px] sm:text-2xl font-semibold text-brand-charcoal">
-              Choose your celebration
+              {t('Choose your celebration', 'اختر احتفالك')}
             </h2>
             <p className="mt-2 text-sm leading-relaxed text-brand-ink">
-              Two ways to spend the afternoon — both run by our studio team, start to finish.
+              {t(
+                'Two ways to spend the afternoon — both run by our studio team, start to finish.',
+                'طريقتان لقضاء بعد الظهر — يديرهما فريق الاستوديو لدينا من البداية إلى النهاية.'
+              )}
             </p>
           </motion.div>
 
@@ -245,11 +250,11 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
               // Built by filtering, so a package missing one of these loses that
               // pair rather than leaving an empty column or a ragged pill.
               const specs = [
-                pkg.duration ? { label: 'Duration', value: pkg.duration } : null,
+                pkg.duration ? { label: t('Duration', 'المدة'), value: pkg.duration } : null,
                 pkg.minGuests || pkg.maxGuests
-                  ? { label: 'Guests', value: `${pkg.minGuests}–${pkg.maxGuests}` }
+                  ? { label: t('Guests', 'الضيوف'), value: `${pkg.minGuests}–${pkg.maxGuests}` }
                   : null,
-                pkg.ageInformation ? { label: 'Ages', value: pkg.ageInformation } : null
+                pkg.ageInformation ? { label: t('Ages', 'الأعمار'), value: pkg.ageInformation } : null
               ].filter((spec): spec is { label: string; value: string } => spec !== null);
 
               return (
@@ -272,7 +277,7 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                         focus(pkg.id);
                       }
                     }}
-                    aria-label={`${pkg.name} — see what's included`}
+                    aria-label={`${pkg.name} — ${t("see what's included", 'شاهد ما تتضمنه')}`}
                     className="package-ticket group relative flex h-full w-full cursor-pointer flex-col overflow-hidden rounded-[4px] text-start transition-transform duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-charcoal motion-safe:hover:-translate-y-0.5 sm:min-h-[240px] sm:flex-row lg:min-h-[300px]"
                     style={{
                       backgroundColor: colour.card,
@@ -321,7 +326,7 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                         className="block text-[10px] font-semibold uppercase tracking-[0.18em]"
                         style={{ color: TICKET_INK }}
                       >
-                        Package {String(index + 1).padStart(2, '0')}
+                        {t('Package', 'الباقة')} {String(index + 1).padStart(2, '0')}
                       </span>
 
                       <motion.h3
@@ -397,7 +402,7 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                           <span className="font-display text-[28px] font-semibold leading-none ltr-numerals lg:text-[32px]">
                             {pkg.price}
                           </span>
-                          <span className="text-[12px] font-semibold">SAR</span>
+                          <span className="text-[12px] font-semibold">{t('SAR', 'ريال')}</span>
                         </p>
                         {/* Only when the package actually carries one. */}
                         {pkg.depositAmount ? (
@@ -405,7 +410,7 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                             className="mt-1 block text-[10px] leading-snug ltr-numerals"
                             style={{ color: TICKET_INK, opacity: 0.82 }}
                           >
-                            {pkg.depositAmount} SAR deposit
+                            {pkg.depositAmount} {t('SAR deposit', 'ريال عربون')}
                           </span>
                         ) : null}
                       </div>
@@ -414,7 +419,7 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                         className="inline-flex min-h-[44px] shrink-0 items-center justify-center rounded-[3px] px-3 text-center text-[11px] font-semibold leading-tight transition-opacity group-hover:opacity-90 sm:mt-3 sm:min-h-0 sm:w-full sm:py-2.5"
                         style={{ backgroundColor: TICKET_INK, color: '#F0F3EE' }}
                       >
-                        See what&rsquo;s included
+                        {t("See what's included", 'شاهد ما تتضمنه')}
                       </span>
                     </div>
                   </div>
@@ -471,7 +476,7 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                       {focused.price}
                     </span>
                     <span className="ms-1.5 text-sm font-medium text-brand-muted">
-                      SAR {priceLine(focused)}
+                      {t('SAR', 'ريال')} {priceLine(focused)}
                     </span>
                   </div>
                 </div>
@@ -479,25 +484,25 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                 <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-4 border-t border-brand-clay pt-5 text-sm">
                   {focused.duration && (
                     <div>
-                      <dt className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-muted">Duration</dt>
+                      <dt className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-muted">{t('Duration', 'المدة')}</dt>
                       <dd className="mt-1 font-medium text-brand-charcoal">{focused.duration}</dd>
                     </div>
                   )}
                   <div>
-                    <dt className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-muted">Guests</dt>
+                    <dt className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-muted">{t('Guests', 'الضيوف')}</dt>
                     <dd className="mt-1 font-medium text-brand-charcoal ltr-numerals">
                       {focused.minGuests}–{focused.maxGuests}
                     </dd>
                   </div>
                   {focused.ageInformation && (
                     <div>
-                      <dt className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-muted">Ages</dt>
+                      <dt className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-muted">{t('Ages', 'الأعمار')}</dt>
                       <dd className="mt-1 font-medium text-brand-charcoal">{focused.ageInformation}</dd>
                     </div>
                   )}
                   {focused.availableDays?.length > 0 && (
                     <div>
-                      <dt className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-muted">Days</dt>
+                      <dt className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-muted">{t('Days', 'الأيام')}</dt>
                       <dd className="mt-1 font-medium text-brand-charcoal">{focused.availableDays.join(', ')}</dd>
                     </div>
                   )}
@@ -520,7 +525,7 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                 <motion.section variants={revealItem}>
                   <h3 className="flex items-center gap-2 font-display text-lg font-semibold text-brand-charcoal">
                     <CheckCircle2 className="h-5 w-5 text-brand-sage" />
-                    What's included
+                    {t("What's included", 'ما تتضمنه')}
                   </h3>
                   <ul className="mt-4 grid grid-cols-1 gap-x-6 gap-y-2.5 sm:grid-cols-2">
                     {focused.includedItems.map(entry => (
@@ -537,7 +542,7 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                 <motion.section variants={revealItem} className="rounded-[28px] bg-brand-sand/50 p-6">
                   <h3 className="flex items-center gap-2 font-display text-lg font-semibold text-brand-charcoal">
                     <Paintbrush className="h-5 w-5 text-brand-terracotta" />
-                    Choose one activity
+                    {t('Choose one activity', 'اختر نشاطًا واحدًا')}
                   </h3>
                   <ul className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                     {focused.activityChoices.map(activity => (
@@ -563,7 +568,7 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                 <motion.section variants={revealItem}>
                   <h3 className="flex items-center gap-2 font-display text-lg font-semibold text-brand-charcoal">
                     <Cake className="h-5 w-5 text-brand-terracotta" />
-                    Customized birthday cake
+                    {t('Customized birthday cake', 'كعكة عيد ميلاد مخصصة')}
                   </h3>
                   {focused.cakeDescription && (
                     <p className="mt-2 text-sm text-brand-ink">{focused.cakeDescription}</p>
@@ -579,7 +584,7 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                             {size.label}
                           </span>
                           <span className="font-display text-lg font-semibold text-brand-charcoal ltr-numerals">
-                            {size.price} <span className="text-xs font-medium text-brand-muted">SAR</span>
+                            {size.price} <span className="text-xs font-medium text-brand-muted">{t('SAR', 'ريال')}</span>
                           </span>
                         </div>
                       ))}
@@ -615,7 +620,7 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                 <motion.section variants={revealItem} className="border-t border-brand-clay pt-6">
                   <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-brand-muted">
                     <ScrollText className="h-4 w-4" />
-                    Good to know
+                    {t('Good to know', 'من المهم معرفته')}
                   </h3>
                   {focused.customerNotes && (
                     <p className="mt-3 text-sm leading-relaxed text-brand-ink">{focused.customerNotes}</p>

@@ -5,6 +5,7 @@
 
 import React from 'react';
 import { MapPin } from 'lucide-react';
+import { useLanguage } from '../../context/LanguageContext';
 
 /**
  * A stylised map of the studio's block — drawn, not embedded.
@@ -31,12 +32,14 @@ export const AnimatedMap: React.FC<AnimatedMapProps> = ({
   label,
   coordinates,
   className = ''
-}) => (
+}) => {
+  const { t } = useLanguage();
+  return (
   <a
     href={href}
     target="_blank"
     rel="noopener noreferrer"
-    aria-label={`Open ${label} in Google Maps`}
+    aria-label={`${t('Open', 'افتح')} ${label} ${t('in Google Maps', 'في خرائط جوجل')}`}
     className={`group relative block overflow-hidden rounded-[22px] border border-brand-clay bg-brand-sand ${className}`}
   >
     {/* Streets */}
@@ -68,7 +71,7 @@ export const AnimatedMap: React.FC<AnimatedMapProps> = ({
     {/* Open badge */}
     <div className="absolute end-4 top-4 inline-flex items-center gap-2 rounded-full bg-brand-cream/95 px-3 py-1.5 text-[11px] font-semibold text-brand-charcoal shadow-card-sm backdrop-blur-sm">
       <span className="map-live-dot h-2 w-2 rounded-full bg-brand-sage" />
-      <span>Open today</span>
+      <span>{t('Open today', 'مفتوح اليوم')}</span>
     </div>
 
     {/* Place */}
@@ -76,11 +79,12 @@ export const AnimatedMap: React.FC<AnimatedMapProps> = ({
       <p className="font-display text-lg font-semibold text-brand-charcoal">{label}</p>
       <p className="mt-0.5 font-mono text-xs text-brand-muted ltr-numerals">{coordinates}</p>
       <span className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-brand-terracotta">
-        Open in Google Maps
+        {t('Open in Google Maps', 'افتح في خرائط جوجل')}
         <span className="transition-transform duration-200 group-hover:translate-x-1 flip-rtl">→</span>
       </span>
     </div>
   </a>
-);
+  );
+};
 
 export default AnimatedMap;
