@@ -44,7 +44,7 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2.112.2';
 import { sendSms } from '../_shared/mshastra.ts';
-import { cancellationMessage, ownsBooking, wasRefunded, type BookingRow } from './logic.ts';
+import { cancellationMessage, ownsBooking, wasRefunded, type BookingRow, type Lang } from './logic.ts';
 import type { NotifyOwnBookingRequest, NotifyOwnBookingResponse } from './contract.ts';
 
 const CORS_HEADERS = {
@@ -121,7 +121,7 @@ Deno.serve(async (req: Request) => {
   const admin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
   const { data: booking, error: bookingError } = await admin
     .from('bookings')
-    .select('id, customer_id, customer_phone, workshop_title, date, total_price, payment_status, status')
+    .select('id, customer_id, customer_phone, workshop_title, date, total_price, payment_status, status, customers(preferred_lang)')
     .eq('id', bookingId)
     .maybeSingle();
 
@@ -145,7 +145,8 @@ Deno.serve(async (req: Request) => {
     return json({ success: true }, 200);
   }
 
-  const message = cancellationMessage(booking as BookingRow, wasRefunded(booking as BookingRow));
+  const lang: Lang = (booking as BookingRow).customers?.preferred_lang === 'ar' ? 'ar' : 'en';
+  const message = cancellationMessage(booking as BookingRow, wasRefunded(booking as BookingRow), lang);
   const result = await sendSms(booking.customer_phone, message);
 
   return json(

@@ -14,6 +14,18 @@
  * triggered the cancellation.
  */
 
+export type Lang = 'en' | 'ar';
+
+/**
+ * validation.ts has no React context access either, so this mirrors its own
+ * translate(en, ar, lang) helper — same shape, declared locally rather than
+ * imported, since this file (like validation.ts) is deliberately
+ * dependency-free.
+ */
+function translate(en: string, ar: string, lang: Lang = 'en'): string {
+  return lang === 'ar' ? ar : en;
+}
+
 export interface BookingRow {
   id: string;
   customer_id: string | null;
@@ -23,6 +35,10 @@ export interface BookingRow {
   total_price: number | null;
   payment_status: string | null;
   status: string | null;
+  /** Embedded via the customer_id -> customers.id foreign key (0001_init.sql:183) —
+   *  index.ts's service-role read joins this in so cancellationMessage() can
+   *  pick a language. */
+  customers?: { preferred_lang: string | null } | null;
 }
 
 /** Whether the caller's own customer id matches this booking's owner. */
@@ -53,10 +69,18 @@ export function formatBookingDate(date?: string | null): string {
 }
 
 /** Same two messages notifyBookingCancellation() (AppContext.tsx) sends. */
-export function cancellationMessage(booking: BookingRow, refunded: boolean): string {
-  const title = booking.workshop_title || 'your booking';
+export function cancellationMessage(booking: BookingRow, refunded: boolean, lang: Lang = 'en'): string {
+  const title = booking.workshop_title || translate('your booking', 'حجزك', lang);
   const when = formatBookingDate(booking.date);
   return refunded
-    ? `Your booking for "${title}" on ${when} has been cancelled, and ${booking.total_price} SAR has been refunded. We hope to see you again soon!`
-    : `Your booking for "${title}" on ${when} has been cancelled. Per our cancellation policy, this booking was not eligible for a refund. Please contact Arty Café with any questions.`;
+    ? translate(
+        `Your booking for "${title}" on ${when} has been cancelled, and ${booking.total_price} SAR has been refunded. We hope to see you again soon!`,
+        `تم إلغاء حجزك لـ "${title}" بتاريخ ${when}، وتم استرداد ${booking.total_price} ريال سعودي. نأمل أن نراك قريبًا!`,
+        lang
+      )
+    : translate(
+        `Your booking for "${title}" on ${when} has been cancelled. Per our cancellation policy, this booking was not eligible for a refund. Please contact Arty Café with any questions.`,
+        `تم إلغاء حجزك لـ "${title}" بتاريخ ${when}. وبحسب سياسة الإلغاء لدينا، هذا الحجز غير مؤهل لاسترداد المبلغ. يرجى التواصل مع آرتي كافيه لأي استفسار.`,
+        lang
+      );
 }
