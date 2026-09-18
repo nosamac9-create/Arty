@@ -324,6 +324,70 @@ edit — judged the wrong trade. Change both together.
 
 ## Diagnosed, not fixed
 
+### AuthSection: a gap opens between the tab row and the form, mobile, one direction only
+
+**Not diagnosed.** Four hypotheses were eliminated against evidence from the device; the mechanism
+is still unknown. Do not start from a fifth theory — start from the measurement at the bottom of
+this entry.
+
+**Symptom.** On a phone: load Sign In, switch to Create Account, switch back to Sign In. A large
+empty gap appears between the tab row (`AuthSection.tsx:628`) and the form. Tall → short only; the
+reverse is clean.
+
+**Two facts that constrain any explanation, both confirmed on-device:**
+
+- **Stateful.** A cold load of Sign In, with no tab switching, has **no gap**. It only ever appears
+  after a Create Account → Sign In switch.
+- **Survives reduced motion.** With `prefers-reduced-motion: reduce` active, the gap is unchanged.
+  Verified that the setting is actually being read: the tab pill at `:651` is
+  `layoutId={prefersReducedMotion ? undefined : 'auth-tab-pill'}`, and it **jumps** rather than
+  slides, so `useReducedMotion()` is returning `true`.
+
+Those two together are what make this hard. With reduced motion on, `layout` is `false`,
+`initial` is `false` and `exit` is `undefined` — every Framer behaviour in the subtree is disabled,
+so the switch is a plain React re-render, which should not leave height behind. Yet the gap is
+stateful, so it cannot be static CSS either.
+
+**Eliminated, with what killed each:**
+
+| Hypothesis | Killed by |
+|---|---|
+| Framer `layout` projection residue on `:616` | Pill jumps → `layout` is off → gap persists anyway |
+| `min-h-full` on `:610` resolving against a stale grid row | No definite-height ancestor. `App.tsx`'s `<main className="flex-1 w-full">` is `display: block`, so its stretched height does not reach the grid; `.page-transition` sets no height; `:527`'s min-height is `lg:`-gated. `min-height: 100%` against an indefinite grid area resolves to `auto` |
+| `align-content` stretching the auto-sized grid rows | Same cause — requires the grid container to be taller than its rows, which the chain above rules out |
+| `AnimatePresence mode="wait"` holding the exiting form mounted | `animation-state.mjs:94` resolves `exit` as `props.exit ?? context.exit`; it does **not** fall back to `variants.exit`. The parent `motion.div` at `:616` has no variants, so both are `undefined`, which hits the early-skip at `:126` (`!prop && !typeState.prevProp`). No exit animation is created, so it resolves immediately. Also checked: no nested `motion` components exist inside either form (lines 707–870, 871–983), so nothing else can register with the presence context |
+
+**Worth knowing — this is the third generation of the same shape.** `git log -S` on the block:
+`5ff32b3` had an ungated `min-h-[550px]` on a stacking grid; `8e0fcaa` replaced it with an ungated
+`min-h-[calc(100vh-5rem)]` plus `items-center`; `e59c1cc` gated the tall min-height to `lg:` but
+left `min-h-full` on `:610` and `flex flex-col justify-center` on `:674`. Both of those are
+vestigial — the residue of a container that used to be deliberately taller than its content. They
+are not the current cause, but they are the reason a gap has somewhere to go if anything ever does
+over-size that box, and they are the first thing to consider removing once the mechanism is known.
+
+**Start here.** Reproduce the gap, then run this in the console. `childrenH` is the key output: it
+says which direct child of the card owns the extra height, which is the question all four dead
+hypotheses were circling.
+
+```js
+const card = document.querySelector('.max-w-md');
+const form = card.querySelector('.flex.flex-col.justify-center');
+console.log({
+  cardStyle: card.getAttribute('style'),
+  cardH: card.getBoundingClientRect().height,
+  formStyle: form.getAttribute('style'),
+  formH: form.getBoundingClientRect().height,
+  formScrollH: form.scrollHeight,
+  childCount: card.children.length,
+  childrenH: [...card.children].map(c => [c.className.slice(0, 40), c.getBoundingClientRect().height])
+});
+```
+
+If `formH > formScrollH`, the box is over-tall and `justify-center` at `:674` is merely revealing
+it. If they match, the space is outside that element and the tab row's `mb-8` or `:610`'s padding
+is where to look. Also worth checking whether a second form is still in the DOM — search the
+subtree for the "Create Account" heading.
+
 ### No SMS or in-app notification on customer self-cancellation
 
 A customer cancelling their own booking gets **zero** confirmation beyond what is on screen at that
