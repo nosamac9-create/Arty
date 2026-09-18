@@ -117,6 +117,21 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
 
   const priceLine = (pkg: BirthdayPackage) => `${pkg.pricingLabel || pkg.pricingType}`;
 
+  const chooseCta = focused && (
+    <>
+                <button
+                  type="button"
+                  onClick={() => onChoose(focused.id)}
+                  className="mt-6 w-full cursor-pointer rounded-full bg-brand-terracotta px-6 py-4 text-sm font-semibold text-brand-cream shadow-button transition-colors hover:bg-brand-terracotta-hover active:scale-[0.99]"
+                >
+                  Choose this package
+                </button>
+                <p className="mt-2.5 text-center text-[11px] text-brand-muted">
+                  {focused.depositAmount ?? DEFAULT_DEPOSIT_AMOUNT} SAR deposit confirms your date.
+                </p>
+    </>
+  );
+
   return (
     <div className="text-start">
 
@@ -488,16 +503,7 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                   )}
                 </dl>
 
-                <button
-                  type="button"
-                  onClick={() => onChoose(focused.id)}
-                  className="mt-6 w-full cursor-pointer rounded-full bg-brand-terracotta px-6 py-4 text-sm font-semibold text-brand-cream shadow-button transition-colors hover:bg-brand-terracotta-hover active:scale-[0.99]"
-                >
-                  Choose this package
-                </button>
-                <p className="mt-2.5 text-center text-[11px] text-brand-muted">
-                  {focused.depositAmount ?? DEFAULT_DEPOSIT_AMOUNT} SAR deposit confirms your date.
-                </p>
+                <div className="hidden lg:block">{chooseCta}</div>
               </motion.div>
             </div>
 
@@ -619,6 +625,12 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                   )}
                 </motion.section>
               )}
+
+              {/* The CTA again, last on a phone. The left column holds it on
+                  desktop, but that column renders first when the grid stacks,
+                  putting the decision above everything it depends on. One of
+                  the two is always hidden. */}
+              <div className="lg:hidden">{chooseCta}</div>
             </div>
           </motion.div>
         )}
