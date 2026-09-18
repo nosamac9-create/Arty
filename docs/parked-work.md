@@ -259,21 +259,52 @@ Fixing it properly means row-aware borders — the cell count is dynamic, so tha
 now used below `sm` to all widths. The latter is cleaner but changes the desktop rendering, which
 was explicitly out of scope for the pass that introduced it.
 
-### The migration warning covers the mobile tab bar
+### The migration warning covers the mobile tab bar — RESOLVED BY REMOVAL
 
-`MigrationWarning` (`src/components/MigrationWarning.tsx:32`) is `fixed bottom-4 left-4 right-4`
-at `z-[100]`. The customer tab bar is `z-40`, so while the warning is showing it renders over the
-navigation and covers it — on a phone that is most of the width of the bar.
+`MigrationWarning` (`src/components/MigrationWarning.tsx:32`) is `fixed bottom-4 left-4 right-4` at
+`z-[100]`, and the customer tab bar was `z-40`, so the warning rendered over the navigation and
+covered it while showing.
 
-This is pre-existing and was **not** introduced by the mobile breakpoint pass. Unlike the workshop
-page's CTA bar, this element never had a breakpoint gate or a tab-bar offset, so there was nothing
-to move when the gates went from `lg` to `md`. It is also a dev-time surface: it appears when the
-migration probe finds the schema behind, not on a normal customer page load.
+Resolved without touching `MigrationWarning`: the mobile tab bar has been removed entirely — the
+hamburger menu in the header already carries all five destinations, and a persistent bottom nav is
+an app pattern rather than a site one. With no bottom navigation to cover, the overlap cannot
+occur. The warning is unchanged and still the only fixed bottom-anchored element outside the
+birthday flow.
 
-Left alone deliberately. Fixing it means either offsetting it by `--mobile-tabbar-total` the way
-the other bottom-anchored elements now do, or dropping it below `z-40` — and which is right depends
-on whether a schema warning should be allowed to cover navigation, which is a judgement call rather
-than a defect.
+### Every safe-area term evaluates to 0px — the viewport meta lacks `viewport-fit=cover`
+
+`index.html:5` is:
+
+```html
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+```
+
+Without `viewport-fit=cover`, iOS keeps the layout viewport inside the safe area and never extends
+it under the home indicator or the notch. `env(safe-area-inset-*)` therefore resolves to **`0px`**
+on every device. Every safe-area term written in this codebase has been inert since it was added —
+nothing is broken by it, but none of it has ever done anything either.
+
+Currently one live consumer, after the tab bar's removal:
+
+- `BirthdayBookingSection.tsx` — the mobile summary bar's toggle,
+  `pb-[calc(0.875rem+env(safe-area-inset-bottom))]`. It is the bottom-most fixed element on that
+  page, so it is the one place the inset would matter.
+
+**Adding `viewport-fit=cover` is not a free change** and is deliberately not done here. It opts the
+whole page into drawing under the system UI, so it would affect more than the one bar above:
+
+- The birthday summary bar would gain real bottom padding on notched iPhones — the intended effect,
+  and the only clearly positive one.
+- Every page's content would extend under the home indicator at the bottom and under the status bar
+  at the top. Anything flush to a screen edge would need its own inset handling, including the
+  sticky header (`CustomerHeader.tsx:42`) and the footer.
+- `100vh` / `100dvh` values start including the area behind the system UI, which changes the
+  auth split-screen (`AuthSection.tsx:527`, `:534`, `:610`, all `calc(100vh-5rem)`) and the
+  modals now capped at `calc(100dvh-2rem)`.
+
+So it is a whole-app layout decision, not a meta-tag tweak. Worth doing deliberately if the site is
+ever installed as a PWA or wrapped, where drawing edge-to-edge is expected; not worth doing for the
+single bar that currently reads the inset.
 
 ### Modals still overflow on iOS when the software keyboard is up
 

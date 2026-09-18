@@ -16,16 +16,14 @@ export const CustomerHeader: React.FC = () => {
   const { t } = useLanguage();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // shortLabel is what fits under an icon in the mobile tab bar.
   const navItems = [
-    { id: 'home', label: t('Home', 'الرئيسية'), shortLabel: t('Home', 'الرئيسية'), icon: Coffee },
-    { id: 'workshops', label: t('Workshops', 'الورش'), shortLabel: t('Workshops', 'الورش'), icon: Palette },
-    { id: 'my-bookings', label: t('My Bookings', 'حجوزاتي'), shortLabel: t('Bookings', 'حجوزاتي'), icon: Calendar },
-    { id: 'my-pieces', label: t('My Pieces', 'أعمالي'), shortLabel: t('Pieces', 'أعمالي'), icon: Flame },
+    { id: 'home', label: t('Home', 'الرئيسية'), icon: Coffee },
+    { id: 'workshops', label: t('Workshops', 'الورش'), icon: Palette },
+    { id: 'my-bookings', label: t('My Bookings', 'حجوزاتي'), icon: Calendar },
+    { id: 'my-pieces', label: t('My Pieces', 'أعمالي'), icon: Flame },
     {
       id: 'auth',
       label: currentUser ? t('My Account', 'حسابي') : t('Login', 'تسجيل الدخول'),
-      shortLabel: t('Account', 'حسابي'),
       icon: User
     },
   ] as const;
@@ -39,7 +37,6 @@ export const CustomerHeader: React.FC = () => {
   };
 
   return (
-    <>
       <header className="sticky top-0 z-40 w-full border-b border-brand-clay bg-brand-cream/92 backdrop-blur-md">
         <div className="mx-auto flex h-[78px] max-w-7xl items-center justify-between gap-6 px-4 sm:px-6 lg:px-12">
 
@@ -130,32 +127,6 @@ export const CustomerHeader: React.FC = () => {
           </div>
         )}
       </header>
-
-      {/* Mobile bottom tab bar — the design's primary mobile navigation */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-brand-clay bg-brand-cream/95 backdrop-blur-md px-2 pb-[env(safe-area-inset-bottom)]">
-        {/* The row height is declared by --mobile-tabbar-h rather than left to
-            emerge from the buttons, so the page padding that clears this bar
-            (src/App.tsx) is driven by the same number. */}
-        <div className="flex h-[var(--mobile-tabbar-h)] items-stretch justify-around">
-          {navItems.map(item => {
-            const Icon = item.icon;
-            const isActive = customerTab === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => handleNavClick(item.id)}
-                className={`flex flex-1 flex-col items-center justify-center gap-1 text-[10px] font-semibold cursor-pointer transition-colors ${
-                  isActive ? 'text-brand-terracotta' : 'text-brand-muted'
-                }`}
-              >
-                <Icon className={`h-[18px] w-[18px] ${isActive ? '' : 'opacity-70'}`} />
-                <span>{item.shortLabel || item.label}</span>
-              </button>
-            );
-          })}
-        </div>
-      </nav>
-    </>
   );
 };
 

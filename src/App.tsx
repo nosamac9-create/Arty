@@ -82,11 +82,7 @@ export default function App() {
         
         /* 1. CUSTOMER SITE */
         <LanguageProvider>
-        {/* The bottom padding clears the fixed mobile tab bar. It sits on this
-            wrapper rather than on <main> so the footer is pushed clear too —
-            the footer was the surface the bar occluded worst. Gated to match
-            the bar's own md:hidden. */}
-        <div className="flex flex-col flex-1 justify-between min-h-screen bg-brand-sand pb-[var(--mobile-tabbar-total)] md:pb-0">
+        <div className="flex flex-col flex-1 justify-between min-h-screen bg-brand-sand">
           <CustomerHeader />
           
           <main className="flex-1 w-full">
