@@ -81,7 +81,7 @@ export default function App() {
       {area === 'customer' ? (
         
         /* 1. CUSTOMER SITE */
-        <LanguageProvider>
+        <LanguageProvider key="customer" scope="customer">
         <div className="flex flex-col flex-1 justify-between min-h-screen bg-brand-sand">
           <CustomerHeader />
           
@@ -106,8 +106,10 @@ export default function App() {
         </LanguageProvider>
       ) : (
         
-        /* 2. STAFF CONSOLE — guarded */
-        !staffAuthChecked ? (
+        /* 2. STAFF CONSOLE — guarded. The whole branch (login, forced password
+           change and the console itself) sits under the staff-scoped provider. */
+        <LanguageProvider key="staff" scope="staff">
+        {!staffAuthChecked ? (
           <div className="flex-1 flex items-center justify-center bg-brand-cream text-xs font-bold text-brand-charcoal/50">
             Checking your session…
           </div>
@@ -160,7 +162,8 @@ export default function App() {
             </main>
           </div>
         </div>
-        )
+        )}
+        </LanguageProvider>
       )}
 
     </div>

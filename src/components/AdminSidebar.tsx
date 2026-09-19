@@ -11,6 +11,7 @@ import {
 , Megaphone } from 'lucide-react';
 import { SETTINGS_SECTIONS } from '../utils/adminAccess';
 import { formatTime } from '../utils/calendarConfig';
+import { LanguageToggle } from './LanguageToggle';
 
 export const AdminSidebar: React.FC = () => {
   const {
@@ -217,6 +218,10 @@ export const AdminTopBar: React.FC = () => {
 
       {/* Right User block */}
       <div className="flex items-center gap-4">
+        {/* Console-scoped: reads the console's own language, never the customer
+            site's, and the console stays left-to-right either way. */}
+        <LanguageToggle />
+
         {/* Notification indicator */}
         <div className="relative">
           <button 

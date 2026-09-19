@@ -22,6 +22,17 @@ interface LanguageContextValue {
 const LanguageContext = createContext<LanguageContextValue | undefined>(undefined);
 
 const STORAGE_KEY = 'artycafe_lang';
+/** The console's own preference, separate from the customer site's, so choosing
+ *  Arabic for the console never changes what a customer sees, and vice versa. */
+const STAFF_STORAGE_KEY = 'artycafe_staff_lang';
+
+export type LanguageScope = 'customer' | 'staff';
+
+interface LanguageProviderProps {
+  children: React.ReactNode;
+  /** Defaults to 'customer', so an existing <LanguageProvider> behaves exactly as before. */
+  scope?: LanguageScope;
+}
 
 /**
  * Language and direction for the customer site.
@@ -30,13 +41,21 @@ const STORAGE_KEY = 'artycafe_lang';
  * properties (ms-*, me-*, text-start) then do the work, rather than every
  * component branching on the language.
  *
- * Only the customer-facing surfaces are translated; the staff console stays in
- * English, which is what the studio actually works in.
+ * The staff console gets its own provider (scope="staff"): its own stored
+ * language, and `lang` on <html> follows that choice — but direction is ALWAYS
+ * ltr and isRTL is always false, so the console's layout never mirrors.
+ *
+ * INVARIANT: only one provider may be mounted at a time, because both write to
+ * <html>. App.tsx guarantees it (customer XOR staff branch) and gives each a
+ * distinct `key` so React remounts instead of reusing one instance.
  */
-export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const LanguageProvider: React.FC<LanguageProviderProps> = ({ children, scope = 'customer' }) => {
+  const isStaff = scope === 'staff';
+  const storageKey = isStaff ? STAFF_STORAGE_KEY : STORAGE_KEY;
+
   const [lang, setLangState] = useState<Lang>(() => {
     try {
-      return (localStorage.getItem(STORAGE_KEY) as Lang) || 'en';
+      return (localStorage.getItem(storageKey) as Lang) || 'en';
     } catch {
       return 'en';
     }
@@ -44,20 +63,29 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   useEffect(() => {
     const root = document.documentElement;
+    if (isStaff) {
+      // Language follows the staff choice; direction never does. 'en-GB' is what
+      // index.html declares, so an English console leaves <html> as it starts.
+      root.lang = lang === 'ar' ? 'ar' : 'en-GB';
+      root.dir = 'ltr';
+      return () => {
+        root.lang = 'en-GB';
+        root.dir = 'ltr';
+      };
+    }
     root.lang = lang;
     root.dir = lang === 'ar' ? 'rtl' : 'ltr';
-    // The staff console is English-only and left-to-right; leaving the document
-    // mirrored behind us would break it.
+    // Leaving the document mirrored behind us would break the staff console.
     return () => {
       root.lang = 'en';
       root.dir = 'ltr';
     };
-  }, [lang]);
+  }, [lang, isStaff]);
 
   const setLang = (next: Lang) => {
     setLangState(next);
     try {
-      localStorage.setItem(STORAGE_KEY, next);
+      localStorage.setItem(storageKey, next);
     } catch {
       /* a blocked storage must not stop the switch working for this visit */
     }
@@ -66,7 +94,7 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const value: LanguageContextValue = {
     lang,
     setLang,
-    isRTL: lang === 'ar',
+    isRTL: !isStaff && lang === 'ar',
     t: (en, ar) => (lang === 'ar' ? ar : en)
   };
 
@@ -76,7 +104,7 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 export const useLanguage = (): LanguageContextValue => {
   const context = useContext(LanguageContext);
   if (!context) {
-    // The staff console renders outside the provider; English is correct there.
+    // Anything rendered outside a provider (e.g. MigrationWarning) gets English.
     return { lang: 'en', setLang: () => {}, isRTL: false, t: (en: string) => en };
   }
   return context;
