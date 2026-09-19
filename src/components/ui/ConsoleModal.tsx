@@ -6,6 +6,7 @@
 import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface Props {
   /** Heading content — a string, or a node when the header carries an avatar. */
@@ -46,6 +47,7 @@ const OUTER_GUTTER = '1.5rem';
 export const ConsoleModal: React.FC<Props> = ({
   title, onClose, children, footer, maxWidth = 'max-w-md', onSubmit
 }) => {
+  const { t } = useLanguage();
   /**
    * Nothing behind the modal scrolls while it is open.
    *
@@ -89,7 +91,7 @@ export const ConsoleModal: React.FC<Props> = ({
         <button
           type="button"
           onClick={onClose}
-          aria-label="Close"
+          aria-label={t('Close', 'إغلاق')}
           className="shrink-0 rounded-lg border border-transparent p-1.5 text-brand-charcoal hover:border-brand-clay/40 hover:bg-brand-sand focus:outline-none cursor-pointer"
         >
           <X className="h-5 w-5" />

@@ -15,7 +15,24 @@ const LABELS: Record<string, Record<string, string>> = {
   // The two walk-in modes staff choose between; stored as the queue entry's `type`.
   queueType:     { 'Without Instructor': 'بدون مدرب', 'With Instructor': 'مع مدرب' },
   // Status of a configured studio room or café table (studio_resources.status).
-  resourceStatus: { 'Active': 'نشط', 'Inactive': 'غير نشط', 'Maintenance': 'قيد الصيانة' }
+  resourceStatus: { 'Active': 'نشط', 'Inactive': 'غير نشط', 'Maintenance': 'قيد الصيانة' },
+  // Making stages of a pottery piece (pipeline_stages.name). Stage names are
+  // renamable in Settings, so a renamed or custom stage falls through as typed.
+  pieceStatus:   { 'Created': 'تم الإنشاء', 'First Burn and Colored': 'الحرق الأول والتلوين',
+                   'Ready for Pickup': 'جاهزة للاستلام', 'Collected': 'تم الاستلام', 'Broken': 'مكسورة' },
+  // How a broken piece was resolved; stored inside the reason text ("Resolved: Replaced").
+  resolutionType: { 'Replaced': 'تم الاستبدال', 'Refunded': 'تم الاسترداد', 'Other': 'أخرى' },
+  // What a completed visit was (derived in the customer metrics, compared for badge colour).
+  visitType:     { 'Birthday Package': 'باقة عيد ميلاد', 'Event': 'فعالية', 'Workshop': 'ورشة',
+                   'Live Queue Walk-in': 'زيارة مباشرة (الطابور المباشر)' },
+  // customers.status
+  customerStatus: { 'Active': 'نشط', 'VIP': 'مميز', 'Inactive': 'غير نشط', 'Blocked': 'محظور' },
+  // customers.source (one display site: the duplicate-customer warning)
+  customerSource: { 'Website Registration': 'تسجيل عبر الموقع', 'Website Booking': 'حجز عبر الموقع',
+                    'Workshop Booking': 'حجز ورشة', 'Event Booking': 'حجز فعالية',
+                    'Birthday Package': 'باقة عيد ميلاد', 'Live Queue': 'الطابور المباشر',
+                    'Admin Created': 'أنشأته الإدارة', 'Manual Admin Entry': 'إدخال يدوي من الإدارة',
+                    'Walk-in': 'زيارة مباشرة' }
 };
 
 export function enumLabel(group: keyof typeof LABELS, value: string, lang: Lang): string {

@@ -36,6 +36,10 @@ import { hasWebsiteAccount } from '../utils/accountUtils';
 import { matchesQuery, useDebouncedValue } from '../utils/search';
 import { usePagination, TablePager } from './ui/TablePager';
 import { ConsoleModal } from './ui/ConsoleModal';
+import { useLanguage } from '../context/LanguageContext';
+import type { Lang } from '../context/LanguageContext';
+import { enumLabel } from '../utils/enumLabels';
+import { localizedText } from '../utils/localizedText';
 
 /**
  * Reached by their own buttons underneath the dropdown, so they are left out of
@@ -44,12 +48,54 @@ import { ConsoleModal } from './ui/ConsoleModal';
  */
 const DEDICATED_BUTTON_STATUSES: string[] = ['Ready for Pickup', ...PIECE_END_STATES];
 
+type Translate = (en: string, ar: string) => string;
+
+/**
+ * Display text for a stored piece-history reason. The reasons stay English in the data
+ * (history, notifications); only the two defaults and the "Resolved: …" format this page
+ * writes are translated, and anything staff typed is shown exactly as entered.
+ */
+const RESOLVED_REASON = /^Resolved: (Replaced|Refunded|Other)(?: — (.+))?$/;
+function displayReason(reason: string, t: Translate, lang: Lang) {
+  if (reason === 'Piece reported broken') return t(reason, 'تم الإبلاغ عن كسر القطعة');
+  if (reason === 'Stage corrected backward') return t(reason, 'تم تصحيح المرحلة بالرجوع');
+  const m = RESOLVED_REASON.exec(reason);
+  if (m) return t(reason, `تمت التسوية: ${enumLabel('resolutionType', m[1], lang)}${m[2] ? ` — ${m[2]}` : ''}`);
+  return reason;
+}
+
+/**
+ * Display text for the derived customer "origin" badge. The origin is built in a memo and
+ * never stored, so it is translated here at render rather than where it is built.
+ */
+const BOOKING_ORIGIN = /^(.+) booking$/;
+function displayOrigin(origin: string, t: Translate, lang: Lang) {
+  switch (origin) {
+    case 'Website account': return t(origin, 'حساب على الموقع');
+    case 'Studio customer': return t(origin, 'عميل الاستوديو');
+    case 'Website booking': return t(origin, 'حجز عبر الموقع');
+    case 'Live Queue walk-in': return t(origin, 'عميل زيارة مباشرة من الطابور');
+  }
+  const m = BOOKING_ORIGIN.exec(origin);
+  return m ? t(origin, `حجز ${enumLabel('source', m[1], lang)}`) : origin;
+}
+
 export const AdminPiecesTrackingSection: React.FC = () => {
   const {
     pieces, updatePieceStatus, addPiece, updatePiece, workshops, bookings,
     // Shared records — no local copies of customers or staff.
     customers, queue, staff, resolveCustomer, pipelineStages
   } = useApp();
+  const { lang, t } = useLanguage();
+
+  // Display labels for the date shortcuts; applyDateShortcut still compares the English keys.
+  const shortcutLabels: Record<string, string> = {
+    'Today': enumLabel('dateScope', 'Today', lang),
+    'Last 7 Days': t('Last 7 Days', 'آخر 7 أيام'),
+    'Last 30 Days': t('Last 30 Days', 'آخر 30 يومًا'),
+    'This Month': t('This Month', 'هذا الشهر'),
+    'All Time': t('All Time', 'كل الأوقات')
+  };
 
   // Views and Filters state
   const [viewMode, setViewMode] = useState<'Board' | 'Table'>('Board');
@@ -132,7 +178,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
     const id = String(Date.now() + Math.random());
     setToasts(prev => [...prev, { id, title, message, highlighted }]);
     setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== id));
+      setToasts(prev => prev.filter(toast => toast.id !== id));
     }, 5000);
   };
 
@@ -303,8 +349,11 @@ export const AdminPiecesTrackingSection: React.FC = () => {
 
     const isReady = status === 'Ready for Pickup';
     triggerToast(
-      isReady ? 'Ready for Pickup!' : 'Status Shipped Successfully',
-      `Piece ${piece.pieceCode || pieceId} (${piece.customerName}) has been updated to "${status}" by ${user}.${reason ? ` Reason: ${reason}` : ''}`,
+      isReady ? t('Ready for Pickup!', 'جاهزة للاستلام!') : t('Status Shipped Successfully', 'تم تحديث الحالة بنجاح'),
+      t(
+        `Piece ${piece.pieceCode || pieceId} (${piece.customerName}) has been updated to "${status}" by ${user}.${reason ? ` Reason: ${reason}` : ''}`,
+        `تم تحديث القطعة ${piece.pieceCode || pieceId} (${piece.customerName}) إلى "${enumLabel('pieceStatus', status, lang)}" بواسطة ${user === 'Staff' ? 'الموظف' : user}.${reason ? ` السبب: ${displayReason(reason, t, lang)}` : ''}`
+      ),
       isReady
     );
   };
@@ -468,10 +517,10 @@ export const AdminPiecesTrackingSection: React.FC = () => {
         <div>
           <h1 className="font-display text-2xl font-bold text-brand-charcoal flex items-center gap-2">
             <Flame className="h-6 w-6 text-brand-terracotta shrink-0" />
-            <span>Ceramics Kiln & Shelf Tracker</span>
+            <span>{t('Ceramics Kiln & Shelf Tracker', 'متتبع فرن السيراميك والرفوف')}</span>
           </h1>
           <p className="text-xs text-brand-charcoal/60 mt-1">
-            Supervise drying stages, kiln firing schedules, glaze dip stations, and pickup shelves.
+            {t('Supervise drying stages, kiln firing schedules, glaze dip stations, and pickup shelves.', 'الإشراف على مراحل التجفيف وجداول حرق الفرن ومحطات غمس التزجيج ورفوف الاستلام.')}
           </p>
         </div>
 
@@ -485,7 +534,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
             className="cursor-pointer px-4 py-2 bg-brand-terracotta hover:bg-brand-terracotta/95 text-brand-cream rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all duration-200"
           >
             <Sparkles className="h-3.5 w-3.5" />
-            <span>+ Log Piece Manually</span>
+            <span>{t('+ Log Piece Manually', '+ تسجيل قطعة يدويًا')}</span>
           </button>
 
           {/* Board vs List Table Switcher */}
@@ -497,7 +546,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
               }`}
             >
               <LayoutGrid className="h-3.5 w-3.5" />
-              <span>Kanban Board</span>
+              <span>{t('Kanban Board', 'لوحة المراحل')}</span>
             </button>
             <button
               onClick={() => setViewMode('Table')}
@@ -506,7 +555,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
               }`}
             >
               <List className="h-3.5 w-3.5" />
-              <span>Table List</span>
+              <span>{t('Table List', 'عرض الجدول')}</span>
             </button>
           </div>
         </div>
@@ -522,7 +571,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-brand-charcoal/40" />
             <input
               type="text"
-              placeholder="Search code, customer, phone, ID, staff, workshop, status..."
+              placeholder={t('Search code, customer, phone, ID, staff, workshop, status...', 'ابحث بالرمز أو العميل أو الهاتف أو الرقم أو الموظف أو الورشة أو الحالة...')}
               value={search}
               onChange={e => setSearch(e.target.value)}
               className="w-full bg-brand-cream/40 border border-brand-clay/60 rounded-xl py-2 pl-9 pr-8 text-xs font-semibold text-brand-charcoal"
@@ -531,7 +580,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setSearch('')}
-                title="Clear search"
+                title={t('Clear search', 'مسح البحث')}
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 text-brand-charcoal/40 hover:text-brand-terracotta cursor-pointer"
               >
                 <X className="h-3.5 w-3.5" />
@@ -550,7 +599,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
               }`}
             >
               <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-              <span>Overdue Only (&gt;=10 days)</span>
+              <span>{t('Overdue Only (>=10 days)', 'المتأخرة فقط (10 أيام أو أكثر)')}</span>
             </button>
 
             <button
@@ -562,7 +611,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
               }`}
             >
               <Check className="h-3.5 w-3.5 shrink-0" />
-              <span>Ready for Pickup Only</span>
+              <span>{t('Ready for Pickup Only', 'الجاهزة للاستلام فقط')}</span>
             </button>
           </div>
         </div>
@@ -576,10 +625,10 @@ export const AdminPiecesTrackingSection: React.FC = () => {
               onChange={e => setDateField(e.target.value as any)}
               className="bg-transparent border-none text-[11px] font-bold text-brand-charcoal focus:ring-0 cursor-pointer pr-8 py-0.5"
             >
-              <option value="dateCreated">Date Created</option>
-              <option value="expectedCompletion">Expected Completion Date</option>
-              <option value="readyDate">Ready Date</option>
-              <option value="collectionDate">Collection Date</option>
+              <option value="dateCreated">{t('Date Created', 'تاريخ الإنشاء')}</option>
+              <option value="expectedCompletion">{t('Expected Completion Date', 'تاريخ الإنجاز المتوقع')}</option>
+              <option value="readyDate">{t('Ready Date', 'تاريخ الجاهزية')}</option>
+              <option value="collectionDate">{t('Collection Date', 'تاريخ الاستلام')}</option>
             </select>
           </div>
 
@@ -589,7 +638,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
               onChange={e => setStartDate(e.target.value)}
               className="bg-white border border-brand-clay/60 rounded-lg px-2 py-1 text-[11px] font-semibold text-brand-charcoal focus:outline-none focus:border-brand-terracotta"
             />
-            <span className="text-[11px] font-bold text-brand-charcoal/50">to</span>
+            <span className="text-[11px] font-bold text-brand-charcoal/50">{t('to', 'إلى')}</span>
             <DateInput
               value={endDate}
               onChange={e => setEndDate(e.target.value)}
@@ -614,7 +663,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                       : 'bg-brand-sand/50 hover:bg-brand-sand text-brand-charcoal/70'
                   }`}
                 >
-                  {shortcut}
+                  {shortcutLabels[shortcut]}
                 </button>
               );
             })}
@@ -627,11 +676,13 @@ export const AdminPiecesTrackingSection: React.FC = () => {
       {processedPieces.length === 0 && (
         <div className="bg-white border border-dashed border-brand-clay rounded-2xl p-10 text-center space-y-2">
           <Search className="h-6 w-6 text-brand-charcoal/30 mx-auto" />
-          <p className="text-sm font-bold text-brand-charcoal">No pottery pieces match your search</p>
+          <p className="text-sm font-bold text-brand-charcoal">{t('No pottery pieces match your search', 'لا توجد قطع فخار تطابق بحثك')}</p>
           <p className="text-xs text-brand-charcoal/60">
             {search.trim()
-              ? <>Nothing found for “<span className="font-bold">{search.trim()}</span>”. Try a piece code, customer name, phone, customer ID, assigned staff, workshop or status.</>
-              : 'No pieces match the current filters.'}
+              ? (lang === 'ar'
+                ? <>لم يُعثر على نتائج لـ “<span className="font-bold">{search.trim()}</span>”. جرّب رمز القطعة أو اسم العميل أو الهاتف أو رقم العميل أو الموظف المسؤول أو الورشة أو الحالة.</>
+                : <>Nothing found for “<span className="font-bold">{search.trim()}</span>”. Try a piece code, customer name, phone, customer ID, assigned staff, workshop or status.</>)
+              : t('No pieces match the current filters.', 'لا توجد قطع تطابق عوامل التصفية الحالية.')}
           </p>
           {(search.trim() || overdueOnly || awaitingCollectionOnly || startDate || endDate) && (
             <button
@@ -645,7 +696,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
               }}
               className="mt-1 px-4 py-2 bg-brand-sand hover:bg-brand-clay/40 text-brand-charcoal rounded-xl text-xs font-bold cursor-pointer"
             >
-              Clear search & filters
+              {t('Clear search & filters', 'مسح البحث وعوامل التصفية')}
             </button>
           )}
         </div>
@@ -673,9 +724,9 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                   style={stageColor(col) ? { borderLeft: `4px solid ${stageColor(col)}` } : undefined}
                 >
                   <span className="truncate pr-1 uppercase tracking-wider text-[10px] self-center">
-                    {col}
+                    {enumLabel('pieceStatus', col, lang)}
                     {!selectableStatuses.includes(col) && (
-                      <span className="ml-1 normal-case text-brand-charcoal/40">(disabled)</span>
+                      <span className="ml-1 normal-case text-brand-charcoal/40">{t('(disabled)', '(معطّلة)')}</span>
                     )}
                   </span>
                   <span className="bg-brand-cream rounded-full h-5 w-5 flex items-center justify-center text-[10px] text-brand-charcoal/80 border border-brand-clay/40 shrink-0 self-center">
@@ -723,7 +774,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                           {(p.expectedReadyDate || p.expectedCompletion) && (
                             <p className="text-[9px] text-brand-terracotta font-bold flex items-center gap-1">
                               <Clock className="h-3 w-3" />
-                              <span>Ready: {p.expectedReadyDate || p.expectedCompletion}</span>
+                              <span>{t('Ready:', 'جاهزة:')} {p.expectedReadyDate || p.expectedCompletion}</span>
                             </p>
                           )}
                         </div>
@@ -737,7 +788,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                           <span className={`font-bold uppercase tracking-wider text-[9px] shrink-0 ${
                             isOverdue ? 'text-red-500 animate-pulse font-extrabold' : 'text-brand-charcoal/40'
                           }`}>
-                            {p.daysElapsed} days
+                            {p.daysElapsed} {t('days', 'يوم')}
                           </span>
                         </div>
 
@@ -747,7 +798,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
 
                   {columnPieces.length === 0 && (
                     <div className="flex-1 flex flex-col items-center justify-center border border-dashed border-brand-clay/40 rounded-xl bg-brand-cream/10 p-4">
-                      <p className="text-[10px] text-brand-charcoal/30 text-center font-bold italic">Empty stage</p>
+                      <p className="text-[10px] text-brand-charcoal/30 text-center font-bold italic">{t('Empty stage', 'مرحلة فارغة')}</p>
                     </div>
                   )}
                 </div>
@@ -763,14 +814,14 @@ export const AdminPiecesTrackingSection: React.FC = () => {
             <table className="w-full text-xs text-left">
               <thead>
                 <tr className="bg-brand-cream/40 border-b border-brand-clay/60 text-brand-charcoal/50 uppercase tracking-wider font-semibold">
-                  <th className="p-4">Piece Code</th>
-                  <th className="p-4">Piece Name</th>
-                  <th className="p-4">Owner Name</th>
-                  <th className="p-4">Workshop Origin</th>
-                  <th className="p-4">Creation Date</th>
-                  <th className="p-4">Expected Ready Date</th>
-                  <th className="p-4">Storage Shelf</th>
-                  <th className="p-4 text-center">Lifecycle Status</th>
+                  <th className="p-4">{t('Piece Code', 'رمز القطعة')}</th>
+                  <th className="p-4">{t('Piece Name', 'اسم القطعة')}</th>
+                  <th className="p-4">{t('Owner Name', 'اسم المالك')}</th>
+                  <th className="p-4">{t('Workshop Origin', 'مصدر الورشة')}</th>
+                  <th className="p-4">{t('Creation Date', 'تاريخ الإنشاء')}</th>
+                  <th className="p-4">{t('Expected Ready Date', 'تاريخ الجاهزية المتوقع')}</th>
+                  <th className="p-4">{t('Storage Shelf', 'رف التخزين')}</th>
+                  <th className="p-4 text-center">{t('Lifecycle Status', 'مرحلة القطعة')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-brand-clay/30">
@@ -794,11 +845,11 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                       <td className="p-4">{p.customerName}</td>
                       <td className="p-4 text-brand-sage">{p.workshopName}</td>
                       <td className="p-4">{p.dateCreated}</td>
-                      <td className="p-4 font-bold text-brand-terracotta">{p.expectedReadyDate || p.expectedCompletion || 'N/A'}</td>
-                      <td className="p-4 font-bold font-mono">{p.storageLocation || 'Unassigned'}</td>
+                      <td className="p-4 font-bold text-brand-terracotta">{p.expectedReadyDate || p.expectedCompletion || t('N/A', 'غير متاح')}</td>
+                      <td className="p-4 font-bold font-mono">{p.storageLocation || t('Unassigned', 'غير محدد')}</td>
                       <td className="p-4 text-center">
                         <span className={`inline-flex items-center rounded-lg px-2.5 py-0.5 text-[10px] font-bold border ${getColumnColorClass(p.status)}`}>
-                          {p.status}
+                          {enumLabel('pieceStatus', p.status, lang)}
                         </span>
                       </td>
                     </tr>
@@ -816,7 +867,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
               to={tablePager.to}
               total={tablePager.total}
               onPage={tablePager.setPage}
-              noun="pieces"
+              noun={t('pieces', 'قطع')}
             />
           </div>
         </div>
@@ -829,8 +880,8 @@ export const AdminPiecesTrackingSection: React.FC = () => {
           onClose={() => setSelectedPieceId(null)}
           title={
             <span className="flex flex-col">
-              <span className="text-[10px] font-bold text-brand-terracotta font-mono uppercase tracking-widest">PIECE TRACKER DETAIL</span>
-              <span className="font-display text-xl font-bold text-brand-charcoal">Code: {selectedPiece.pieceCode || selectedPiece.id}</span>
+              <span className="text-[10px] font-bold text-brand-terracotta font-mono uppercase tracking-widest">{t('PIECE TRACKER DETAIL', 'تفاصيل تتبع القطعة')}</span>
+              <span className="font-display text-xl font-bold text-brand-charcoal">{t('Code:', 'الرمز:')} {selectedPiece.pieceCode || selectedPiece.id}</span>
             </span>
           }
           footer={
@@ -851,7 +902,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                   className="col-span-2 cursor-pointer bg-brand-charcoal hover:bg-brand-charcoal/90 text-brand-cream font-bold text-xs py-3 rounded-xl transition-all flex items-center justify-center gap-1.5"
                 >
                   <ClipboardList className="h-4 w-4" />
-                  <span>Resolve Broken Piece</span>
+                  <span>{t('Resolve Broken Piece', 'معالجة القطعة المكسورة')}</span>
                 </button>
               ) : (
                 <>
@@ -863,7 +914,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                     className="cursor-pointer bg-green-600 hover:bg-green-700 text-brand-cream font-bold text-xs py-3 rounded-xl transition-all shadow-sm flex items-center justify-center gap-1.5"
                   >
                     <Check className="h-4 w-4 stroke-[3]" />
-                    <span>Mark Ready for Pickup</span>
+                    <span>{t('Mark Ready for Pickup', 'تحديد كجاهزة للاستلام')}</span>
                   </button>
 
                   <button
@@ -874,7 +925,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                     className="cursor-pointer bg-brand-charcoal hover:bg-brand-charcoal/90 text-brand-cream font-bold text-xs py-3 rounded-xl transition-all flex items-center justify-center gap-1.5"
                   >
                     <ClipboardList className="h-4 w-4" />
-                    <span>Mark Collected / Picked Up</span>
+                    <span>{t('Mark Collected / Picked Up', 'تحديد كمستلمة / تم الاستلام')}</span>
                   </button>
 
                   <button
@@ -882,7 +933,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                     className="col-span-2 cursor-pointer bg-red-50 hover:bg-red-100 border border-red-300 text-red-700 font-bold text-xs py-3 rounded-xl transition-all flex items-center justify-center gap-1.5"
                   >
                     <AlertCircle className="h-4 w-4" />
-                    <span>Mark as Broken</span>
+                    <span>{t('Mark as Broken', 'تحديد كمكسورة')}</span>
                   </button>
                 </>
               )}
@@ -900,7 +951,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                 </div>
                 
                 <div className="space-y-1.5">
-                  <span className="text-[9px] font-bold text-brand-sage uppercase tracking-wider block">Assigned Pottery Staff</span>
+                  <span className="text-[9px] font-bold text-brand-sage uppercase tracking-wider block">{t('Assigned Pottery Staff', 'موظف الفخار المسؤول')}</span>
                   <div className="flex items-center gap-2">
                     <div className="h-6 w-6 shrink-0 rounded-full bg-brand-terracotta text-brand-cream flex items-center justify-center font-bold text-[10px]">
                       {selectedPiece.assignedStaff?.charAt(0) || '?'}
@@ -910,11 +961,15 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                       value={selectedPiece.assignedStaff || ''}
                       onChange={async e => {
                         await updatePiece(selectedPiece.id, { assignedStaff: e.target.value });
-                        triggerToast('Piece Reassigned', `Now assigned to ${e.target.value || 'nobody'}.`, false);
+                        triggerToast(
+                          t('Piece Reassigned', 'تمت إعادة التعيين'),
+                          t(`Now assigned to ${e.target.value || 'nobody'}.`, `تم تعيين القطعة إلى ${e.target.value || 'لا أحد'}.`),
+                          false
+                        );
                       }}
                       className="min-w-0 flex-1 bg-white border border-brand-clay/80 rounded-xl p-1.5 text-xs font-bold text-brand-charcoal cursor-pointer"
                     >
-                      <option value="">Unassigned</option>
+                      <option value="">{t('Unassigned', 'غير معيّن')}</option>
                       {selectedPiece.assignedStaff &&
                         !assignableStaff.some(st => st.name === selectedPiece.assignedStaff) && (
                         <option value={selectedPiece.assignedStaff}>{selectedPiece.assignedStaff}</option>
@@ -927,7 +982,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                   {/* Historical assignment kept even if that staff member is no longer active */}
                   {selectedPiece.assignedStaff && !assignableStaff.some(s => s.name === selectedPiece.assignedStaff) && (
                     <p className="text-[9px] font-semibold text-brand-charcoal/50 italic">
-                      No longer an active staff member — kept for history.
+                      {t('No longer an active staff member — kept for history.', 'لم يعد موظفًا نشطًا — محفوظ للسجل.')}
                     </p>
                   )}
                 </div>
@@ -937,13 +992,13 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                   <div className="space-y-1 bg-red-50 border border-red-200 rounded-xl p-2.5">
                     <span className="text-[9px] font-bold text-red-700 uppercase tracking-wider block flex items-center gap-1">
                       <AlertCircle className="h-3 w-3" />
-                      <span>Broken — Internal Note</span>
+                      <span>{t('Broken — Internal Note', 'مكسورة — ملاحظة داخلية')}</span>
                     </span>
                     <p className="text-[11px] font-semibold text-red-900">
-                      {selectedPiece.damageNote || 'No damage note recorded.'}
+                      {selectedPiece.damageNote ? displayReason(selectedPiece.damageNote, t, lang) : t('No damage note recorded.', 'لم تُسجَّل ملاحظة عن الضرر.')}
                     </p>
                     <p className="text-[9px] font-semibold text-red-700/70">
-                      The customer was asked to contact the café. This note is not shared with them.
+                      {t('The customer was asked to contact the café. This note is not shared with them.', 'طُلب من العميل التواصل مع المقهى. هذه الملاحظة غير مشتركة مع العميل.')}
                     </p>
                   </div>
                 )}
@@ -953,12 +1008,12 @@ export const AdminPiecesTrackingSection: React.FC = () => {
               <div className="space-y-4 text-xs text-brand-charcoal">
                 
                 <div className="space-y-1.5">
-                  <span className="font-bold text-brand-charcoal/50 block">Ceramic Piece Name</span>
+                  <span className="font-bold text-brand-charcoal/50 block">{t('Ceramic Piece Name', 'اسم قطعة السيراميك')}</span>
                   <p className="text-sm font-bold text-brand-charcoal">{selectedPiece.name}</p>
                 </div>
 
                 <div className="space-y-1.5">
-                  <span className="font-bold text-brand-charcoal/50 block">Artist Owner Info</span>
+                  <span className="font-bold text-brand-charcoal/50 block">{t('Artist Owner Info', 'بيانات الفنان المالك')}</span>
                   <div className="p-2.5 bg-brand-sand/40 border border-brand-clay rounded-xl">
                     <p className="font-bold">{selectedPiece.customerName}</p>
                     <p className="text-[10px] text-brand-charcoal/50 font-bold">{selectedPiece.customerPhone}</p>
@@ -969,8 +1024,8 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                 <div className="space-y-3 bg-brand-sand/30 p-3 rounded-2xl border border-brand-clay/60">
                   <div className="space-y-1">
                     <label className="font-bold text-brand-charcoal/70 block flex items-center justify-between">
-                      <span>Expected-Ready Date</span>
-                      <span className="text-[9px] text-brand-terracotta">Syncs to My Pieces</span>
+                      <span>{t('Expected-Ready Date', 'تاريخ الجاهزية المتوقع')}</span>
+                      <span className="text-[9px] text-brand-terracotta">{t('Syncs to My Pieces', 'يتزامن مع «أعمالي»')}</span>
                     </label>
                     <DateInput
                       value={editExpectedReadyDate}
@@ -980,7 +1035,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="font-bold text-brand-charcoal/70 block">Storage Shelf</label>
+                    <label className="font-bold text-brand-charcoal/70 block">{t('Storage Shelf', 'رف التخزين')}</label>
                     <input
                       type="text"
                       value={editStorageLocation}
@@ -991,12 +1046,12 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="font-bold text-brand-charcoal/70 block">Additional Description / Glazing Notes</label>
+                    <label className="font-bold text-brand-charcoal/70 block">{t('Additional Description / Glazing Notes', 'وصف إضافي / ملاحظات التزجيج')}</label>
                     <textarea
                       rows={3}
                       value={editGlazingNotes}
                       onChange={e => setEditGlazingNotes(e.target.value)}
-                      placeholder="Add optional piece details, glazing colour requests, finishing instructions, or other notes…"
+                      placeholder={t('Add optional piece details, glazing colour requests, finishing instructions, or other notes…', 'أضف تفاصيل اختيارية عن القطعة أو طلبات ألوان التزجيج أو تعليمات التشطيب أو ملاحظات أخرى…')}
                       className="w-full bg-white border border-brand-clay/80 rounded-xl p-2 font-semibold text-brand-charcoal text-xs resize-y"
                     />
                   </div>
@@ -1011,17 +1066,17 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                         additionalDescriptionGlazingNotes: editGlazingNotes,
                         notes: editGlazingNotes
                       });
-                      triggerToast('Updated Piece Details', `Piece details and glazing notes updated successfully.`, false);
+                      triggerToast(t('Updated Piece Details', 'تم تحديث بيانات القطعة'), t('Piece details and glazing notes updated successfully.', 'تم تحديث بيانات القطعة وملاحظات التزجيج بنجاح.'), false);
                     }}
                     className="w-full bg-brand-terracotta text-brand-cream font-bold py-2 rounded-xl text-xs hover:bg-brand-terracotta-hover transition-colors cursor-pointer"
                   >
-                    Save Changes
+                    {t('Save Changes', 'حفظ التغييرات')}
                   </button>
                 </div>
 
                 {/* Status selector directly within the detail dialog */}
                 <div className="space-y-1.5 pt-1">
-                  <label className="font-bold text-brand-charcoal/50 block">Advance Lifecycle State</label>
+                  <label className="font-bold text-brand-charcoal/50 block">{t('Advance Lifecycle State', 'تحديث مرحلة القطعة')}</label>
                   <select
                     value={selectedPiece.status}
                     onChange={e => onAttemptStatusChange(selectedPiece.id, e.target.value as any)}
@@ -1037,7 +1092,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                       .filter(col => selectableStatuses.includes(col) || col === selectedPiece.status)
                       .map(col => (
                         <option key={col} value={col}>
-                          {col}{!selectableStatuses.includes(col) ? ' (disabled)' : ''}
+                          {enumLabel('pieceStatus', col, lang)}{!selectableStatuses.includes(col) ? t(' (disabled)', ' (معطّلة)') : ''}
                         </option>
                       ))}
                   </select>
@@ -1065,7 +1120,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                   <AlertCircle className="h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className="font-display text-base font-bold text-brand-charcoal">Mark Piece as Broken</h3>
+                  <h3 className="font-display text-base font-bold text-brand-charcoal">{t('Mark Piece as Broken', 'تحديد القطعة كمكسورة')}</h3>
                   <p className="text-[11px] font-semibold text-brand-charcoal/60">
                     {target.pieceCode || target.id} · {target.customerName}
                   </p>
@@ -1073,20 +1128,18 @@ export const AdminPiecesTrackingSection: React.FC = () => {
               </div>
 
               <p className="text-[11px] font-semibold text-brand-charcoal/70 bg-brand-cream/60 border border-brand-clay/50 rounded-xl p-2.5">
-                The customer is notified that there is an important update and asked to contact the café.
-                Your internal note stays in the console and is never sent to them.
-                The piece is not marked collected or cancelled.
+                {t('The customer is notified that there is an important update and asked to contact the café. Your internal note stays in the console and is never sent to them. The piece is not marked collected or cancelled.', 'يُبلَّغ العميل بوجود تحديث مهم ويُطلب التواصل مع المقهى. تبقى ملاحظتك الداخلية في لوحة التحكم ولا تُرسل إلى العميل أبدًا. لا تُحدَّد القطعة كمستلمة أو ملغاة.')}
               </p>
 
               <div className="space-y-3.5 text-xs">
                 <div className="space-y-1">
-                  <label className="font-bold text-brand-charcoal/60 block">Staff member recording this *</label>
+                  <label className="font-bold text-brand-charcoal/60 block">{t('Staff member recording this *', 'الموظف الذي يسجّل هذا *')}</label>
                   <select
                     value={brokenPerformer}
                     onChange={e => { setBrokenPerformer(e.target.value); setBrokenError(''); }}
                     className="w-full bg-brand-cream border border-brand-clay rounded-xl p-2.5 font-bold text-brand-charcoal cursor-pointer"
                   >
-                    <option value="">Select staff member...</option>
+                    <option value="">{t('Select staff member...', 'اختر الموظف...')}</option>
                     {assignableStaff.map(s => (
                       <option key={s.id} value={s.name}>{s.name}</option>
                     ))}
@@ -1094,12 +1147,12 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="font-bold text-brand-charcoal/60 block">Internal reason / damage note</label>
+                  <label className="font-bold text-brand-charcoal/60 block">{t('Internal reason / damage note', 'السبب الداخلي / ملاحظة الضرر')}</label>
                   <textarea
                     value={brokenReason}
                     onChange={e => setBrokenReason(e.target.value)}
                     rows={3}
-                    placeholder="E.g. Cracked during kiln firing — handle separated at the join."
+                    placeholder={t('E.g. Cracked during kiln firing — handle separated at the join.', 'مثال: تشقّقت أثناء الحرق في الفرن — انفصل المقبض عند الوصلة.')}
                     className="w-full bg-brand-cream border border-brand-clay rounded-xl p-2.5 font-semibold text-brand-charcoal"
                   />
                 </div>
@@ -1116,12 +1169,12 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                   onClick={() => { setBrokenTargetId(null); setBrokenError(''); }}
                   className="bg-brand-sand/60 hover:bg-brand-sand text-brand-charcoal font-bold text-xs py-3 rounded-xl cursor-pointer transition-colors"
                 >
-                  Cancel
+                  {t('Cancel', 'إلغاء')}
                 </button>
                 <button
                   onClick={async () => {
                     if (!brokenPerformer) {
-                      setBrokenError('Select the staff member recording this.');
+                      setBrokenError(t('Select the staff member recording this.', 'اختر الموظف الذي يسجّل هذا.'));
                       return;
                     }
                     await handleUpdatePieceStatus(
@@ -1138,7 +1191,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                   }}
                   className="bg-red-600 hover:bg-red-700 text-brand-cream font-bold text-xs py-3 rounded-xl cursor-pointer transition-colors shadow-sm"
                 >
-                  Confirm Broken
+                  {t('Confirm Broken', 'تأكيد الكسر')}
                 </button>
               </div>
             </div>
@@ -1162,7 +1215,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                   <ClipboardList className="h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className="font-display text-base font-bold text-brand-charcoal">Resolve Broken Piece</h3>
+                  <h3 className="font-display text-base font-bold text-brand-charcoal">{t('Resolve Broken Piece', 'معالجة القطعة المكسورة')}</h3>
                   <p className="text-[11px] font-semibold text-brand-charcoal/60">
                     {target.pieceCode || target.id} · {target.customerName}
                   </p>
@@ -1170,12 +1223,12 @@ export const AdminPiecesTrackingSection: React.FC = () => {
               </div>
 
               <p className="text-[11px] font-semibold text-brand-charcoal/70 bg-brand-cream/60 border border-brand-clay/50 rounded-xl p-2.5">
-                This closes the piece out as Collected. Choose how it was resolved with the customer.
+                {t('This closes the piece out as Collected. Choose how it was resolved with the customer.', 'يؤدي هذا إلى إغلاق القطعة كـ«مستلمة». اختر كيف تمت التسوية مع العميل.')}
               </p>
 
               <div className="space-y-3.5 text-xs">
                 <div className="space-y-1.5">
-                  <label className="font-bold text-brand-charcoal/60 block">Resolution *</label>
+                  <label className="font-bold text-brand-charcoal/60 block">{t('Resolution *', 'التسوية *')}</label>
                   <div className="grid grid-cols-3 gap-2">
                     {RESOLUTION_TYPES.map(type => (
                       <button
@@ -1188,20 +1241,20 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                             : 'bg-brand-cream border-brand-clay text-brand-charcoal hover:bg-brand-sand'
                         }`}
                       >
-                        {type}
+                        {enumLabel('resolutionType', type, lang)}
                       </button>
                     ))}
                   </div>
                 </div>
 
                 <div className="space-y-1">
-                  <label className="font-bold text-brand-charcoal/60 block">Staff member recording this *</label>
+                  <label className="font-bold text-brand-charcoal/60 block">{t('Staff member recording this *', 'الموظف الذي يسجّل هذا *')}</label>
                   <select
                     value={resolvePerformer}
                     onChange={e => { setResolvePerformer(e.target.value); setResolveError(''); }}
                     className="w-full bg-brand-cream border border-brand-clay rounded-xl p-2.5 font-bold text-brand-charcoal cursor-pointer"
                   >
-                    <option value="">Select staff member...</option>
+                    <option value="">{t('Select staff member...', 'اختر الموظف...')}</option>
                     {assignableStaff.map(s => (
                       <option key={s.id} value={s.name}>{s.name}</option>
                     ))}
@@ -1210,13 +1263,13 @@ export const AdminPiecesTrackingSection: React.FC = () => {
 
                 <div className="space-y-1">
                   <label className="font-bold text-brand-charcoal/60 block">
-                    Note{resolveType === 'Other' ? ' *' : ' (optional)'}
+                    {t('Note', 'ملاحظة')}{resolveType === 'Other' ? ' *' : t(' (optional)', ' (اختياري)')}
                   </label>
                   <textarea
                     value={resolveNote}
                     onChange={e => { setResolveNote(e.target.value); setResolveError(''); }}
                     rows={3}
-                    placeholder={resolveType === 'Other' ? 'Describe how this was resolved…' : 'Optional additional detail…'}
+                    placeholder={resolveType === 'Other' ? t('Describe how this was resolved…', 'صف كيف تمت التسوية…') : t('Optional additional detail…', 'تفاصيل إضافية اختيارية…')}
                     className="w-full bg-brand-cream border border-brand-clay rounded-xl p-2.5 font-semibold text-brand-charcoal"
                   />
                 </div>
@@ -1233,20 +1286,20 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                   onClick={() => { setResolveTargetId(null); setResolveError(''); }}
                   className="bg-brand-sand/60 hover:bg-brand-sand text-brand-charcoal font-bold text-xs py-3 rounded-xl cursor-pointer transition-colors"
                 >
-                  Cancel
+                  {t('Cancel', 'إلغاء')}
                 </button>
                 <button
                   onClick={async () => {
                     if (!resolveType) {
-                      setResolveError('Choose how this was resolved.');
+                      setResolveError(t('Choose how this was resolved.', 'اختر كيف تمت التسوية.'));
                       return;
                     }
                     if (!resolvePerformer) {
-                      setResolveError('Select the staff member recording this.');
+                      setResolveError(t('Select the staff member recording this.', 'اختر الموظف الذي يسجّل هذا.'));
                       return;
                     }
                     if (resolveType === 'Other' && !resolveNote.trim()) {
-                      setResolveError('Add a note describing the resolution.');
+                      setResolveError(t('Add a note describing the resolution.', 'أضف ملاحظة تصف التسوية.'));
                       return;
                     }
                     const formattedReason = `Resolved: ${resolveType}${resolveNote.trim() ? ` — ${resolveNote.trim()}` : ''}`;
@@ -1260,7 +1313,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                   }}
                   className="bg-brand-charcoal hover:bg-brand-charcoal/90 text-brand-cream font-bold text-xs py-3 rounded-xl cursor-pointer transition-colors shadow-sm"
                 >
-                  Confirm Resolution
+                  {t('Confirm Resolution', 'تأكيد التسوية')}
                 </button>
               </div>
             </div>
@@ -1274,7 +1327,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
             <div className="flex justify-between items-center border-b border-brand-clay/60 pb-3">
               <h3 className="font-display text-lg font-bold text-red-600 flex items-center gap-2">
                 <AlertCircle className="h-5 w-5 shrink-0 text-red-600" />
-                <span>Confirm Reverting Stage</span>
+                <span>{t('Confirm Reverting Stage', 'تأكيد إرجاع المرحلة')}</span>
               </h3>
               <button 
                 onClick={() => setBackwardMoveTarget(null)}
@@ -1285,18 +1338,20 @@ export const AdminPiecesTrackingSection: React.FC = () => {
             </div>
 
             <p className="text-xs text-brand-charcoal/70 leading-relaxed font-semibold">
-              Warning: You are moving piece <span className="font-mono font-bold text-brand-terracotta">{backwardMoveTarget.pieceId}</span> backward from <span className="font-bold uppercase text-brand-charcoal">{backwardMoveTarget.currentStatus}</span> to <span className="font-bold uppercase text-brand-terracotta">{backwardMoveTarget.targetStatus}</span>. Reverting stages requires validation and a recorded justification.
+              {lang === 'ar'
+                ? <>تحذير: أنت تنقل القطعة <span className="font-mono font-bold text-brand-terracotta">{backwardMoveTarget.pieceId}</span> إلى الخلف من <span className="font-bold uppercase text-brand-charcoal">{enumLabel('pieceStatus', backwardMoveTarget.currentStatus, lang)}</span> إلى <span className="font-bold uppercase text-brand-terracotta">{enumLabel('pieceStatus', backwardMoveTarget.targetStatus, lang)}</span>. يتطلب إرجاع المراحل تحققًا ومبررًا مسجَّلًا.</>
+                : <>Warning: You are moving piece <span className="font-mono font-bold text-brand-terracotta">{backwardMoveTarget.pieceId}</span> backward from <span className="font-bold uppercase text-brand-charcoal">{backwardMoveTarget.currentStatus}</span> to <span className="font-bold uppercase text-brand-terracotta">{backwardMoveTarget.targetStatus}</span>. Reverting stages requires validation and a recorded justification.</>}
             </p>
 
             <div className="space-y-3.5 text-xs">
               <div className="space-y-1">
-                <label className="font-bold text-brand-charcoal/60 block">Who is performing this reversal?</label>
+                <label className="font-bold text-brand-charcoal/60 block">{t('Who is performing this reversal?', 'من يُجري هذا الإرجاع؟')}</label>
                 <select
                   value={backwardPerformer}
                   onChange={e => setBackwardPerformer(e.target.value)}
                   className="w-full bg-brand-cream border border-brand-clay rounded-xl p-2.5 font-bold text-brand-charcoal cursor-pointer"
                 >
-                  <option value="">Select staff member...</option>
+                  <option value="">{t('Select staff member...', 'اختر الموظف...')}</option>
                   {assignableStaff.map(s => (
                     <option key={s.id} value={s.name}>{s.name}</option>
                   ))}
@@ -1304,13 +1359,13 @@ export const AdminPiecesTrackingSection: React.FC = () => {
               </div>
 
               <div className="space-y-1">
-                <label className="font-bold text-brand-charcoal/60 block">Reason for Reversal / Correction note</label>
+                <label className="font-bold text-brand-charcoal/60 block">{t('Reason for Reversal / Correction note', 'سبب الإرجاع / ملاحظة التصحيح')}</label>
                 <textarea
                   value={backwardReason}
                   onChange={e => setBackwardReason(e.target.value)}
                   className="w-full bg-brand-cream border border-brand-clay rounded-xl p-2.5 font-semibold text-brand-charcoal"
                   rows={3}
-                  placeholder="E.g. Piece needs more drying time, glazing correction required..."
+                  placeholder={t('E.g. Piece needs more drying time, glazing correction required...', 'مثال: القطعة تحتاج وقتًا أطول للتجفيف أو يلزم تصحيح التزجيج...')}
                 />
               </div>
             </div>
@@ -1320,7 +1375,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                 onClick={() => setBackwardMoveTarget(null)}
                 className="bg-brand-sand/60 hover:bg-brand-sand text-brand-charcoal font-bold text-xs py-3 rounded-xl cursor-pointer transition-colors text-center"
               >
-                Cancel Move
+                {t('Cancel Move', 'إلغاء النقل')}
               </button>
               <button
                 onClick={() => {
@@ -1334,7 +1389,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                 }}
                 className="bg-brand-terracotta hover:bg-brand-terracotta/90 text-brand-cream font-bold text-xs py-3 rounded-xl cursor-pointer transition-colors text-center shadow-sm"
               >
-                Confirm Reversal
+                {t('Confirm Reversal', 'تأكيد الإرجاع')}
               </button>
             </div>
           </div>
@@ -1349,10 +1404,10 @@ export const AdminPiecesTrackingSection: React.FC = () => {
             {/* Modal Header */}
             <div className="flex justify-between items-center border-b border-brand-clay/60 pb-3">
               <div>
-                <span className="text-[10px] font-bold text-brand-terracotta font-mono uppercase tracking-widest block">Pottery Logging Console</span>
+                <span className="text-[10px] font-bold text-brand-terracotta font-mono uppercase tracking-widest block">{t('Pottery Logging Console', 'لوحة تسجيل الفخار')}</span>
                 <h3 className="font-display text-xl font-bold text-brand-charcoal flex items-center gap-2">
                   <Sparkles className="h-5 w-5 text-brand-terracotta shrink-0" />
-                  <span>Log Piece Manually</span>
+                  <span>{t('Log Piece Manually', 'تسجيل قطعة يدويًا')}</span>
                 </h3>
               </div>
               <button 
@@ -1371,12 +1426,12 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                 
                 {/* Searchable Customer Input with PhoneInput */}
                 <div className="space-y-1.5 relative">
-                  <label className="font-bold text-brand-charcoal/60 block">1. Customer / Ceramic Owner *</label>
+                  <label className="font-bold text-brand-charcoal/60 block">{t('1. Customer / Ceramic Owner *', '1. العميل / مالك القطعة *')}</label>
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-brand-charcoal/40" />
                     <input
                       type="text"
-                      placeholder="Type customer name to search existing..."
+                      placeholder={t('Type customer name to search existing...', 'اكتب اسم العميل للبحث بين العملاء الحاليين...')}
                       value={custSearch}
                       onChange={e => {
                         setCustSearch(e.target.value);
@@ -1418,14 +1473,14 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                               ? 'bg-brand-sand/50 text-brand-sage'
                               : 'bg-purple-50 text-purple-700'
                           }`}>
-                            {c.origin}
+                            {displayOrigin(c.origin, t, lang)}
                           </span>
                         </button>
                       ))}
 
                       {filteredCustResults.length === 0 && (
                         <p className="p-2.5 text-[11px] font-semibold text-brand-charcoal/50 italic">
-                          No matching customer. Use "Add as new customer" below.
+                          {t('No matching customer. Use "Add as new customer" below.', 'لا يوجد عميل مطابق. استخدم «إضافة كعميل جديد» أدناه.')}
                         </p>
                       )}
 
@@ -1440,7 +1495,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                         }}
                         className="w-full text-left p-2.5 hover:bg-brand-terracotta/5 font-bold text-brand-terracotta text-xs flex items-center gap-1.5 cursor-pointer"
                       >
-                        <span>+ Add "{custSearch}" as New Customer</span>
+                        <span>{t('+ Add', '+ إضافة')} "{custSearch}" {t('as New Customer', 'كعميل جديد')}</span>
                       </button>
                     </div>
                   )}
@@ -1448,19 +1503,19 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                   {/* Customer Phone & Name */}
                   <div className="p-3 bg-brand-sand/35 border border-brand-clay/60 rounded-xl space-y-3 mt-2">
                     <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-brand-charcoal/70">Customer Name *</label>
+                      <label className="text-[10px] font-bold text-brand-charcoal/70">{t('Customer Name *', 'اسم العميل *')}</label>
                       <input
                         type="text"
                         required
                         value={manualName}
                         onChange={e => setManualName(e.target.value)}
-                        placeholder="e.g. Noura Al-Amri"
+                        placeholder={t('e.g. Noura Al-Amri', 'مثال: نورة العمري')}
                         className="w-full bg-white border border-brand-clay rounded-xl p-2 font-bold text-brand-charcoal"
                       />
                     </div>
 
                     <PhoneInput
-                      label="Customer Phone Number"
+                      label={t('Customer Phone Number', 'رقم هاتف العميل')}
                       required
                       value={manualPhone}
                       onChange={setManualPhone}
@@ -1470,22 +1525,22 @@ export const AdminPiecesTrackingSection: React.FC = () => {
 
                 {/* Optional Workshop dropdown */}
                 <div className="space-y-1.5">
-                  <label className="font-bold text-brand-charcoal/60 block">2. Workshop / Class Origin (Optional)</label>
+                  <label className="font-bold text-brand-charcoal/60 block">{t('2. Workshop / Class Origin (Optional)', '2. الورشة / الدرس الأصلي (اختياري)')}</label>
                   <select
                     value={relatedWorkshopId}
                     onChange={e => setRelatedWorkshopId(e.target.value)}
                     className="w-full bg-white border border-brand-clay rounded-xl p-2.5 font-semibold text-brand-charcoal cursor-pointer"
                   >
-                    <option value="">None / Freestyle Studio Play</option>
+                    <option value="">{t('None / Freestyle Studio Play', 'بدون / لعب حر في الاستوديو')}</option>
                     {workshops.map(w => (
-                      <option key={w.id} value={w.id}>{w.title}</option>
+                      <option key={w.id} value={w.id}>{localizedText(w.title, w.titleAr, lang)}</option>
                     ))}
                   </select>
                 </div>
 
                 {/* Piece Type Selection */}
                 <div className="space-y-1.5">
-                  <label className="font-bold text-brand-charcoal/60 block">3. Pottery Piece Type</label>
+                  <label className="font-bold text-brand-charcoal/60 block">{t('3. Pottery Piece Type', '3. نوع قطعة الفخار')}</label>
                   <select
                     value={pieceType}
                     onChange={e => {
@@ -1493,21 +1548,21 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                     }}
                     className="w-full bg-white border border-brand-clay rounded-xl p-2.5 font-bold text-brand-charcoal cursor-pointer"
                   >
-                    <option value="Mug">Mug</option>
-                    <option value="Bowl">Bowl</option>
-                    <option value="Plate">Plate</option>
-                    <option value="Vase">Vase</option>
-                    <option value="Sculpture">Sculpture</option>
-                    <option value="Other">Other (Trinket Box, Tile, etc.)</option>
+                    <option value="Mug">{t('Mug', 'كوب')}</option>
+                    <option value="Bowl">{t('Bowl', 'وعاء')}</option>
+                    <option value="Plate">{t('Plate', 'طبق')}</option>
+                    <option value="Vase">{t('Vase', 'مزهرية')}</option>
+                    <option value="Sculpture">{t('Sculpture', 'منحوتة')}</option>
+                    <option value="Other">{t('Other (Trinket Box, Tile, etc.)', 'أخرى (علبة حلي، بلاطة، إلخ)')}</option>
                   </select>
                 </div>
 
                 {/* Additional Description / Glazing Notes */}
                 <div className="space-y-1.5">
-                  <label className="font-bold text-brand-charcoal/80 block">4. Additional Description / Glazing Notes</label>
+                  <label className="font-bold text-brand-charcoal/80 block">{t('4. Additional Description / Glazing Notes', '4. وصف إضافي / ملاحظات التزجيج')}</label>
                   <textarea
                     rows={3}
-                    placeholder="Add optional piece details, glazing colour requests, finishing instructions, or other notes…"
+                    placeholder={t('Add optional piece details, glazing colour requests, finishing instructions, or other notes…', 'أضف تفاصيل اختيارية عن القطعة أو طلبات ألوان التزجيج أو تعليمات التشطيب أو ملاحظات أخرى…')}
                     value={manualNotes}
                     onChange={e => setManualNotes(e.target.value)}
                     className="w-full bg-white border border-brand-clay rounded-xl p-2.5 font-semibold text-brand-charcoal text-xs resize-y"
@@ -1522,33 +1577,33 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                 {/* OPTION 5: PIECE CODE (Required, Unique, Searchable) */}
                 <div className="space-y-1.5">
                   <label className="font-bold text-brand-charcoal/80 block flex items-center justify-between">
-                    <span>5. Piece Code *</span>
-                    <span className="text-[10px] text-brand-terracotta font-mono">Unique Identifier</span>
+                    <span>{t('5. Piece Code *', '5. رمز القطعة *')}</span>
+                    <span className="text-[10px] text-brand-terracotta font-mono">{t('Unique Identifier', 'معرّف فريد')}</span>
                   </label>
                   <div className="relative">
                     <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-brand-terracotta" />
                     <input
                       type="text"
                       required
-                      placeholder="e.g. AC-8802"
+                      placeholder={t('e.g. AC-8802', 'مثال: AC-8802')}
                       value={pieceCodeInput}
                       onChange={e => setPieceCodeInput(e.target.value.toUpperCase())}
                       className="w-full bg-white border-2 border-brand-terracotta/40 rounded-xl py-2.5 pl-9 pr-3 font-mono font-bold text-brand-charcoal uppercase tracking-wider"
                     />
                   </div>
-                  <p className="text-[10px] text-brand-charcoal/50 font-semibold">Unique piece code stamped/written on the physical piece.</p>
+                  <p className="text-[10px] text-brand-charcoal/50 font-semibold">{t('Unique piece code stamped/written on the physical piece.', 'رمز فريد مختوم أو مكتوب على القطعة الفعلية.')}</p>
                 </div>
 
                 {/* OPTION 6: PHONE-CAMERA CAPTURE & PHOTO PREVIEW */}
                 <div className="space-y-2 bg-brand-sand/30 p-3 rounded-2xl border border-brand-clay/60">
-                  <label className="font-bold text-brand-charcoal/80 block">6. Photo Capture & Preview</label>
+                  <label className="font-bold text-brand-charcoal/80 block">{t('6. Photo Capture & Preview', '6. التقاط الصورة ومعاينتها')}</label>
                   
                   <div className="grid grid-cols-2 gap-3 items-center">
                     <div className="aspect-video rounded-xl bg-brand-sand overflow-hidden border border-brand-clay relative">
                       {customPhotoUrl ? (
                         <img
                           src={customPhotoUrl}
-                          alt="Preview"
+                          alt={t('Preview', 'معاينة')}
                           className="h-full w-full object-cover"
                           referrerPolicy="no-referrer"
                         />
@@ -1556,7 +1611,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                         // The sand frame with nothing in it: honest about there
                         // being no photograph of this piece yet.
                         <div className="flex h-full w-full items-center justify-center text-[10px] font-semibold text-brand-charcoal/40">
-                          No photo yet
+                          {t('No photo yet', 'لا توجد صورة بعد')}
                         </div>
                       )}
                     </div>
@@ -1564,7 +1619,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                     <div className="space-y-2">
                       <label className="cursor-pointer bg-brand-terracotta hover:bg-brand-terracotta-hover text-brand-cream text-[11px] font-bold py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 shadow-xs transition-colors">
                         <Camera className="h-4 w-4" />
-                        <span>Take Photo / Upload</span>
+                        <span>{t('Take Photo / Upload', 'التقاط صورة / رفع')}</span>
                         <input
                           type="file"
                           accept="image/*"
@@ -1573,7 +1628,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                           className="hidden"
                         />
                       </label>
-                      <p className="text-[9px] text-brand-charcoal/60 leading-tight">Use phone camera to snap piece photo directly.</p>
+                      <p className="text-[9px] text-brand-charcoal/60 leading-tight">{t('Use phone camera to snap piece photo directly.', 'استخدم كاميرا الهاتف لالتقاط صورة القطعة مباشرة.')}</p>
                     </div>
                   </div>
                 </div>
@@ -1581,7 +1636,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                 {/* DATES: Logged Date & Expected Ready Date */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <label className="font-bold text-brand-charcoal/60 block">7. Date Logged</label>
+                    <label className="font-bold text-brand-charcoal/60 block">{t('7. Date Logged', '7. تاريخ التسجيل')}</label>
                     <DateInput
                       value={dateCreatedInput}
                       onChange={e => setDateCreatedInput(e.target.value)}
@@ -1590,7 +1645,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="font-bold text-brand-charcoal/80 block text-brand-terracotta">8. Expected Ready Date *</label>
+                    <label className="font-bold text-brand-charcoal/80 block text-brand-terracotta">{t('8. Expected Ready Date *', '8. تاريخ الجاهزية المتوقع *')}</label>
                     <DateInput
                       required
                       value={expectedReadyDateInput}
@@ -1603,7 +1658,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                 {/* Storage shelf & Staff Assignment */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <label className="font-bold text-brand-charcoal/60 block">9. Storage Shelf</label>
+                    <label className="font-bold text-brand-charcoal/60 block">{t('9. Storage Shelf', '9. رف التخزين')}</label>
                     <input
                       type="text"
                       placeholder="Shelf B-1"
@@ -1614,14 +1669,14 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="font-bold text-brand-charcoal/60 block">10. Assigned Staff</label>
+                    <label className="font-bold text-brand-charcoal/60 block">{t('10. Assigned Staff', '10. الموظف المسؤول')}</label>
                     {/* Reads live from Staff Management; inactive staff are not offered. */}
                     <select
                       value={assignedStaffInput}
                       onChange={e => setAssignedStaffInput(e.target.value)}
                       className="w-full bg-white border border-brand-clay rounded-xl p-2.5 font-bold text-brand-charcoal cursor-pointer"
                     >
-                      <option value="">Select staff member...</option>
+                      <option value="">{t('Select staff member...', 'اختر الموظف...')}</option>
                       {assignableStaff.map(s => (
                         <option key={s.id} value={s.name}>
                           {s.name}{s.position ? ` (${s.position})` : ''}
@@ -1630,7 +1685,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                     </select>
                     {assignableStaff.length === 0 && (
                       <p className="text-[11px] font-semibold text-amber-700">
-                        No active staff members. Add one in Staff Management.
+                        {t('No active staff members. Add one in Staff Management.', 'لا يوجد موظفون نشطون. أضف موظفًا من إدارة الموظفين.')}
                       </p>
                     )}
                   </div>
@@ -1647,19 +1702,19 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                 onClick={() => setShowManualLogModal(false)}
                 className="bg-brand-sand/60 hover:bg-brand-sand text-brand-charcoal font-bold py-3 rounded-xl cursor-pointer transition-colors text-center"
               >
-                Cancel / Reset
+                {t('Cancel / Reset', 'إلغاء / إعادة تعيين')}
               </button>
 
               <button
                 type="button"
                 onClick={async () => {
                   if (!manualName.trim() || !manualPhone.trim()) {
-                    alert('Please specify Customer Name and Phone number.');
+                    alert(t('Please specify Customer Name and Phone number.', 'يرجى تحديد اسم العميل ورقم الهاتف.'));
                     return;
                   }
 
                   if (!pieceCodeInput.trim()) {
-                    alert('Piece Code is required and must be unique.');
+                    alert(t('Piece Code is required and must be unique.', 'رمز القطعة مطلوب ويجب أن يكون فريدًا.'));
                     return;
                   }
 
@@ -1671,7 +1726,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                   });
 
                   if (codeExists) {
-                    alert(`Piece code '${normalizedPieceCode}' already exists. Please use a unique code.`);
+                    alert(t(`Piece code '${normalizedPieceCode}' already exists. Please use a unique code.`, `رمز القطعة '${normalizedPieceCode}' موجود بالفعل. يرجى استخدام رمز فريد.`));
                     return;
                   }
 
@@ -1718,13 +1773,13 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                   try {
                     await addPiece(newPieceData);
                   } catch (err) {
-                    alert(err instanceof Error ? err.message : 'Could not log the piece. Please try again.');
+                    alert(err instanceof Error ? err.message : t('Could not log the piece. Please try again.', 'تعذّر تسجيل القطعة. يرجى المحاولة مرة أخرى.'));
                     return;
                   }
 
                   triggerToast(
-                    'Ceramic Piece Added Successfully',
-                    `Logged piece "${pieceCodeInput}" under customer "${manualName}".`,
+                    t('Ceramic Piece Added Successfully', 'تمت إضافة قطعة السيراميك بنجاح'),
+                    t(`Logged piece "${pieceCodeInput}" under customer "${manualName}".`, `تم تسجيل القطعة "${pieceCodeInput}" للعميل "${manualName}".`),
                     false
                   );
 
@@ -1741,7 +1796,7 @@ export const AdminPiecesTrackingSection: React.FC = () => {
                 }}
                 className="bg-brand-terracotta hover:bg-brand-terracotta/90 text-brand-cream font-bold py-3 rounded-xl cursor-pointer transition-colors text-center shadow-sm"
               >
-                Create Piece Record
+                {t('Create Piece Record', 'إنشاء سجل القطعة')}
               </button>
             </div>
 
@@ -1751,27 +1806,27 @@ export const AdminPiecesTrackingSection: React.FC = () => {
 
       {/* Toast notifications container */}
       <div className="fixed bottom-6 right-6 z-50 space-y-3 max-w-sm w-full pointer-events-none">
-        {toasts.map(t => (
+        {toasts.map(toast => (
           <div
-            key={t.id}
+            key={toast.id}
             className={`pointer-events-auto p-4 rounded-2xl border shadow-xl flex gap-3 items-start justify-between animate-in slide-in-from-bottom-5 duration-300 ${
-              t.highlighted 
+              toast.highlighted 
                 ? 'bg-gradient-to-r from-amber-50 to-amber-100/40 border-amber-400 text-amber-950 ring-4 ring-amber-400/10' 
                 : 'bg-brand-charcoal text-brand-cream border-brand-charcoal/40'
             }`}
           >
             <div className="text-left">
-              <p className={`text-xs font-extrabold uppercase tracking-wider ${t.highlighted ? 'text-amber-800 animate-pulse' : 'text-brand-sage'}`}>
-                {t.title}
+              <p className={`text-xs font-extrabold uppercase tracking-wider ${toast.highlighted ? 'text-amber-800 animate-pulse' : 'text-brand-sage'}`}>
+                {toast.title}
               </p>
               <p className="text-[11px] font-semibold mt-1 leading-relaxed">
-                {t.message}
+                {toast.message}
               </p>
             </div>
             <button
-              onClick={() => setToasts(prev => prev.filter(item => item.id !== t.id))}
+              onClick={() => setToasts(prev => prev.filter(item => item.id !== toast.id))}
               className="cursor-pointer shrink-0 opacity-60 hover:opacity-100"
-              aria-label="Dismiss"
+              aria-label={t('Dismiss', 'إغلاق')}
             >
               <X className="h-3.5 w-3.5" />
             </button>
