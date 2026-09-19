@@ -14,6 +14,7 @@ import { BirthdayPackage } from '../types';
 import { AppImage } from './ui/AppImage';
 import { PackageBalloonBackdrop } from './ui/PackageBalloonBackdrop';
 import { DEFAULT_DEPOSIT_AMOUNT } from '../utils/queueUtils';
+import { localizedText } from '../utils/localizedText';
 
 interface Props {
   packages: BirthdayPackage[];
@@ -75,7 +76,7 @@ const TICKET_PERFORATION = 'rgba(255, 250, 240, 0.55)';
 export const BirthdayPackagesShowcase: React.FC<Props> = ({
   packages, initialPackageId, onChoose, onFocusChange
 }) => {
-  const { t } = useLanguage();
+  const { lang, t } = useLanguage();
   const prefersReducedMotion = useReducedMotion();
   const [focusedId, setFocusedId] = useState<string | null>(
     // With reduced motion there is no travel to wait for, so the requested
@@ -94,6 +95,9 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
   }, []);
 
   const focused = packages.find(p => p.id === focusedId) || null;
+  const focusedFullDescription = focused
+    ? localizedText(focused.fullDescription, focused.fullDescriptionAr, lang)
+    : '';
 
   const focus = (id: string) => {
     setFocusedId(id);
@@ -176,7 +180,7 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                       className="absolute inset-0 rounded-full bg-brand-terracotta"
                     />
                   )}
-                  <span className="relative">{pkg.name}</span>
+                  <span className="relative">{localizedText(pkg.name, pkg.nameAr, lang)}</span>
                 </button>
               );
             })}
@@ -257,6 +261,8 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                 pkg.ageInformation ? { label: t('Ages', 'الأعمار'), value: pkg.ageInformation } : null
               ].filter((spec): spec is { label: string; value: string } => spec !== null);
 
+              const shortDesc = localizedText(pkg.shortDescription, pkg.shortDescriptionAr, lang);
+
               return (
                 <motion.li
                   key={pkg.id}
@@ -277,7 +283,7 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                         focus(pkg.id);
                       }
                     }}
-                    aria-label={`${pkg.name} — ${t("see what's included", 'شاهد ما تتضمنه')}`}
+                    aria-label={`${localizedText(pkg.name, pkg.nameAr, lang)} — ${t("see what's included", 'شاهد ما تتضمنه')}`}
                     className="package-ticket group relative flex h-full w-full cursor-pointer flex-col overflow-hidden rounded-[4px] text-start transition-transform duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-charcoal motion-safe:hover:-translate-y-0.5 sm:min-h-[240px] sm:flex-row lg:min-h-[300px]"
                     style={{
                       backgroundColor: colour.card,
@@ -334,15 +340,15 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                         transition={spring}
                         className="mt-1.5 font-display text-[22px] font-semibold leading-tight lg:text-[26px]"
                       >
-                        {pkg.name}
+                        {localizedText(pkg.name, pkg.nameAr, lang)}
                       </motion.h3>
 
-                      {pkg.shortDescription && (
+                      {shortDesc && (
                         <p
                           className="mt-2 line-clamp-3 text-[13px] leading-[1.6] sm:line-clamp-2 lg:line-clamp-3"
                           style={{ color: TICKET_INK, opacity: 0.82 }}
                         >
-                          {pkg.shortDescription}
+                          {shortDesc}
                         </p>
                       )}
 
@@ -464,7 +470,7 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                     transition={spring}
                     className="font-display text-3xl font-semibold text-brand-cream sm:text-4xl"
                   >
-                    {focused.name}
+                    {localizedText(focused.name, focused.nameAr, lang)}
                   </motion.h2>
                 </div>
               </motion.div>
@@ -515,9 +521,9 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
             {/* Everything the celebration includes. */}
             <div className="lg:col-span-7 space-y-8">
 
-              {focused.fullDescription && (
+              {focusedFullDescription && (
                 <motion.p variants={revealItem} className="text-base leading-[1.75] text-brand-ink">
-                  {focused.fullDescription}
+                  {focusedFullDescription}
                 </motion.p>
               )}
 

@@ -22,6 +22,7 @@ import {
 import { formatDate } from '../utils/calendarConfig';
 import { selectFeaturedWorkshops, recentBookingsWindow } from '../utils/featuredWorkshops';
 import { STUDIO_PHONE } from '../utils/studioConfig';
+import { localizedText } from '../utils/localizedText';
 import { useSessionSeats, useRecentBookings } from '../lib/sessionSeats';
 import { Calendar, Sparkles, ChevronRight, Paintbrush, MousePointerClick, CalendarRange, Gift, Coffee, ChevronDown, Phone, Mail, UserCheck, Star, ArrowLeft, Clock }  from 'lucide-react';
 
@@ -65,7 +66,7 @@ export const HomeSection: React.FC = () => {
     setSelectedBirthdayPackage, publishedBirthdayPackages, setWorkshopsInitialCategory,
     workshopSessions, bookings, queue, todayDateStr, rawWorkshops
   } = useApp();
-  const { t } = useLanguage();
+  const { lang, t } = useLanguage();
 
   /**
    * Whether the workshops table has come back yet.
@@ -138,8 +139,8 @@ export const HomeSection: React.FC = () => {
 
   /** Images only — the carousel renders cards, the details sit below it. */
   const featuredSlides = useMemo(
-    () => featuredWorkshops.map(ws => ({ src: ws.image, alt: ws.title })),
-    [featuredWorkshops]
+    () => featuredWorkshops.map(ws => ({ src: ws.image, alt: localizedText(ws.title, ws.titleAr, lang) })),
+    [featuredWorkshops, lang]
   );
 
   const [featuredIndex, setFeaturedIndex] = useState(0);
@@ -147,6 +148,8 @@ export const HomeSection: React.FC = () => {
   // archived — so the index is resolved against the current array rather than
   // trusted, and never points past its end.
   const activeFeatured = featuredWorkshops[featuredIndex] || featuredWorkshops[0] || null;
+  const activeTitle = activeFeatured ? localizedText(activeFeatured.title, activeFeatured.titleAr, lang) : '';
+  const activeHook = activeFeatured ? localizedText(activeFeatured.hook, activeFeatured.hookAr, lang) : '';
 
   const publishedEvents = events.filter(evt => evt.status === 'Published');
 
@@ -416,10 +419,10 @@ export const HomeSection: React.FC = () => {
                      the focal line without outweighing the image it describes. */
                   className="group mt-2 cursor-pointer font-display text-xl md:text-2xl font-semibold text-brand-charcoal transition-colors hover:text-brand-terracotta"
                 >
-                  {activeFeatured.title}
+                  {activeTitle}
                 </button>
 
-                {activeFeatured.hook && (
+                {activeHook && (
                   /* max-w-xl is 576px — 2.2x the 260px card, so the text block
                      read as the subject and the image as a thumbnail. This clamp
                      tracks the card's own clamp(148px, 22vw, 260px) at roughly
@@ -427,7 +430,7 @@ export const HomeSection: React.FC = () => {
                      only at one breakpoint. Carousel geometry is untouched; the
                      text is what moves. */
                   <p className="mx-auto mt-2 max-w-[clamp(240px,34vw,400px)] text-[15px] leading-[1.7] text-brand-ink">
-                    {activeFeatured.hook}
+                    {activeHook}
                   </p>
                 )}
 
@@ -662,7 +665,7 @@ export const HomeSection: React.FC = () => {
                         <span className="h-1.5 w-1.5 rounded-full bg-brand-cream/35" />
                       </span>
 
-                      <h3 className="mt-2 font-display text-2xl font-semibold text-brand-cream">{pkg.name}</h3>
+                      <h3 className="mt-2 font-display text-2xl font-semibold text-brand-cream">{localizedText(pkg.name, pkg.nameAr, lang)}</h3>
 
                       {/* 13px, so AA still wants 4.5:1. /60 no longer reaches it
                           on this ground; /75 does. */}
@@ -671,7 +674,7 @@ export const HomeSection: React.FC = () => {
                           // ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker.
                           pkg.maxGuests ? `${pkg.maxGuests} ${t('guests', 'ضيوف')}` : null,
                           pkg.duration || null,
-                          pkg.shortDescription || null
+                          localizedText(pkg.shortDescription, pkg.shortDescriptionAr, lang) || null
                         ].filter(Boolean).join(' · ')}
                       </p>
                     </div>

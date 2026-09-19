@@ -1,0 +1,15 @@
+import type { Lang } from '../context/LanguageContext';
+
+/**
+ * The text to show a customer for one piece of staff-written content.
+ *
+ * Arabic when the visitor is reading Arabic AND staff wrote an Arabic version
+ * (non-null, not blank after trim); otherwise the English. See migration 0035.
+ *
+ * DISPLAY ONLY. Never use the result to compare, match, search, filter, or as a
+ * stored snapshot (booking/piece titles) — those must keep the English value.
+ */
+export function localizedText(en: string, ar: string | null | undefined, lang: Lang): string {
+  if (lang === 'ar' && typeof ar === 'string' && ar.trim() !== '') return ar;
+  return en;
+}

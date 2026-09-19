@@ -15,6 +15,7 @@ import { BirthdayPackagesShowcase } from './BirthdayPackagesShowcase';
 import { isWorkshopFullyBooked } from '../utils/queueUtils';
 import { useSessionSeats, useRecentBookings } from '../lib/sessionSeats';
 import { recentBookingsWindow } from '../utils/featuredWorkshops';
+import { localizedText } from '../utils/localizedText';
 
 /** Pseudo-category: not a real DB category, it swaps the whole grid to birthday packages. */
 const BIRTHDAY_CATEGORY = 'Birthday Packages';
@@ -25,7 +26,7 @@ export const WorkshopsBrowsingSection: React.FC = () => {
     publishedBirthdayPackages, selectedBirthdayPackage, setSelectedBirthdayPackage,
     workshopsInitialCategory, workshopSessions, todayDateStr
   } = useApp();
-  const { t } = useLanguage();
+  const { lang, t } = useLanguage();
 
   /**
    * Seats for every published upcoming session on the grid, in one call.
@@ -86,7 +87,9 @@ export const WorkshopsBrowsingSection: React.FC = () => {
       const q = searchQuery.toLowerCase();
       result = result.filter(ws => 
         ws.title.toLowerCase().includes(q) || 
-        ws.hook.toLowerCase().includes(q) || 
+        ws.hook.toLowerCase().includes(q) ||
+        (ws.titleAr ?? '').toLowerCase().includes(q) ||
+        (ws.hookAr ?? '').toLowerCase().includes(q) ||
         ws.instructor.toLowerCase().includes(q)
       );
     }
@@ -386,6 +389,8 @@ export const WorkshopsBrowsingSection: React.FC = () => {
               // this workshop — not just the one date most recently looked at
               // — so a workshop with other open dates is never shown as full.
               const isFull = isWorkshopFullyBooked(ws.id, { workshopSessions }, todayDateStr, gridSeats.get);
+              const title = localizedText(ws.title, ws.titleAr, lang);
+              const hook = localizedText(ws.hook, ws.hookAr, lang);
               return (
                 /* The same Reveal the page headings use, so the grid and the
                    type above it share one fade-and-rise and stay in step if it
@@ -423,7 +428,7 @@ export const WorkshopsBrowsingSection: React.FC = () => {
                         frame — unchanged by this layout pass. */}
                     <WorkshopCardSlideshow
                       images={workshopGalleryImages(ws)}
-                      alt={ws.title}
+                      alt={title}
                       cardIndex={cardIndex}
                       className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.04]"
                     />
@@ -454,7 +459,7 @@ export const WorkshopsBrowsingSection: React.FC = () => {
                         {ws.category}{ws.skillLevel ? ` · ${ws.skillLevel === 'All Levels' ? t('Suitable for all levels', 'مناسب لجميع المستويات') : ws.skillLevel}` : ''}
                       </span>
                       <h3 className="mt-1.5 font-display text-[17px] font-semibold leading-tight text-brand-cream sm:text-[26px] line-clamp-2">
-                        {ws.title}
+                        {title}
                       </h3>
                     </div>
                   </div>
@@ -462,8 +467,8 @@ export const WorkshopsBrowsingSection: React.FC = () => {
                   <div className="flex flex-1 flex-col p-3 sm:p-7">
                     {/* The description opens the white area — the title is over
                         the image now and is not repeated here. */}
-                    {ws.hook && (
-                      <p className="max-md:hidden text-[15px] leading-[1.7] text-brand-ink line-clamp-2">{ws.hook}</p>
+                    {hook && (
+                      <p className="max-md:hidden text-[15px] leading-[1.7] text-brand-ink line-clamp-2">{hook}</p>
                     )}
 
                     {/* The site's meta treatment: lucide at h-4 w-4 in sage,

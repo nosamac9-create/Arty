@@ -21,6 +21,7 @@ import { validatePhoneRule, canonicalPhone } from '../utils/validation';
 import { minBirthdayNoticeDays, BIRTHDAY_DAILY_MAX, BIRTHDAY_SAME_SLOT_MAX, DEFAULT_DEPOSIT_AMOUNT } from '../utils/queueUtils';
 import { useBirthdayCounts } from '../lib/sessionSeats';
 import { BackButton } from './ui/BackButton';
+import { localizedText } from '../utils/localizedText';
 
 const FALLBACK_TIMES = ['10:00 AM', '01:00 PM', '04:00 PM', '07:00 PM'];
 
@@ -172,6 +173,8 @@ export const BirthdayBookingSection: React.FC = () => {
     () => publishedBirthdayPackages.find(p => p.id === selectedPkgId) || null,
     [publishedBirthdayPackages, selectedPkgId]
   );
+  // Display only. The stored values below (:447, :485, :513) keep the English name.
+  const selectedPackageDisplayName = localizedText(selectedPackage?.name ?? '', selectedPackage?.nameAr, lang);
 
   const depositAmount = selectedPackage?.depositAmount ?? DEFAULT_DEPOSIT_AMOUNT;
   const timeOptions = selectedPackage?.availableTimes?.length
@@ -941,7 +944,7 @@ export const BirthdayBookingSection: React.FC = () => {
           <p className={`mt-1 font-display text-xl font-semibold ${
             selectedPackage ? 'text-brand-charcoal' : 'text-brand-muted'
           }`}>
-            {selectedPackage?.name || t('No package selected', 'لم يتم اختيار باقة')}
+            {selectedPackageDisplayName || t('No package selected', 'لم يتم اختيار باقة')}
           </p>
         </div>
 
@@ -1157,7 +1160,7 @@ export const BirthdayBookingSection: React.FC = () => {
                             <div className="p-5">
                               <div className="flex items-start justify-between gap-3">
                                 <h3 className="font-display text-lg font-semibold text-brand-charcoal">
-                                  {pkg.name}
+                                  {localizedText(pkg.name, pkg.nameAr, lang)}
                                 </h3>
                                 {isOn && (
                                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-terracotta text-brand-cream">
@@ -1374,7 +1377,7 @@ export const BirthdayBookingSection: React.FC = () => {
         >
           <span className="min-w-0">
             <span className="block truncate text-xs font-semibold text-brand-ink">
-              {selectedPackage?.name || t('Select a package', 'اختر باقة')}
+              {selectedPackageDisplayName || t('Select a package', 'اختر باقة')}
             </span>
             <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-brand-muted">
               <Clock className="h-3 w-3" />

@@ -16,6 +16,7 @@ import {
 import { CheckoutStepper } from './ui/CheckoutStepper';
 import { AppImage } from './ui/AppImage';
 import { BackButton } from './ui/BackButton';
+import { localizedText } from '../utils/localizedText';
 
 export const CheckoutInfoSection: React.FC = () => {
   const {
@@ -187,7 +188,9 @@ export const CheckoutInfoSection: React.FC = () => {
             <div className="flex gap-4">
               <AppImage
                 src={birthday ? (birthdayPackage?.image || workshop.image) : workshop.image}
-                alt={birthday ? (birthdayPackage?.name || t('Birthday package', 'باقة عيد ميلاد')) : workshop.title}
+                alt={birthday
+                  ? (localizedText(birthdayPackage?.name ?? '', birthdayPackage?.nameAr, lang) || t('Birthday package', 'باقة عيد ميلاد'))
+                  : localizedText(workshop.title, workshop.titleAr, lang)}
                 className="w-20 h-20 rounded-2xl object-cover shrink-0 bg-brand-sand border border-brand-clay"
               />
               <div>

@@ -18,6 +18,7 @@ import {
   Calendar as CalendarIcon, User, Flame, Clock, Award, Map, CheckCircle2, Minus, Plus, Edit, Users, ChevronLeft, ChevronRight 
 } from 'lucide-react';
 import { BackButton } from './ui/BackButton';
+import { localizedText } from '../utils/localizedText';
 
 export const WorkshopDetailSection: React.FC = () => {
   const { 
@@ -330,7 +331,7 @@ export const WorkshopDetailSection: React.FC = () => {
           {/* Photos — same position and size as the single image it replaces. */}
           <ImageSlider
             images={galleryImages}
-            alt={workshop.title}
+            alt={localizedText(workshop.title, workshop.titleAr, lang)}
             className="aspect-[16/9] w-full rounded-[32px]"
           />
 
@@ -346,13 +347,13 @@ export const WorkshopDetailSection: React.FC = () => {
 
             <Reveal index={1}>
               <h1 className="font-display text-3xl sm:text-4xl font-semibold text-brand-charcoal">
-                {workshop.title}
+                {localizedText(workshop.title, workshop.titleAr, lang)}
               </h1>
             </Reveal>
 
             <Reveal index={2}>
               <p className="text-lg font-medium text-brand-terracotta">
-                "{workshop.hook}"
+                "{localizedText(workshop.hook, workshop.hookAr, lang)}"
               </p>
             </Reveal>
           </div>
@@ -407,12 +408,12 @@ export const WorkshopDetailSection: React.FC = () => {
             </Reveal>
             <Reveal index={1}>
               <p className="text-brand-ink leading-[1.75] text-[15px]">
-                {workshop.description}
+                {localizedText(workshop.description, workshop.descriptionAr, lang)}
               </p>
             </Reveal>
             <Reveal index={2}>
               <p className="text-brand-ink leading-[1.75] text-[15px]">
-                {workshop.fullDetails}
+                {localizedText(workshop.fullDetails, workshop.fullDetailsAr, lang)}
               </p>
             </Reveal>
           </div>
