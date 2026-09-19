@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
+import { useLanguage } from '../context/LanguageContext';
 import { Sparkles, Calendar, Receipt, ChevronRight, MapPin, Gift } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { STUDIO_PHONE } from '../utils/studioConfig';
@@ -85,6 +86,7 @@ const toIcsUtc = (d: Date): string =>
 
 export const BookingConfirmationSection: React.FC = () => {
   const { lastBookingCreated, setCustomerTab, workshops, bookingError } = useApp();
+  const { t } = useLanguage();
 
   // Trigger celebration confetti on mount
   useEffect(() => {
@@ -212,17 +214,16 @@ export const BookingConfirmationSection: React.FC = () => {
     return (
       <div className="mx-auto max-w-xl px-4 py-16 text-center space-y-4">
         <div className="mx-auto h-14 w-14 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center text-2xl font-semibold">!</div>
-        <h2 className="font-display text-2xl font-semibold text-brand-charcoal">Your booking did not go through</h2>
+        <h2 className="font-display text-2xl font-semibold text-brand-charcoal">{t('Your booking did not go through', 'لم يكتمل حجزك')}</h2>
         <p className="text-sm text-brand-ink leading-relaxed">{bookingError}</p>
         <p className="text-xs text-brand-charcoal/55">
-          Nothing has been reserved and you have not been charged. Please try again,
-          or call the studio on {STUDIO_PHONE}.
+          {t('Nothing has been reserved and you have not been charged. Please try again, or call the studio on', 'لم يتم حجز أي شيء ولم يتم خصم أي مبلغ منك. يرجى المحاولة مرة أخرى، أو الاتصال بالاستوديو على')} {STUDIO_PHONE}.
         </p>
         <button
           onClick={() => setCustomerTab('workshops')}
           className="mt-2 inline-flex items-center gap-2 rounded-xl bg-brand-terracotta px-6 py-3 text-sm font-semibold text-brand-cream cursor-pointer"
         >
-          Back to Workshops
+          {t('Back to Workshops', 'العودة إلى الورش')}
         </button>
       </div>
     );
@@ -260,10 +261,12 @@ export const BookingConfirmationSection: React.FC = () => {
 
         {/* Success Header */}
         <div className="text-center space-y-2 mb-2">
-          <h1 className="font-display text-3xl font-semibold text-brand-charcoal">You're booked!</h1>
+          <h1 className="font-display text-3xl font-semibold text-brand-charcoal">{t("You're booked!", 'تم تأكيد حجزك!')}</h1>
           <p className="text-sm text-brand-ink max-w-sm mx-auto">
-            We have reserved your potter wheel at the café. Your booking is saved under
-            My Bookings, where you can check the details or cancel any time.
+            {t(
+              'We have reserved your potter wheel at the café. Your booking is saved under My Bookings, where you can check the details or cancel any time.',
+              'لقد حجزنا لك عجلة الفخار في المقهى. حجزك محفوظ ضمن «حجوزاتي»، حيث يمكنك الاطلاع على التفاصيل أو الإلغاء في أي وقت.'
+            )}
           </p>
         </div>
 
@@ -271,29 +274,32 @@ export const BookingConfirmationSection: React.FC = () => {
         <div className="border-t border-brand-clay py-5 space-y-4 text-xs text-brand-ink">
           
           <div className="flex justify-between items-start">
-            <span className="font-semibold text-brand-muted">Workshop</span>
+            <span className="font-semibold text-brand-muted">{t('Workshop', 'الورشة')}</span>
             <span className="font-semibold text-brand-charcoal text-end min-w-0 break-words">{booking.workshopTitle}</span>
           </div>
 
           <div className="flex justify-between">
-            <span className="font-semibold text-brand-muted">Date & Session</span>
-            <span className="font-semibold text-brand-charcoal">{booking.date} at {booking.time}</span>
+            <span className="font-semibold text-brand-muted">{t('Date & Session', 'التاريخ والجلسة')}</span>
+            <span className="font-semibold text-brand-charcoal">{booking.date} {t('at', 'الساعة')} {booking.time}</span>
           </div>
 
           <div className="flex justify-between">
-            <span className="font-semibold text-brand-muted">Guests</span>
-            <span className="font-semibold text-brand-charcoal">{booking.participants} {booking.participants === 1 ? 'Guest' : 'Guests'}</span>
+            <span className="font-semibold text-brand-muted">{t('Guests', 'الضيوف')}</span>
+            <span className="font-semibold text-brand-charcoal">
+              {/* ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker. */}
+              {booking.participants} {booking.participants === 1 ? t('Guest', 'ضيف') : t('Guests', 'ضيوف')}
+            </span>
           </div>
 
           <div className="flex justify-between">
-            <span className="font-semibold text-brand-muted">Total Paid (VAT incl.)</span>
-            <span className="font-semibold text-brand-terracotta text-sm">{booking.totalPrice} SAR</span>
+            <span className="font-semibold text-brand-muted">{t('Total Paid (VAT incl.)', 'الإجمالي المدفوع (شامل الضريبة)')}</span>
+            <span className="font-semibold text-brand-terracotta text-sm">{booking.totalPrice} {t('SAR', 'ريال')}</span>
           </div>
 
           <div className="flex justify-between items-start">
-            <span className="font-semibold text-brand-muted">Studio Location</span>
+            <span className="font-semibold text-brand-muted">{t('Studio Location', 'موقع الاستوديو')}</span>
             <div className="text-right">
-              <span className="font-semibold text-brand-charcoal block">{matchingWorkshop?.room || 'Studio A'}</span>
+              <span className="font-semibold text-brand-charcoal block">{matchingWorkshop?.room || t('Studio A', 'الاستوديو أ')}</span>
               <span className="text-[10px] text-brand-muted flex items-center justify-end gap-1 mt-0.5">
                 <MapPin className="h-3 w-3" /> Ahmad Al Attas St, Jeddah
               </span>
@@ -308,7 +314,7 @@ export const BookingConfirmationSection: React.FC = () => {
             onClick={() => setCustomerTab('my-bookings')}
             className="w-full cursor-pointer rounded-xl bg-brand-terracotta py-3.5 text-sm font-semibold text-brand-cream shadow-card-sm hover:bg-brand-terracotta-hover transition-colors text-center"
           >
-            View My Bookings
+            {t('View My Bookings', 'عرض حجوزاتي')}
           </button>
           
           {calendarEvent && (
@@ -317,14 +323,14 @@ export const BookingConfirmationSection: React.FC = () => {
               className="w-full cursor-pointer rounded-xl bg-brand-cream border border-brand-clay py-3.5 text-sm font-semibold text-brand-charcoal hover:bg-brand-sand transition-colors text-center flex items-center justify-center gap-2"
             >
               <Calendar className="h-4 w-4 text-brand-sage" />
-              <span>Add to Calendar</span>
+              <span>{t('Add to Calendar', 'أضف إلى التقويم')}</span>
             </button>
           )}
         </div>
 
         {/* Cancellation policy note */}
         <p className="mt-5 text-[10px] text-center text-brand-muted italic leading-relaxed">
-          *You can cancel free of charge up to 24 hours before your session directly from your bookings portal.
+          {t('*You can cancel free of charge up to 24 hours before your session directly from your bookings portal.', '*يمكنك الإلغاء مجانًا حتى 24 ساعة قبل جلستك مباشرة من بوابة حجوزاتك.')}
         </p>
 
       </div>

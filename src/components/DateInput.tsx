@@ -19,6 +19,7 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { useLanguage } from '../context/LanguageContext';
 import { MONTH_NAMES, MONTH_NAMES_SHORT, WEEKDAY_NAMES_SHORT, CALENDAR_INPUT_PROPS } from '../utils/calendarConfig';
 
 export interface DateInputProps {
@@ -71,10 +72,12 @@ export const DateInput: React.FC<DateInputProps> = ({
   className = '',
   id,
   name,
-  placeholder = 'Select date',
+  placeholder: placeholderProp,
   title
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const { t } = useLanguage();
+  const placeholder = placeholderProp ?? t('Select date', 'اختر التاريخ');
   const containerRef = useRef<HTMLDivElement>(null);
 
   /**
@@ -254,7 +257,7 @@ export const DateInput: React.FC<DateInputProps> = ({
               type="button"
               onClick={() => stepMonth(-1)}
               className="relative p-1.5 rounded-lg hover:bg-brand-sand text-brand-charcoal/70 cursor-pointer before:absolute before:-inset-2 before:content-['']"
-              title="Previous month"
+              title={t('Previous month', 'الشهر السابق')}
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
@@ -281,7 +284,7 @@ export const DateInput: React.FC<DateInputProps> = ({
               type="button"
               onClick={() => stepMonth(1)}
               className="relative p-1.5 rounded-lg hover:bg-brand-sand text-brand-charcoal/70 cursor-pointer before:absolute before:-inset-2 before:content-['']"
-              title="Next month"
+              title={t('Next month', 'الشهر التالي')}
             >
               <ChevronRight className="h-4 w-4" />
             </button>
@@ -338,7 +341,7 @@ export const DateInput: React.FC<DateInputProps> = ({
               disabled={isOutOfRange(todayISO)}
               className="text-[10px] font-bold text-brand-terracotta hover:underline disabled:opacity-40 disabled:no-underline disabled:cursor-not-allowed cursor-pointer"
             >
-              Today
+              {t('Today', 'اليوم')}
             </button>
 
             <div className="flex items-center gap-2">
@@ -349,12 +352,12 @@ export const DateInput: React.FC<DateInputProps> = ({
                   className="text-[10px] font-bold text-brand-charcoal/50 hover:text-red-600 flex items-center gap-0.5 cursor-pointer"
                 >
                   <X className="h-3 w-3" />
-                  <span>Clear</span>
+                  <span>{t('Clear', 'مسح')}</span>
                 </button>
               )}
               <span className="text-[9px] font-bold text-brand-charcoal/35 flex items-center gap-1">
                 <CalendarIcon className="h-3 w-3" />
-                <span>Gregorian</span>
+                <span>{t('Gregorian', 'ميلادي')}</span>
               </span>
             </div>
           </div>

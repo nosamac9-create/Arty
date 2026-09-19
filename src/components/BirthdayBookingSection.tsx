@@ -38,11 +38,31 @@ const DETAIL_KEYS = [
 ];
 
 const STEPS = [
-  { n: 1, label: 'Package' },
-  { n: 2, label: 'Party Details' },
-  { n: 3, label: 'Extras' },
-  { n: 4, label: 'Review & Deposit' }
+  { n: 1, label: 'Package', labelAr: 'الباقة' },
+  { n: 2, label: 'Party Details', labelAr: 'تفاصيل الحفلة' },
+  { n: 3, label: 'Extras', labelAr: 'الإضافات' },
+  { n: 4, label: 'Review & Deposit', labelAr: 'المراجعة والعربون' }
 ];
+
+/**
+ * Arabic wording for the labels the studio ships with. Labels are staff-editable
+ * (Settings → Events & Birthdays) and stored English-only, so a translation is
+ * used only while the stored label still IS one of these defaults. Rename it in
+ * Settings and the staff wording is shown as typed, never a stale translation of
+ * the old text. Display only: never stored, never compared for logic.
+ */
+const DEFAULT_LABEL_AR: Record<string, { en: string[]; ar: string }> = {
+  bookingName:        { en: ['Booking Name'], ar: 'اسم الحجز' },
+  phone:              { en: ['Phone Number'], ar: 'رقم الجوال' },
+  numberOfPeople:     { en: ['Number of People'], ar: 'عدد الأشخاص' },
+  bookingDate:        { en: ['Date / Day'], ar: 'التاريخ / اليوم' },
+  bookingTime:        { en: ['Time'], ar: 'الوقت' },
+  birthdayPersonName: { en: ['Name of the Birthday Person'], ar: 'اسم صاحب عيد الميلاد' },
+  balloonColor:       { en: ['Balloon Color 🎈', 'Pick a balloon colour 🎈'], ar: 'لون البالونات 🎈' },
+  drinksChoice:       { en: ['Drinks — coffee or fresh juices of your choice', 'Choose your drinks'], ar: 'المشروبات — قهوة أو عصائر طازجة من اختيارك' },
+  cakePhoto:          { en: ['Please attach a photo of the cake'], ar: 'يرجى إرفاق صورة للكعكة' }
+};
+const normalizeLabel = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase();
 
 /** Swatches for colour-style choices, so a balloon colour reads as a colour. */
 const COLOR_SWATCHES: Record<string, string> = {
@@ -93,7 +113,18 @@ export const BirthdayBookingSection: React.FC = () => {
   );
   const fieldByKey = (key: string) => activeFields.find(f => f.key === key);
   const isActive = (key: string) => !!fieldByKey(key);
-  const labelFor = (key: string, fallback: string) => fieldByKey(key)?.label || fallback;
+  /** Display text for a field label. See DEFAULT_LABEL_AR. */
+  const displayLabel = (field: BirthdayFormField): string => {
+    const known = DEFAULT_LABEL_AR[field.key];
+    if (lang === 'ar' && known && known.en.some(en => normalizeLabel(en) === normalizeLabel(field.label))) {
+      return known.ar;
+    }
+    return field.label;
+  };
+  const labelFor = (key: string, fallback: string) => {
+    const field = fieldByKey(key);
+    return (field && displayLabel(field)) || fallback;
+  };
   const isRequired = (key: string) => !!fieldByKey(key)?.required;
 
   const detailFields = useMemo(
@@ -372,7 +403,7 @@ export const BirthdayBookingSection: React.FC = () => {
       if (!field.required) return;
       if (['bookingName', 'phone', 'numberOfPeople', 'package', 'bookingDate', 'bookingTime', 'birthdayPersonName', 'cakePhoto'].includes(field.key)) return;
       if (!String(valueOf(field)).trim()) {
-        errs[field.key] = `${field.label} ${t('is required', 'مطلوب')}`;
+        errs[field.key] = `${displayLabel(field)} ${t('is required', 'مطلوب')}`;
       }
     });
 
@@ -598,7 +629,7 @@ export const BirthdayBookingSection: React.FC = () => {
     const required = field.required;
     const label = (
       <label className={labelClass}>
-        {field.label} {required && <span className="text-red-500">*</span>}
+        {displayLabel(field)} {required && <span className="text-red-500">*</span>}
       </label>
     );
 
@@ -622,7 +653,7 @@ export const BirthdayBookingSection: React.FC = () => {
         return (
           <PhoneInput
             key={field.id}
-            label={field.label}
+            label={displayLabel(field)}
             required={required}
             value={phone}
             onChange={val => setPhone(val)}
@@ -877,15 +908,15 @@ export const BirthdayBookingSection: React.FC = () => {
     () =>
       extraFields
         .map(f => ({
-          label: f.label,
+          label: displayLabel(f),
           value: f.key === 'cakePhoto'
-            ? (cakePhotoUrl ? 'Design image attached' : '')
+            ? (cakePhotoUrl ? t('Design image attached', 'تم إرفاق صورة التصميم') : '')
             : String(valueOf(f) || '').trim()
         }))
         .filter(entry => entry.value),
     // valueOf reads fieldValues, so both drive this.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [extraFields, fieldValues, cakePhotoUrl]
+    [extraFields, fieldValues, cakePhotoUrl, lang]
   );
 
   const estimatedTotal = (selectedPackage?.price || 0) * Number(numberOfPeople || 0);
@@ -1034,7 +1065,7 @@ export const BirthdayBookingSection: React.FC = () => {
       {/* STEPPER */}
       <nav aria-label={t('Reservation steps', 'خطوات الحجز')} className="mb-10 border-b border-brand-clay pb-5">
         <ol className="flex items-center gap-2 overflow-x-auto no-scrollbar sm:gap-4">
-          {STEPS.map(({ n, label }) => {
+          {STEPS.map(({ n, label, labelAr }) => {
             const isCurrent = n === step;
             const isDone = n < step;
             const reachable = n <= furthest;
@@ -1065,7 +1096,7 @@ export const BirthdayBookingSection: React.FC = () => {
                       isCurrent ? 'text-brand-charcoal' : 'text-brand-muted'
                     } ${isCurrent ? '' : 'hidden sm:inline'}`}
                   >
-                    {label}
+                    {t(label, labelAr)}
                   </span>
                 </button>
                 {n < STEPS.length && <span className="h-px w-4 bg-brand-clay sm:w-8" aria-hidden="true" />}

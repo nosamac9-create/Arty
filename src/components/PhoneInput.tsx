@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ChevronDown, Search, Check } from 'lucide-react';
+import { useLanguage } from '../context/LanguageContext';
 import { COUNTRIES, CountryCodeOption, parsePhoneComponents, normalisePhone, validatePhone, parseArabicDigits } from '../utils/phoneUtils';
 
 interface PhoneInputProps {
@@ -32,6 +33,7 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
   className = '',
   label
 }) => {
+  const { t } = useLanguage();
   const [country, setCountry] = useState<CountryCodeOption>(COUNTRIES[0]); // Saudi Arabia default
   const [nationalNumber, setNationalNumber] = useState('');
   const [isOpen, setIsOpen] = useState(false);
@@ -132,7 +134,7 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
                   <input
                     type="text"
                     autoFocus
-                    placeholder="Search country name or +code..."
+                    placeholder={t('Search country name or +code...', 'ابحث باسم الدولة أو رمز الاتصال...')}
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
                     className="w-full bg-white border border-brand-clay rounded-xl py-1.5 ps-8 pe-3 text-xs font-semibold text-brand-charcoal focus:outline-none focus:ring-2 focus:ring-brand-terracotta"
@@ -170,7 +172,7 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
                   })
                 ) : (
                   <div className="p-4 text-center text-xs text-brand-charcoal/50 font-semibold">
-                    No matching countries found
+                    {t('No matching countries found', 'لا توجد دول مطابقة')}
                   </div>
                 )}
               </div>
