@@ -13,6 +13,8 @@ import { LineListTextarea } from './ui/LineListTextarea';
 import { BackButton } from './ui/BackButton';
 import { ContentLanguageTabs, ContentLang } from './ui/ContentLanguageTabs';
 import { DEFAULT_DEPOSIT_AMOUNT } from '../utils/queueUtils';
+import { useLanguage } from '../context/LanguageContext';
+import { enumLabel } from '../utils/enumLabels';
 
 interface Props {
   /** The record being edited, straight from the shared data layer. */
@@ -57,6 +59,7 @@ const Section: React.FC<{
  * stacked. Nothing is written until Save.
  */
 export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSave, onNotify }) => {
+  const { lang, t } = useLanguage();
   const [draft, setDraft] = useState<BirthdayPackage>(pkg);
   const [isSaving, setIsSaving] = useState(false);
   // Which language the Basic information section is showing. UI-only: never saved.
@@ -75,24 +78,24 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
-      onNotify('That file is not an image.');
+      onNotify(t('That file is not an image.', 'هذا الملف ليس صورة.'));
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      onNotify('That photo is over 5MB. Please choose a smaller one.');
+      onNotify(t('That photo is over 5MB. Please choose a smaller one.', 'حجم هذه الصورة يتجاوز 5 ميغابايت. يرجى اختيار صورة أصغر.'));
       return;
     }
 
     const reader = new FileReader();
     reader.onloadend = () => setField('image', reader.result as string);
-    reader.onerror = () => onNotify('That photo could not be read. Please try again.');
+    reader.onerror = () => onNotify(t('That photo could not be read. Please try again.', 'تعذّرت قراءة هذه الصورة. يرجى المحاولة مرة أخرى.'));
     reader.readAsDataURL(file);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!draft.name.trim()) {
-      onNotify('Package name is required.');
+      onNotify(t('Package name is required.', 'اسم الباقة مطلوب.'));
       return;
     }
 
@@ -119,7 +122,7 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
       <div className="flex flex-col gap-4 border-b border-brand-clay/60 pb-5 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <BackButton onClick={onBack} className="mb-3">
-            Back to Birthday Package Management
+            {t('Back to Birthday Package Management', 'العودة إلى إدارة باقات أعياد الميلاد')}
           </BackButton>
 
           <div className="flex items-center gap-3">
@@ -136,9 +139,9 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
               </span>
             )}
             <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-brand-terracotta">Editing package</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-brand-terracotta">{t('Editing package', 'تعديل الباقة')}</p>
               <h1 className="truncate font-display text-xl font-bold text-brand-charcoal">
-                {draft.name || 'Untitled package'}
+                {draft.name || t('Untitled package', 'باقة بلا اسم')}
               </h1>
             </div>
           </div>
@@ -150,14 +153,14 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
               ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
               : 'border-brand-clay bg-brand-sand text-brand-charcoal/60'
           }`}>
-            {draft.status}
+            {enumLabel('workshopStatus', draft.status, lang)}
           </span>
           <button
             type="button"
             onClick={onBack}
             className="rounded-xl border border-brand-clay bg-white px-4 py-2 font-bold text-brand-charcoal hover:bg-brand-sand cursor-pointer"
           >
-            Cancel
+            {t('Cancel', 'إلغاء')}
           </button>
           <button
             type="submit"
@@ -165,15 +168,15 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
             className="flex items-center gap-1.5 rounded-xl bg-brand-terracotta px-5 py-2 font-bold text-brand-cream shadow-xs transition-all hover:bg-brand-terracotta-hover disabled:opacity-50 cursor-pointer"
           >
             <Save className="h-4 w-4" />
-            <span>{isSaving ? 'Saving…' : 'Save Package'}</span>
+            <span>{isSaving ? t('Saving…', 'جارٍ الحفظ…') : t('Save Package', 'حفظ الباقة')}</span>
           </button>
         </div>
       </div>
 
       <Section
-        title="Basic package information"
+        title={t('Basic package information', 'معلومات الباقة الأساسية')}
         icon={<Package className="h-4 w-4 text-brand-terracotta" />}
-        description="The name and copy shown on the customer site."
+        description={t('The name and copy shown on the customer site.', 'الاسم والنص المعروضان على موقع العملاء.')}
       >
         <ContentLanguageTabs
           value={contentLang}
@@ -184,7 +187,7 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
         {contentLang === 'en' ? (
           <>
         <div className="space-y-1">
-          <label className={labelClass}>Package Name *</label>
+          <label className={labelClass}>{t('Package Name *', 'اسم الباقة *')}</label>
           <input
             type="text"
             required
@@ -195,7 +198,7 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
         </div>
 
         <div className="space-y-1">
-          <label className={labelClass}>Short Description</label>
+          <label className={labelClass}>{t('Short Description', 'وصف مختصر')}</label>
           <input
             type="text"
             value={draft.shortDescription}
@@ -205,7 +208,7 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
         </div>
 
         <div className="space-y-1">
-          <label className={labelClass}>Full Description</label>
+          <label className={labelClass}>{t('Full Description', 'الوصف الكامل')}</label>
           <textarea
             rows={3}
             value={draft.fullDescription}
@@ -256,9 +259,9 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
       </Section>
 
       <Section
-        title="Photo"
+        title={t('Photo', 'الصورة')}
         icon={<ImageIcon className="h-4 w-4 text-brand-terracotta" />}
-        description="Shown on the birthday packages page."
+        description={t('Shown on the birthday packages page.', 'تظهر في صفحة باقات أعياد الميلاد.')}
       >
         <div className="flex flex-col items-start gap-4 rounded-2xl border-2 border-dashed border-brand-clay bg-brand-cream/40 p-4 sm:flex-row">
           {draft.image ? (
@@ -288,7 +291,7 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
                 className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-brand-clay bg-brand-cream px-4 py-2 font-semibold text-brand-terracotta transition-colors hover:bg-brand-sand/50"
               >
                 <Upload className="h-3.5 w-3.5" />
-                <span>{draft.image ? 'Replace photo' : 'Upload photo'}</span>
+                <span>{draft.image ? t('Replace photo', 'استبدال الصورة') : t('Upload photo', 'رفع صورة')}</span>
               </label>
               {draft.image && (
                 <button
@@ -296,17 +299,17 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
                   onClick={() => setField('image', '')}
                   className="rounded-xl border border-brand-clay px-3 py-2 font-semibold text-brand-muted hover:text-brand-charcoal cursor-pointer"
                 >
-                  Remove
+                  {t('Remove', 'إزالة')}
                 </button>
               )}
             </div>
 
-            <p className="text-[11px] text-brand-muted">JPG or PNG, up to 5MB.</p>
+            <p className="text-[11px] text-brand-muted">{t('JPG or PNG, up to 5MB.', 'JPG أو PNG، حتى 5 ميغابايت.')}</p>
 
             <input
               type="text"
               value={draft.image.startsWith('data:') ? '' : draft.image}
-              placeholder="Or paste an image link"
+              placeholder={t('Or paste an image link', 'أو الصق رابط صورة')}
               onChange={e => setField('image', e.target.value)}
               className="w-full rounded-xl border border-brand-clay bg-brand-cream/60 p-2.5 font-semibold"
             />
@@ -315,13 +318,13 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
       </Section>
 
       <Section
-        title="Pricing & guest limits"
+        title={t('Pricing & guest limits', 'الأسعار وحدود الضيوف')}
         icon={<DollarSign className="h-4 w-4 text-brand-terracotta" />}
-        description="What the party costs and how many it holds."
+        description={t('What the party costs and how many it holds.', 'تكلفة الحفلة وعدد الضيوف المسموح.')}
       >
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div className="space-y-1">
-            <label className={labelClass}>Price (SAR)</label>
+            <label className={labelClass}>{t('Price (SAR)', 'السعر (ريال)')}</label>
             <input
               type="number"
               min={0}
@@ -332,20 +335,20 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
           </div>
 
           <div className="space-y-1">
-            <label className={labelClass}>Pricing Type</label>
+            <label className={labelClass}>{t('Pricing Type', 'نوع التسعير')}</label>
             <select
               value={draft.pricingType}
               onChange={e => setField('pricingType', e.target.value as BirthdayPackage['pricingType'])}
               className={inputClass}
             >
-              <option value="Per child">Per child</option>
-              <option value="Per person">Per person</option>
-              <option value="Fixed price">Fixed price</option>
+              <option value="Per child">{enumLabel('pricingType', 'Per child', lang)}</option>
+              <option value="Per person">{enumLabel('pricingType', 'Per person', lang)}</option>
+              <option value="Fixed price">{enumLabel('pricingType', 'Fixed price', lang)}</option>
             </select>
           </div>
 
           <div className="space-y-1">
-            <label className={labelClass}>Pricing Label (shown to customers)</label>
+            <label className={labelClass}>{t('Pricing Label (shown to customers)', 'تسمية التسعير (تظهر للعملاء)')}</label>
             <input
               type="text"
               value={draft.pricingLabel || ''}
@@ -355,7 +358,7 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
           </div>
 
           <div className="space-y-1">
-            <label className={labelClass}>Duration</label>
+            <label className={labelClass}>{t('Duration', 'المدة')}</label>
             <input
               type="text"
               value={draft.duration}
@@ -365,7 +368,7 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
           </div>
 
           <div className="space-y-1">
-            <label className={labelClass}>Deposit (SAR)</label>
+            <label className={labelClass}>{t('Deposit (SAR)', 'العربون (ريال)')}</label>
             <input
               type="number"
               min={0}
@@ -376,7 +379,7 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
           </div>
 
           <div className="space-y-1">
-            <label className={labelClass}>Age Information</label>
+            <label className={labelClass}>{t('Age Information', 'معلومات العمر')}</label>
             <input
               type="text"
               value={draft.ageInformation}
@@ -386,7 +389,7 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
           </div>
 
           <div className="space-y-1">
-            <label className={labelClass}>Minimum Guests</label>
+            <label className={labelClass}>{t('Minimum Guests', 'الحد الأدنى للضيوف')}</label>
             <input
               type="number"
               min={1}
@@ -397,7 +400,7 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
           </div>
 
           <div className="space-y-1">
-            <label className={labelClass}>Maximum Guests</label>
+            <label className={labelClass}>{t('Maximum Guests', 'الحد الأقصى للضيوف')}</label>
             <input
               type="number"
               min={1}
@@ -410,20 +413,20 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
       </Section>
 
       <Section
-        title="Availability"
+        title={t('Availability', 'التوفر')}
         icon={<CalendarRange className="h-4 w-4 text-brand-terracotta" />}
-        description="The days and start times a customer can choose."
+        description={t('The days and start times a customer can choose.', 'الأيام وأوقات البدء التي يمكن للعميل اختيارها.')}
       >
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {([
-            ['availableDays', 'Available Days'],
-            ['availableTimes', 'Available Times']
+            ['availableDays', t('Available Days', 'الأيام المتاحة')],
+            ['availableTimes', t('Available Times', 'الأوقات المتاحة')]
           ] as const).map(([key, label]) => (
             <div key={key} className="space-y-1">
               <label className={labelClass}>{label}</label>
               <LineListTextarea
                 rows={3}
-                placeholder="One entry per line"
+                placeholder={t('One entry per line', 'إدخال واحد في كل سطر')}
                 value={draft[key] || []}
                 onChange={lines => setField(key, lines)}
                 className={inputClass}
@@ -434,21 +437,21 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
       </Section>
 
       <Section
-        title="Includes & activities"
+        title={t('Includes & activities', 'المشتملات والأنشطة')}
         icon={<Sparkles className="h-4 w-4 text-brand-terracotta" />}
-        description="Listed on the package page as what the celebration covers."
+        description={t('Listed on the package page as what the celebration covers.', 'تظهر في صفحة الباقة كما تشمله الاحتفالية.')}
       >
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {([
-            ['includedItems', 'Includes (one per line)'],
-            ['activityChoices', 'Activity Choices (one per line)'],
-            ['additionalInfo', 'Additional Information (one per line)']
+            ['includedItems', t('Includes (one per line)', 'تشمل (واحد في كل سطر)')],
+            ['activityChoices', t('Activity Choices (one per line)', 'خيارات الأنشطة (واحد في كل سطر)')],
+            ['additionalInfo', t('Additional Information (one per line)', 'معلومات إضافية (واحد في كل سطر)')]
           ] as const).map(([key, label]) => (
             <div key={key} className="space-y-1">
               <label className={labelClass}>{label}</label>
               <LineListTextarea
                 rows={3}
-                placeholder="One entry per line"
+                placeholder={t('One entry per line', 'إدخال واحد في كل سطر')}
                 value={draft[key] || []}
                 onChange={lines => setField(key, lines)}
                 className={inputClass}
@@ -459,15 +462,15 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
       </Section>
 
       <Section
-        title="Cake options"
+        title={t('Cake options', 'خيارات الكعكة')}
         icon={<Cake className="h-4 w-4 text-brand-terracotta" />}
-        description="Sizes and prices offered with this package."
+        description={t('Sizes and prices offered with this package.', 'المقاسات والأسعار المتاحة مع هذه الباقة.')}
       >
         <div className="space-y-1">
-          <label className={labelClass}>Cake Description</label>
+          <label className={labelClass}>{t('Cake Description', 'وصف الكعكة')}</label>
           <input
             type="text"
-            placeholder="Send us your cake design and we will do it."
+            placeholder={t('Send us your cake design and we will do it.', 'أرسل لنا تصميم الكعكة وسنقوم بتنفيذه.')}
             value={draft.cakeDescription}
             onChange={e => setField('cakeDescription', e.target.value)}
             className={inputClass}
@@ -476,7 +479,7 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
 
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <label className={labelClass}>Cake Sizes &amp; Prices</label>
+            <label className={labelClass}>{t('Cake Sizes & Prices', 'مقاسات الكعكة وأسعارها')}</label>
             <button
               type="button"
               onClick={() => setField('cakeSizes', [
@@ -486,19 +489,19 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
               className="flex items-center gap-1 text-[11px] font-bold text-brand-terracotta hover:underline cursor-pointer"
             >
               <Plus className="h-3 w-3" />
-              <span>Add Size</span>
+              <span>{t('Add Size', 'إضافة مقاس')}</span>
             </button>
           </div>
 
           {(draft.cakeSizes || []).length === 0 ? (
-            <p className="text-[11px] italic text-brand-charcoal/50">No cake sizes listed.</p>
+            <p className="text-[11px] italic text-brand-charcoal/50">{t('No cake sizes listed.', 'لا توجد مقاسات كعك مدرجة.')}</p>
           ) : (
             <div className="space-y-1.5">
               {(draft.cakeSizes || []).map((size, sizeIdx) => (
                 <div key={size.id} className="flex items-center gap-2">
                   <input
                     type="text"
-                    placeholder="e.g. Small (15 cm)"
+                    placeholder={t('e.g. Small (15 cm)', 'مثال: صغير (15 سم)')}
                     value={size.label}
                     onChange={e => setField('cakeSizes',
                       (draft.cakeSizes || []).map((c, i) => i === sizeIdx ? { ...c, label: e.target.value } : c))}
@@ -512,10 +515,10 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
                       (draft.cakeSizes || []).map((c, i) => i === sizeIdx ? { ...c, price: Number(e.target.value) || 0 } : c))}
                     className="w-24 rounded-xl border border-brand-clay bg-brand-cream/40 p-2 font-semibold"
                   />
-                  <span className="text-[11px] font-bold text-brand-charcoal/50">SAR</span>
+                  <span className="text-[11px] font-bold text-brand-charcoal/50">{t('SAR', 'ريال')}</span>
                   <button
                     type="button"
-                    title="Remove size"
+                    title={t('Remove size', 'إزالة المقاس')}
                     onClick={() => setField('cakeSizes', (draft.cakeSizes || []).filter((_, i) => i !== sizeIdx))}
                     className="rounded-lg border border-red-200 p-1.5 text-red-500 hover:bg-red-50 cursor-pointer"
                   >
@@ -529,13 +532,13 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
       </Section>
 
       <Section
-        title="Trainer & delivery"
+        title={t('Trainer & delivery', 'المدرب والتسليم')}
         icon={<Compass className="h-4 w-4 text-brand-terracotta" />}
-        description="Who runs the party and how finished pieces get home."
+        description={t('Who runs the party and how finished pieces get home.', 'من يقود الحفلة وكيف تصل القطع المنتهية إلى المنزل.')}
       >
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1">
-            <label className={labelClass}>Trainer Information</label>
+            <label className={labelClass}>{t('Trainer Information', 'معلومات المدرب')}</label>
             <input
               type="text"
               value={draft.trainerInfo}
@@ -545,7 +548,7 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
           </div>
 
           <div className="space-y-1">
-            <label className={labelClass}>Delivery / Pickup Information</label>
+            <label className={labelClass}>{t('Delivery / Pickup Information', 'معلومات التسليم / الاستلام')}</label>
             <input
               type="text"
               value={draft.deliveryInfo}
@@ -557,12 +560,12 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
       </Section>
 
       <Section
-        title="Notes & terms"
+        title={t('Notes & terms', 'الملاحظات والشروط')}
         icon={<ShieldAlert className="h-4 w-4 text-brand-terracotta" />}
-        description="Shown under the package on the customer site."
+        description={t('Shown under the package on the customer site.', 'تظهر أسفل الباقة على موقع العملاء.')}
       >
         <div className="space-y-1">
-          <label className={labelClass}>Customer-Visible Notes</label>
+          <label className={labelClass}>{t('Customer-Visible Notes', 'ملاحظات ظاهرة للعميل')}</label>
           <textarea
             rows={2}
             value={draft.customerNotes}
@@ -572,7 +575,7 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
         </div>
 
         <div className="space-y-1">
-          <label className={labelClass}>Terms</label>
+          <label className={labelClass}>{t('Terms', 'الشروط')}</label>
           <textarea
             rows={2}
             value={draft.terms}
@@ -583,19 +586,19 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
       </Section>
 
       <Section
-        title="Publishing"
+        title={t('Publishing', 'النشر')}
         icon={<Package className="h-4 w-4 text-brand-terracotta" />}
-        description="Draft packages are hidden from the customer site."
+        description={t('Draft packages are hidden from the customer site.', 'الباقات المسودة مخفية عن موقع العملاء.')}
       >
         <div className="space-y-1 sm:max-w-xs">
-          <label className={labelClass}>Status</label>
+          <label className={labelClass}>{t('Status', 'الحالة')}</label>
           <select
             value={draft.status}
             onChange={e => setField('status', e.target.value as BirthdayPackage['status'])}
             className={inputClass}
           >
-            <option value="Published">Published</option>
-            <option value="Draft">Draft</option>
+            <option value="Published">{enumLabel('workshopStatus', 'Published', lang)}</option>
+            <option value="Draft">{enumLabel('workshopStatus', 'Draft', lang)}</option>
           </select>
         </div>
       </Section>
@@ -607,7 +610,7 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
           onClick={onBack}
           className="rounded-xl border border-brand-clay bg-white px-4 py-2 font-bold text-brand-charcoal hover:bg-brand-sand cursor-pointer"
         >
-          Cancel
+          {t('Cancel', 'إلغاء')}
         </button>
         <button
           type="submit"
@@ -615,7 +618,7 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
           className="flex items-center gap-1.5 rounded-xl bg-brand-terracotta px-5 py-2 font-bold text-brand-cream shadow-xs transition-all hover:bg-brand-terracotta-hover disabled:opacity-50 cursor-pointer"
         >
           <Save className="h-4 w-4" />
-          <span>{isSaving ? 'Saving…' : 'Save Package'}</span>
+          <span>{isSaving ? t('Saving…', 'جارٍ الحفظ…') : t('Save Package', 'حفظ الباقة')}</span>
         </button>
       </div>
     </form>

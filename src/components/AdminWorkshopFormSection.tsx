@@ -31,6 +31,58 @@ import { ContentLanguageTabs, ContentLang } from './ui/ContentLanguageTabs';
 import { MONTH_NAMES } from '../utils/calendarConfig';
 import { matchesQuery } from '../utils/search';
 import { getRiyadhNow } from '../utils/dateUtils';
+import { useLanguage } from '../context/LanguageContext';
+import { enumLabel } from '../utils/enumLabels';
+
+/** Arabic Gregorian month names, in getMonth() order. Local on purpose: MONTH_NAMES stays English. */
+const MONTH_NAMES_AR = [
+  'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+  'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
+];
+
+/** Short Arabic day names for the rule day picker. The stored values stay the English full names. */
+const DAY_SHORT_AR: Record<string, string> = {
+  Sunday: 'أحد', Monday: 'إثن', Tuesday: 'ثلا', Wednesday: 'أرب',
+  Thursday: 'خمس', Friday: 'جمع', Saturday: 'سبت'
+};
+
+/** "N sessions" with Arabic number agreement: 1 → واحدة, 2 → dual, 3–10 → plural, 11+ → singular. */
+const sessionsAr = (n: number): string =>
+  n === 1 ? 'جلسة واحدة'
+    : n === 2 ? 'جلستان'
+    : n >= 3 && n <= 10 ? `${n} جلسات`
+    : `${n} جلسة`;
+
+/**
+ * Arabic wording for the labels and placeholders the workshop form ships with. They are
+ * staff-editable (Settings → Workshop Detail Lists) and stored English-only, so a translation
+ * is used only while the stored text still IS the shipped default. Rename it in Settings and
+ * the staff wording is shown as typed, never a stale translation of the old text. Display
+ * only: never stored, never compared for logic.
+ */
+const DEFAULT_FIELD_TEXT_AR: Record<string, {
+  label: { en: string; ar: string };
+  placeholder?: { en: string; ar: string };
+}> = {
+  title:       { label: { en: 'Workshop Title', ar: 'عنوان الورشة' },
+                 placeholder: { en: 'e.g. Traditional Arabic Calligraphy Glazing', ar: 'مثال: تزجيج الخط العربي التقليدي' } },
+  category:    { label: { en: 'Category', ar: 'الفئة' } },
+  hook:        { label: { en: 'One-Line Hook (Subtext)', ar: 'عبارة جذب من سطر واحد (نص فرعي)' },
+                 placeholder: { en: 'e.g. Mold clay on the wheel and paint under the stars', ar: 'مثال: شكّل الطين على العجلة وارسم تحت النجوم' } },
+  description: { label: { en: 'Short Catchy Description', ar: 'وصف قصير جذاب' },
+                 placeholder: { en: 'Brief summary shown on grids...', ar: 'ملخص موجز يظهر في الشبكات...' } },
+  fullDetails: { label: { en: 'Full Details curriculum (Rich Text)', ar: 'تفاصيل المنهج الكاملة (نص منسق)' },
+                 placeholder: { en: 'Write full specifications of what students will accomplish week by week...', ar: 'اكتب المواصفات الكاملة لما سينجزه الطلاب أسبوعًا بعد أسبوع...' } },
+  price:       { label: { en: 'Price in SAR', ar: 'السعر بالريال' } },
+  duration:    { label: { en: 'Duration', ar: 'المدة' } },
+  ageRange:    { label: { en: 'Age Range', ar: 'الفئة العمرية' } },
+  skillLevel:  { label: { en: 'Skill Level', ar: 'مستوى المهارة' } },
+  tutor:       { label: { en: 'Tutor / Artist Specialist', ar: 'المدرب / الفنان المتخصص' } },
+  room:        { label: { en: 'Studio Room / Table Station', ar: 'قاعة الاستوديو / محطة الطاولة' } },
+  materials:   { label: { en: 'Materials Included (Press Enter key)', ar: 'المواد المشمولة (اضغط Enter)' },
+                 placeholder: { en: 'Add a material and press Enter...', ar: 'أضف مادة واضغط Enter...' } }
+};
+const normalizeFieldText = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase();
 
 export const AdminWorkshopFormSection: React.FC = () => {
   const { 
@@ -64,6 +116,34 @@ export const AdminWorkshopFormSection: React.FC = () => {
     getFreshStaff,
     birthdayPackages,
 } = useApp();
+  const { lang, t } = useLanguage();
+
+  const monthName = (m: number) => (lang === 'ar' ? MONTH_NAMES_AR[m - 1] : MONTH_NAMES[m - 1]);
+
+  /** Display text for a configured field's label / placeholder. See DEFAULT_FIELD_TEXT_AR. */
+  const fieldLabel = (field: WorkshopFieldConfig): string => {
+    const known = DEFAULT_FIELD_TEXT_AR[field.fieldKey];
+    if (lang === 'ar' && known && normalizeFieldText(known.label.en) === normalizeFieldText(field.label)) {
+      return known.label.ar;
+    }
+    return field.label;
+  };
+  const fieldPlaceholder = (field: WorkshopFieldConfig): string | undefined => {
+    const known = DEFAULT_FIELD_TEXT_AR[field.fieldKey]?.placeholder;
+    if (lang === 'ar' && known && field.placeholder && normalizeFieldText(known.en) === normalizeFieldText(field.placeholder)) {
+      return known.ar;
+    }
+    return field.placeholder;
+  };
+
+  /**
+   * The dialog for a tutor or room conflict that blocks a save. Only the wrapper is translated:
+   * the reason itself is produced by the availability utils and is shown as they return it.
+   */
+  const assignmentBlockedMessage = (conflictMessage: string) => t(
+    `Assignment blocked — this tutor is Busy.\n\n${conflictMessage}\n\nSelect another staff member or change the session time, then save again.`,
+    `تم منع التعيين — هذا المدرب مشغول.\n\n${conflictMessage}\n\nاختر موظفًا آخر أو غيّر وقت الجلسة، ثم احفظ مرة أخرى.`
+  );
 
   // `rawWorkshops === undefined` is purely the loading signal. The list the
   // page renders is the merged one, so the Sessions column and the Sessions
@@ -190,7 +270,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
 
       if (errors.length > 0) {
         alert(
-          `${errors.length === files.length ? 'No photos were added.' : 'Some photos were not added.'}\n\n${errors.join('\n')}`
+          `${errors.length === files.length ? t('No photos were added.', 'لم تتم إضافة أي صور.') : t('Some photos were not added.', 'لم تتم إضافة بعض الصور.')}\n\n${errors.join('\n')}`
         );
       }
     } finally {
@@ -523,11 +603,14 @@ export const AdminWorkshopFormSection: React.FC = () => {
       }));
     if (slots.length === 0) {
       if (selectedSpace.status === 'Active') return '';
-      return `${selectedSpace.name} is ${selectedSpace.status === 'Maintenance' ? 'under maintenance' : 'inactive'}.`;
+      return t(
+        `${selectedSpace.name} is ${selectedSpace.status === 'Maintenance' ? 'under maintenance' : 'inactive'}.`,
+        `${selectedSpace.name} ${selectedSpace.status === 'Maintenance' ? 'قيد الصيانة' : 'غير نشطة'}.`
+      );
     }
     const conflict = findSpaceConflictAcrossSlots(selectedSpace, slots, spaceSources, editingExclusion);
     return conflict ? conflict.reason || conflict.label : '';
-  }, [selectedSpace, sessions, duration, spaceSources, editingExclusion]);
+  }, [selectedSpace, sessions, duration, spaceSources, editingExclusion, lang, t]);
 
   /**
    * Runs the full recurring-rule check: every session each active rule will
@@ -642,7 +725,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
     if (tutorStaffId && hasSessions) {
       const member = latestStaff.find(s => s.id === tutorStaffId);
       if (!member) {
-        return 'The selected tutor no longer exists in Staff Management. Please select another staff member.';
+        return t('The selected tutor no longer exists in Staff Management. Please select another staff member.', 'المدرب المحدد لم يعد موجودًا في إدارة الموظفين. يرجى اختيار موظف آخر.');
       }
 
       for (const sess of sessions) {
@@ -660,7 +743,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
         });
 
         if (!avail.isAvailable) {
-          return avail.reason || `${member.name} is not available on ${sess.date} at ${sessTime}.`;
+          return avail.reason || t(`${member.name} is not available on ${sess.date} at ${sessTime}.`, `${member.name} غير متاح بتاريخ ${sess.date} الساعة ${sessTime}.`);
         }
       }
     }
@@ -773,7 +856,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
     if (field.dataSource === 'studio-resources') {
       return studioSpaces.map(space => ({
         value: space.id,
-        label: `${space.name}${space.status === 'Active' ? '' : ` — ${space.status}`}`,
+        label: `${space.name}${space.status === 'Active' ? '' : ` — ${enumLabel('resourceStatus', space.status, lang)}`}`,
         disabled: space.status !== 'Active'
       }));
     }
@@ -786,7 +869,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
 
     const values = [...(field.options || [])];
     if (current && !values.includes(current)) values.push(current);
-    return values.map(v => ({ value: v, label: v }));
+    return values.map(v => ({ value: v, label: field.boundTo === 'skillLevel' ? enumLabel('skillLevel', v, lang) : v }));
   };
 
   /** Renders one configured field. */
@@ -798,7 +881,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
 
     const label = (
       <label className="text-xs font-bold text-brand-charcoal/80">
-        {field.label}
+        {fieldLabel(field)}
         {field.required && <span className="text-red-500 font-extrabold"> *</span>}
       </label>
     );
@@ -814,7 +897,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
         control = (
           <textarea
             rows={3}
-            placeholder={field.placeholder}
+            placeholder={fieldPlaceholder(field)}
             value={value || ''}
             onChange={e => setFieldValue(field, e.target.value)}
             className={inputClass}
@@ -830,11 +913,11 @@ export const AdminWorkshopFormSection: React.FC = () => {
               <Italic className="h-3.5 w-3.5 text-brand-charcoal/50" />
               <Link className="h-3.5 w-3.5 text-brand-charcoal/50" />
               <AlignLeft className="h-3.5 w-3.5 text-brand-charcoal/50" />
-              <span className="ml-2 text-[10px] font-mono text-brand-charcoal/40">Pristine HTML Mode</span>
+              <span className="ml-2 text-[10px] font-mono text-brand-charcoal/40">{t('Pristine HTML Mode', 'وضع HTML الخام')}</span>
             </div>
             <textarea
               rows={4}
-              placeholder={field.placeholder}
+              placeholder={fieldPlaceholder(field)}
               value={value || ''}
               onChange={e => setFieldValue(field, e.target.value)}
               className="w-full bg-brand-cream/35 border border-t-0 border-brand-clay rounded-b-xl p-3 text-xs font-semibold text-brand-charcoal"
@@ -847,7 +930,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
         control = (
           <input
             type="number"
-            placeholder={field.placeholder}
+            placeholder={fieldPlaceholder(field)}
             value={value ?? ''}
             onChange={e => setFieldValue(field, e.target.value)}
             className={inputClass}
@@ -863,7 +946,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
             onChange={e => setFieldValue(field, e.target.value)}
             className={`${inputClass} cursor-pointer`}
           >
-            <option value="">{field.placeholder || `Select ${field.label.toLowerCase()}...`}</option>
+            <option value="">{fieldPlaceholder(field) || (lang === 'ar' ? `اختر ${fieldLabel(field)}...` : `Select ${field.label.toLowerCase()}...`)}</option>
             {choices.map(choice => (
               <option key={choice.value} value={choice.value} disabled={choice.disabled}>
                 {choice.label}
@@ -910,7 +993,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
             {label}
             <input
               type="text"
-              placeholder={field.placeholder || 'Add a value and press Enter...'}
+              placeholder={fieldPlaceholder(field) || t('Add a value and press Enter...', 'أضف قيمة واضغط Enter...')}
               value={isMaterials ? materialInput : (customTagInputs[field.fieldKey] || '')}
               onChange={e => isMaterials
                 ? setMaterialInput(e.target.value)
@@ -933,7 +1016,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
                   <span>{tag}</span>
                   <X
                     className="h-3 w-3 hover:text-brand-terracotta cursor-pointer shrink-0"
-                    onClick={() => setFieldValue(field, tags.filter(t => t !== tag))}
+                    onClick={() => setFieldValue(field, tags.filter(tg => tg !== tag))}
                   />
                 </span>
               ))}
@@ -952,7 +1035,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
               className="h-4 w-4 accent-brand-terracotta cursor-pointer"
             />
             <span className="text-xs font-bold text-brand-charcoal/80">
-              {field.label}{field.required && <span className="text-red-500"> *</span>}
+              {fieldLabel(field)}{field.required && <span className="text-red-500"> *</span>}
             </span>
           </label>
         );
@@ -983,7 +1066,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
         control = (
           <input
             type="text"
-            placeholder={field.placeholder}
+            placeholder={fieldPlaceholder(field)}
             value={value || ''}
             onChange={e => setFieldValue(field, e.target.value)}
             className={inputClass}
@@ -998,7 +1081,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
         {showAgeError && (
           <span className="text-[10px] text-red-500 font-bold flex items-center gap-1 pt-0.5 leading-tight">
             <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-            <span>This field is required.</span>
+            <span>{t('This field is required.', 'هذا الحقل مطلوب.')}</span>
           </span>
         )}
       </div>
@@ -1075,7 +1158,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
       const baseErrors = validateWorkshopForm({
         title, category: category || categoryInput, price, capacity, ageRange, sessions,
         ...(willBePublished ? { images } : {})
-      });
+      }, lang);
       setWorkshopErrors(baseErrors);
       if (Object.keys(baseErrors).length > 0) {
         // The title field lives on the English tab; bring it back into view.
@@ -1094,7 +1177,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
           setContentLang('en');
         }
         if (missing.boundTo === 'ageRange') setErrorTouched(true);
-        alert(`"${missing.label}" is required. Please fill it in before publishing.`);
+        alert(t(`"${missing.label}" is required. Please fill it in before publishing.`, `الحقل "${fieldLabel(missing)}" مطلوب. يرجى تعبئته قبل النشر.`));
         return;
       }
 
@@ -1105,9 +1188,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
       // Block the save while the tutor has a conflicting assignment.
       const conflictMessage = await findAssignmentConflict();
       if (conflictMessage) {
-        alert(
-          `Assignment blocked — this tutor is Busy.\n\n${conflictMessage}\n\nSelect another staff member or change the session time, then save again.`
-        );
+        alert(assignmentBlockedMessage(conflictMessage));
         return;
       }
 
@@ -1178,18 +1259,18 @@ export const AdminWorkshopFormSection: React.FC = () => {
 
       if (editingWorkshopId) {
         await updateWorkshop(editingWorkshopId, workshopData);
-        alert(`Successfully updated workshop: "${finalTitle}" (${status || 'Published'})!`);
+        alert(t(`Successfully updated workshop: "${finalTitle}" (${status || 'Published'})!`, `تم تحديث الورشة "${finalTitle}" (${enumLabel('workshopStatus', status || 'Published', lang)}) بنجاح!`));
         setEditingWorkshopId(null);
         resetForm();
       } else {
         await addWorkshop(workshopData);
-        alert(`Successfully published workshop: "${finalTitle}"!\nIt is now live on the customer-facing workshops page.`);
+        alert(t(`Successfully published workshop: "${finalTitle}"!\nIt is now live on the customer-facing workshops page.`, `تم نشر الورشة "${finalTitle}" بنجاح!\nأصبحت الآن متاحة في صفحة الورش الخاصة بالعملاء.`));
         setEditingWorkshopId(null);
         resetForm();
       }
     } catch (err) {
       console.error("Error saving workshop:", err);
-      alert("Failed to save workshop. Please try again.");
+      alert(t('Failed to save workshop. Please try again.', 'تعذّر حفظ الورشة. يرجى المحاولة مرة أخرى.'));
     } finally {
       setIsSaving(false);
     }
@@ -1209,9 +1290,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
       // Drafts are blocked on conflicts too — the sessions are still real assignments.
       const conflictMessage = await findAssignmentConflict();
       if (conflictMessage) {
-        alert(
-          `Assignment blocked — this tutor is Busy.\n\n${conflictMessage}\n\nSelect another staff member or change the session time, then save again.`
-        );
+        alert(assignmentBlockedMessage(conflictMessage));
         return;
       }
 
@@ -1281,18 +1360,18 @@ export const AdminWorkshopFormSection: React.FC = () => {
 
       if (editingWorkshopId) {
         await updateWorkshop(editingWorkshopId, workshopData);
-        alert(`Draft updated successfully for: "${finalTitle}"!`);
+        alert(t(`Draft updated successfully for: "${finalTitle}"!`, `تم تحديث مسودة "${finalTitle}" بنجاح!`));
         setEditingWorkshopId(null);
         resetForm();
       } else {
         await addWorkshop(workshopData);
-        alert(`Draft created successfully for: "${finalTitle}"!`);
+        alert(t(`Draft created successfully for: "${finalTitle}"!`, `تم إنشاء مسودة "${finalTitle}" بنجاح!`));
         setEditingWorkshopId(null);
         resetForm();
       }
     } catch (err) {
       console.error("Error saving draft:", err);
-      alert("Failed to save draft. Please try again.");
+      alert(t('Failed to save draft. Please try again.', 'تعذّر حفظ المسودة. يرجى المحاولة مرة أخرى.'));
     } finally {
       setIsSaving(false);
     }
@@ -1385,16 +1464,16 @@ export const AdminWorkshopFormSection: React.FC = () => {
             {editingWorkshopId ? (
               <span className="flex items-center gap-2 text-brand-terracotta">
                 <Sparkles className="h-5 w-5 animate-pulse" />
-                <span>Editing: {title || 'Unnamed Workshop'}</span>
+                <span>{t('Editing:', 'تعديل:')} {title || t('Unnamed Workshop', 'ورشة بدون اسم')}</span>
               </span>
             ) : (
-              'Create New Creative Workshop'
+              t('Create New Creative Workshop', 'إنشاء ورشة إبداعية جديدة')
             )}
           </h1>
           <p className="text-xs text-brand-charcoal/60 mt-1">
             {editingWorkshopId 
-              ? "Modify this workshop's fields, scheduled slots, or visibility and click Update." 
-              : "Configure curriculum, seat counts, pricing, and timetable sessions."
+              ? t("Modify this workshop's fields, scheduled slots, or visibility and click Update.", 'عدّل حقول هذه الورشة أو مواعيدها أو ظهورها ثم اضغط «تحديث».') 
+              : t('Configure curriculum, seat counts, pricing, and timetable sessions.', 'اضبط المنهج وعدد المقاعد والأسعار وجلسات الجدول.')
             }
           </p>
         </div>
@@ -1408,7 +1487,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
             }}
             className="cursor-pointer px-4 py-2 border border-brand-clay bg-white hover:bg-brand-sand rounded-xl text-xs font-bold text-brand-charcoal transition-all"
           >
-            Cancel Editing
+            {t('Cancel Editing', 'إلغاء التعديل')}
           </button>
         )}
       </div>
@@ -1423,7 +1502,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h3 className="font-display font-bold text-lg text-brand-charcoal flex items-center gap-2">
                 <FolderKanban className="h-5 w-5 text-brand-terracotta" />
-                <span>Workshop Curriculum basics</span>
+                <span>{t('Workshop Curriculum basics', 'أساسيات منهج الورشة')}</span>
               </h3>
               <ContentLanguageTabs
                 value={contentLang}
@@ -1449,7 +1528,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
           <div className="bg-white border border-brand-clay/70 rounded-2xl p-5 shadow-2xs space-y-4">
             <h3 className="font-display font-bold text-lg text-brand-charcoal flex items-center gap-2">
               <Settings className="h-5 w-5 text-brand-terracotta" />
-              <span>Logistics & Metadata</span>
+              <span>{t('Logistics & Metadata', 'اللوجستيات والبيانات الوصفية')}</span>
             </h3>
 
             {/* Rendered from Settings → Workshop Detail Lists. */}
@@ -1469,7 +1548,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
           
           {/* Section: Status Selector */}
           <div className="bg-white border border-brand-clay/70 rounded-2xl p-5 shadow-2xs space-y-3 text-left">
-            <label className="text-xs font-bold text-brand-charcoal/80 uppercase tracking-wider block">Class Visibility Status</label>
+            <label className="text-xs font-bold text-brand-charcoal/80 uppercase tracking-wider block">{t('Class Visibility Status', 'حالة ظهور الدرس')}</label>
             <div className="grid grid-cols-3 gap-2">
               {(['Draft', 'Published', 'Archived'] as const).map(s => {
                 const isActive = status === s;
@@ -1484,7 +1563,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
                         : 'bg-brand-cream border-brand-clay text-brand-charcoal/70 hover:bg-brand-sand'
                     }`}
                   >
-                    {s}
+                    {enumLabel('workshopStatus', s, lang)}
                   </button>
                 );
               })}
@@ -1496,10 +1575,10 @@ export const AdminWorkshopFormSection: React.FC = () => {
           <div className="bg-white border border-brand-clay/70 rounded-2xl p-5 shadow-2xs space-y-3 text-left">
             <div className="flex items-baseline justify-between gap-2">
               <label className="text-xs font-bold text-brand-charcoal/80 uppercase tracking-wider block">
-                Workshop photos
+                {t('Workshop photos', 'صور الورشة')}
               </label>
               <span className="text-[10px] font-bold text-brand-charcoal/45">
-                {images.length} {images.length === 1 ? 'photo' : 'photos'}
+                {images.length} {images.length === 1 ? t('photo', 'صورة') : t('photos', 'صورة')}
               </span>
             </div>
 
@@ -1514,12 +1593,12 @@ export const AdminWorkshopFormSection: React.FC = () => {
               />
               <Upload className={`h-7 w-7 text-brand-terracotta mb-2 shrink-0 ${uploadingPhotos ? 'animate-pulse' : 'pulse-accent'}`} />
               <p className="text-xs font-bold text-brand-charcoal">
-                {uploadingPhotos ? 'Uploading photos…' : 'Click or drag & drop photos here'}
+                {uploadingPhotos ? t('Uploading photos…', 'جارٍ رفع الصور…') : t('Click or drag & drop photos here', 'انقر أو اسحب الصور وأفلتها هنا')}
               </p>
               <p className="text-[10px] text-brand-charcoal/50 mt-0.5">
                 {uploadingPhotos
-                  ? 'Please wait — do not close this form.'
-                  : 'JPEG, PNG, WEBP (Max 5MB each) — pick several at once, or add more later'}
+                  ? t('Please wait — do not close this form.', 'يرجى الانتظار — لا تغلق هذا النموذج.')
+                  : t('JPEG, PNG, WEBP (Max 5MB each) — pick several at once, or add more later', 'JPEG وPNG وWEBP (حتى 5 ميغابايت لكل صورة) — اختر عدة صور دفعة واحدة أو أضف المزيد لاحقًا')}
               </p>
             </label>
 
@@ -1531,30 +1610,30 @@ export const AdminWorkshopFormSection: React.FC = () => {
                       key={src}
                       className="group relative aspect-square rounded-xl overflow-hidden border border-brand-clay bg-brand-clay"
                     >
-                      <img src={src} alt={`Workshop photo ${index + 1}`} className="h-full w-full object-cover" />
+                      <img src={src} alt={t(`Workshop photo ${index + 1}`, `صورة الورشة ${index + 1}`)} className="h-full w-full object-cover" />
 
                       {/* The first photo is the cover — it is what the workshop
                           card shows wherever a single image is needed. */}
                       {index === 0 ? (
                         <span className="absolute bottom-1 left-1 rounded bg-brand-terracotta px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white">
-                          Cover
+                          {t('Cover', 'الغلاف')}
                         </span>
                       ) : (
                         <button
                           type="button"
                           onClick={() => handleMakeCover(src)}
                           className="absolute bottom-1 left-1 rounded bg-white/90 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-brand-charcoal opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer hover:bg-white"
-                          title="Use as cover photo"
+                          title={t('Use as cover photo', 'استخدمها كصورة الغلاف')}
                         >
-                          Make cover
+                          {t('Make cover', 'اجعلها الغلاف')}
                         </button>
                       )}
 
                       <button
                         type="button"
                         onClick={() => handleRemoveImage(src)}
-                        aria-label={`Remove photo ${index + 1}`}
-                        title="Remove photo"
+                        aria-label={t(`Remove photo ${index + 1}`, `إزالة الصورة ${index + 1}`)}
+                        title={t('Remove photo', 'إزالة الصورة')}
                         className="absolute top-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-white/90 text-red-500 shadow-2xs hover:bg-red-50 transition-colors cursor-pointer"
                       >
                         <X className="h-3.5 w-3.5" />
@@ -1564,13 +1643,12 @@ export const AdminWorkshopFormSection: React.FC = () => {
                 </div>
 
                 <p className="text-[10px] text-brand-charcoal/50 font-semibold">
-                  The first photo is the cover, used on the workshop card. The rest appear in the
-                  slider on the workshop page.
+                  {t('The first photo is the cover, used on the workshop card. The rest appear in the slider on the workshop page.', 'الصورة الأولى هي الغلاف وتُستخدم في بطاقة الورشة. تظهر البقية في شريط الصور بصفحة الورشة.')}
                 </p>
               </>
             ) : (
               <p className="text-[10px] text-brand-charcoal/50 font-semibold italic">
-                No photos yet — the workshop will show an empty photo frame until one is added.
+                {t('No photos yet — the workshop will show an empty photo frame until one is added.', 'لا توجد صور بعد — ستعرض الورشة إطار صورة فارغًا حتى تُضاف صورة.')}
               </p>
             )}
           </div>
@@ -1581,10 +1659,10 @@ export const AdminWorkshopFormSection: React.FC = () => {
               <div>
                 <h4 className="text-xs font-bold text-brand-charcoal uppercase tracking-wider flex items-center gap-2">
                   <RefreshCw className="h-4 w-4 text-brand-terracotta" />
-                  <span>Monthly Schedule</span>
+                  <span>{t('Monthly Schedule', 'الجدول الشهري')}</span>
                 </h4>
                 <p className="text-[11px] text-brand-charcoal/60 mt-0.5">
-                  Define reusable monthly recurring schedule rules. Sessions are generated automatically.
+                  {t('Define reusable monthly recurring schedule rules. Sessions are generated automatically.', 'حدّد قواعد جدولة شهرية متكررة قابلة لإعادة الاستخدام. تُنشأ الجلسات تلقائيًا.')}
                 </p>
               </div>
 
@@ -1610,18 +1688,18 @@ export const AdminWorkshopFormSection: React.FC = () => {
                 className="px-3 py-1.5 bg-brand-sand hover:bg-brand-sand/80 text-brand-charcoal rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer shrink-0"
               >
                 <Plus className="h-3.5 w-3.5 text-brand-terracotta" />
-                <span>Add Rule</span>
+                <span>{t('Add Rule', 'إضافة قاعدة')}</span>
               </button>
             </div>
 
             {recurringSchedules.length === 0 ? (
-              <p className="text-xs text-brand-charcoal/50 italic py-2">No monthly schedule rules defined yet.</p>
+              <p className="text-xs text-brand-charcoal/50 italic py-2">{t('No monthly schedule rules defined yet.', 'لم تُحدَّد قواعد جدول شهرية بعد.')}</p>
             ) : (
               <div className="space-y-4">
                 {recurringSchedules.map((rule, idx) => (
                   <div key={rule.id} className="p-3.5 bg-brand-cream/40 border border-brand-clay/60 rounded-xl space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-brand-terracotta">Rule #{idx + 1}</span>
+                      <span className="text-xs font-bold text-brand-terracotta">{t('Rule #', 'القاعدة رقم ')}{idx + 1}</span>
                       <div className="flex items-center gap-2">
                         <select
                           value={rule.status}
@@ -1632,8 +1710,8 @@ export const AdminWorkshopFormSection: React.FC = () => {
                           }}
                           className="bg-white border border-brand-clay text-[10px] font-bold rounded-lg px-2 py-0.5"
                         >
-                          <option value="Active">Active</option>
-                          <option value="Inactive">Inactive</option>
+                          <option value="Active">{enumLabel('resourceStatus', 'Active', lang)}</option>
+                          <option value="Inactive">{enumLabel('resourceStatus', 'Inactive', lang)}</option>
                         </select>
                         <button
                           type="button"
@@ -1647,7 +1725,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
 
                     {/* Days of week */}
                     <div>
-                      <label className="text-[10px] font-bold text-brand-charcoal/70 uppercase block mb-1">Days of Week</label>
+                      <label className="text-[10px] font-bold text-brand-charcoal/70 uppercase block mb-1">{t('Days of Week', 'أيام الأسبوع')}</label>
                       <div className="flex flex-wrap gap-1">
                         {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map(day => {
                           const isSelected = rule.daysOfWeek.includes(day);
@@ -1669,7 +1747,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
                                   : 'bg-white border border-brand-clay/60 text-brand-charcoal/60'
                               }`}
                             >
-                              {day.slice(0, 3)}
+                              {lang === 'ar' ? DAY_SHORT_AR[day] : day.slice(0, 3)}
                             </button>
                           );
                         })}
@@ -1679,7 +1757,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
                     {/* Start Time, Instructor, Capacity */}
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       <div>
-                        <label className="text-[10px] font-bold text-brand-charcoal/70 block mb-0.5">Start Time</label>
+                        <label className="text-[10px] font-bold text-brand-charcoal/70 block mb-0.5">{t('Start Time', 'وقت البدء')}</label>
                         <input
                           type="text"
                           value={rule.startTime}
@@ -1693,7 +1771,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
                       </div>
 
                       <div>
-                        <label className="text-[10px] font-bold text-brand-charcoal/70 block mb-0.5">Capacity</label>
+                        <label className="text-[10px] font-bold text-brand-charcoal/70 block mb-0.5">{t('Capacity', 'السعة')}</label>
                         <input
                           type="number"
                           value={rule.capacity}
@@ -1709,7 +1787,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
 
                     {/* Instructor with Staff Availability check */}
                     <div>
-                      <label className="text-[10px] font-bold text-brand-charcoal/70 block mb-0.5">Instructor (Availability Check)</label>
+                      <label className="text-[10px] font-bold text-brand-charcoal/70 block mb-0.5">{t('Instructor (Availability Check)', 'المدرب (فحص التوفر)')}</label>
                       <select
                         value={resolveStaffId(staff, rule.staffId, rule.instructor) || ''}
                         onChange={e => {
@@ -1725,7 +1803,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
                         }}
                         className="w-full bg-white border border-brand-clay rounded-lg p-1.5 text-xs font-semibold"
                       >
-                        <option value="">Select Instructor...</option>
+                        <option value="">{t('Select Instructor...', 'اختر المدرب...')}</option>
                         {/* Availability is evaluated against EVERY session this rule
                             will generate, read from the shared session calendar. */}
                         {staff
@@ -1744,8 +1822,8 @@ export const AdminWorkshopFormSection: React.FC = () => {
                             // An <option> renders text only, so this pair reads
                             // as words rather than symbols or an icon.
                             const availLabel = ruleConflict
-                              ? `Busy: ${formatSlotDate(ruleConflict.date)} ${ruleConflict.startTime}–${ruleConflict.endTime}`
-                              : 'Available';
+                              ? t(`Busy: ${formatSlotDate(ruleConflict.date)} ${ruleConflict.startTime}–${ruleConflict.endTime}`, `مشغول: ${formatSlotDate(ruleConflict.date)} ${ruleConflict.startTime}–${ruleConflict.endTime}`)
+                              : t('Available', 'متاح');
                             return (
                               <option key={st.id} value={st.id}>
                                 {st.name} ({availLabel})
@@ -1780,7 +1858,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
 
                     {/* Studio room / table for this rule, with availability */}
                     <div>
-                      <label className="text-[10px] font-bold text-brand-charcoal/70 block mb-0.5">Studio Room / Table (Availability Check)</label>
+                      <label className="text-[10px] font-bold text-brand-charcoal/70 block mb-0.5">{t('Studio Room / Table (Availability Check)', 'قاعة / طاولة الاستوديو (فحص التوفر)')}</label>
                       <select
                         value={rule.roomId || ''}
                         onChange={e => {
@@ -1796,7 +1874,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
                         }}
                         className="w-full bg-white border border-brand-clay rounded-lg p-1.5 text-xs font-semibold"
                       >
-                        <option value="">Use the workshop's room</option>
+                        <option value="">{t("Use the workshop's room", 'استخدم قاعة الورشة')}</option>
                         {studioSpaces.map(space => {
                           const slots = getRuleSlots(rule, { duration });
                           const conflict = slots.length > 0
@@ -1808,7 +1886,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
                                 : null);
                           return (
                             <option key={space.id} value={space.id} disabled={!!conflict}>
-                              {conflict ? conflict.label : `${space.name} — Available`}
+                              {conflict ? conflict.label : `${space.name} — ${enumLabel('staffAvailability', 'Available', lang)}`}
                             </option>
                           );
                         })}
@@ -1818,7 +1896,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
                     {/* Effective dates */}
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       <div>
-                        <label className="text-[10px] font-bold text-brand-charcoal/70 block mb-0.5">Effective From</label>
+                        <label className="text-[10px] font-bold text-brand-charcoal/70 block mb-0.5">{t('Effective From', 'ساري من')}</label>
                         <DateInput
                           value={rule.effectiveStartDate}
                           onChange={e => {
@@ -1831,7 +1909,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
                       </div>
 
                       <div>
-                        <label className="text-[10px] font-bold text-brand-charcoal/70 block mb-0.5">Effective Until (Optional)</label>
+                        <label className="text-[10px] font-bold text-brand-charcoal/70 block mb-0.5">{t('Effective Until (Optional)', 'ساري حتى (اختياري)')}</label>
                         <DateInput
                           value={rule.effectiveEndDate || ''}
                           onChange={e => {
@@ -1857,14 +1935,14 @@ export const AdminWorkshopFormSection: React.FC = () => {
                   rule scoped to a later month, or an unrelated result from
                   whichever other rule happened to cover today's month. */}
               <div className="flex items-center gap-2">
-                <label className="text-[10px] font-bold text-brand-charcoal/70 shrink-0">Generate for</label>
+                <label className="text-[10px] font-bold text-brand-charcoal/70 shrink-0">{t('Generate for', 'إنشاء لشهر')}</label>
                 <select
                   value={genTargetMonth}
                   onChange={e => setGenTargetMonth(Number(e.target.value))}
                   className="bg-white border border-brand-clay rounded-lg p-1.5 font-semibold text-xs cursor-pointer"
                 >
                   {MONTH_NAMES.map((name, i) => (
-                    <option key={name} value={i + 1}>{name}</option>
+                    <option key={name} value={i + 1}>{lang === 'ar' ? MONTH_NAMES_AR[i] : name}</option>
                   ))}
                 </select>
                 <select
@@ -1885,10 +1963,12 @@ export const AdminWorkshopFormSection: React.FC = () => {
                   // that clashes with the instructor or the studio space.
                   const blocking = findRecurringConflict(recurringSchedules);
                   if (blocking) {
-                    alert(
+                    alert(t(
                       `Session generation blocked — scheduling conflict.\n\n${blocking.conflict.message}\n\n` +
-                      `Select another instructor or room for this rule, or change its time, then generate again.`
-                    );
+                      `Select another instructor or room for this rule, or change its time, then generate again.`,
+                      `تم منع إنشاء الجلسات — تعارض في الجدولة.\n\n${blocking.conflict.message}\n\n` +
+                      `اختر مدربًا أو قاعة أخرى لهذه القاعدة، أو غيّر وقتها، ثم أعد الإنشاء.`
+                    ));
                     return;
                   }
 
@@ -1903,10 +1983,12 @@ export const AdminWorkshopFormSection: React.FC = () => {
                     year < nowRiyadh.getFullYear() ||
                     (year === nowRiyadh.getFullYear() && month < nowRiyadh.getMonth() + 1);
                   if (monthIsPast) {
-                    alert(
+                    alert(t(
                       `${MONTH_NAMES[month - 1]} ${year} has already passed.\n\n` +
-                      `Sessions are not generated for dates in the past. Pick the current month or a later one.`
-                    );
+                      `Sessions are not generated for dates in the past. Pick the current month or a later one.`,
+                      `انتهى شهر ${monthName(month)} ${year}.\n\n` +
+                      `لا يتم إنشاء الجلسات لتواريخ سابقة. اختر الشهر الحالي أو شهرًا لاحقًا.`
+                    ));
                     return;
                   }
 
@@ -1937,6 +2019,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
                   const genResult = generateSessionsForMonthDetailed(mockWorkshop, year, month, existingForDedup);
                   const generatedRecords = genResult.sessions;
                   const monthLabel = `${MONTH_NAMES[month - 1]} ${year}`;
+                  const monthLabelAr = `${monthName(month)} ${year}`;
                   const plural = (n: number) => (n === 1 ? '' : 's');
 
                   // Skipping is normal and is reported alongside whatever else
@@ -1944,14 +2027,18 @@ export const AdminWorkshopFormSection: React.FC = () => {
                   // for a month and got three sessions should be told the other
                   // two were already there, not left to wonder.
                   const skippedNotes: string[] = [];
+                  const skippedNotesAr: string[] = [];
                   if (genResult.skippedExisting > 0) {
                     skippedNotes.push(`${genResult.skippedExisting} already existed`);
+                    skippedNotesAr.push(`موجودة مسبقًا: ${genResult.skippedExisting}`);
                   }
                   if (genResult.skippedPast > 0) {
                     skippedNotes.push(`${genResult.skippedPast} ${genResult.skippedPast === 1 ? 'has' : 'have'} already passed`);
+                    skippedNotesAr.push(`انقضى موعدها: ${genResult.skippedPast}`);
                   }
                   if (genResult.skippedOverlappingRule > 0) {
                     skippedNotes.push(`${genResult.skippedOverlappingRule} duplicated another rule in this run`);
+                    skippedNotesAr.push(`مكررة من قاعدة أخرى في هذه العملية: ${genResult.skippedOverlappingRule}`);
                   }
 
                   if (generatedRecords.length > 0) {
@@ -1980,10 +2067,12 @@ export const AdminWorkshopFormSection: React.FC = () => {
                       ruleId: g.ruleId
                     }));
                     setSessions([...sessions, ...mappedNew]);
-                    alert(
+                    alert(t(
                       `${generatedRecords.length} session${plural(generatedRecords.length)} added for ${monthLabel}.` +
-                      (skippedNotes.length > 0 ? `\n\nSkipped: ${skippedNotes.join(', ')}.` : '')
-                    );
+                      (skippedNotes.length > 0 ? `\n\nSkipped: ${skippedNotes.join(', ')}.` : ''),
+                      `تمت إضافة ${sessionsAr(generatedRecords.length)} لشهر ${monthLabelAr}.` +
+                      (skippedNotesAr.length > 0 ? `\n\nتم التخطي — ${skippedNotesAr.join('، ')}.` : '')
+                    ));
                   } else if (genResult.slotsConsidered > 0) {
                     // The rules DID produce slots for this month — every one was
                     // skipped. Nothing is wrong, so this must not read like a
@@ -1991,17 +2080,21 @@ export const AdminWorkshopFormSection: React.FC = () => {
                     // rule when the dedup was simply doing its job.
                     const n = genResult.slotsConsidered;
                     if (genResult.skippedExisting === n) {
-                      alert(`All ${n} session${plural(n)} for ${monthLabel} already exist — nothing new to add.`);
+                      alert(t(`All ${n} session${plural(n)} for ${monthLabel} already exist — nothing new to add.`, `جميع الجلسات (${n}) لشهر ${monthLabelAr} موجودة مسبقًا — لا يوجد جديد لإضافته.`));
                     } else if (genResult.skippedPast === n) {
-                      alert(
+                      alert(t(
                         `Every session the rules would produce for ${monthLabel} has already started.\n\n` +
-                        `Sessions are not generated for times that have passed. Generate next month instead.`
-                      );
+                        `Sessions are not generated for times that have passed. Generate next month instead.`,
+                        `بدأت بالفعل جميع الجلسات التي ستنتجها القواعد لشهر ${monthLabelAr}.\n\n` +
+                        `لا يتم إنشاء الجلسات لأوقات مضت. أنشئ جلسات الشهر القادم بدلًا من ذلك.`
+                      ));
                     } else {
-                      alert(
+                      alert(t(
                         `Nothing new to add for ${monthLabel}.\n\n` +
-                        `All ${n} session${plural(n)} the rules produced were skipped: ${skippedNotes.join(', ')}.`
-                      );
+                        `All ${n} session${plural(n)} the rules produced were skipped: ${skippedNotes.join(', ')}.`,
+                        `لا يوجد جديد لإضافته لشهر ${monthLabelAr}.\n\n` +
+                        `تم تخطي جميع الجلسات (${n}) التي أنتجتها القواعد — ${skippedNotesAr.join('، ')}.`
+                      ));
                     }
                   } else {
                     // The rules produced no slot at all for this month. This is
@@ -2020,19 +2113,21 @@ export const AdminWorkshopFormSection: React.FC = () => {
                     });
 
                     if (hasActiveRule && !hasRuleCoveringMonth) {
-                      alert(
+                      alert(t(
                         `No active rule's Effective From/Until range covers ${MONTH_NAMES[month - 1]} ${year}.\n\n` +
-                        `Adjust the rule's effective dates, or pick a different month above, then generate again.`
-                      );
+                        `Adjust the rule's effective dates, or pick a different month above, then generate again.`,
+                        `لا يغطي نطاق «ساري من / حتى» لأي قاعدة نشطة شهر ${monthName(month)} ${year}.\n\n` +
+                        `عدّل تواريخ سريان القاعدة، أو اختر شهرًا مختلفًا أعلاه، ثم أعد الإنشاء.`
+                      ));
                     } else {
-                      alert("No new sessions generated. Ensure rules are Active and valid.");
+                      alert(t('No new sessions generated. Ensure rules are Active and valid.', 'لم يتم إنشاء أي جلسات جديدة. تأكد من أن القواعد نشطة وصالحة.'));
                     }
                   }
                 }}
                 className="w-full py-2 bg-brand-charcoal text-brand-cream hover:bg-black rounded-xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer"
               >
                 <RefreshCw className="h-3.5 w-3.5 text-brand-terracotta" />
-                <span>Generate Monthly Sessions from Schedule</span>
+                <span>{t('Generate Monthly Sessions from Schedule', 'إنشاء الجلسات الشهرية من الجدول')}</span>
               </button>
             </div>
           </div>
@@ -2050,10 +2145,10 @@ export const AdminWorkshopFormSection: React.FC = () => {
                 put while sessions 7+ scroll past underneath. */}
             <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
               <h4 className="text-xs font-bold uppercase tracking-widest text-brand-sage">
-                Sessions Calendar
+                {t('Sessions Calendar', 'تقويم الجلسات')}
                 {sessions.length > 0 && (
                   <span className="text-brand-charcoal/45 ltr-numerals">
-                    {' · '}{sessions.length} session{sessions.length === 1 ? '' : 's'}
+                    {' · '}{lang === 'ar' ? sessionsAr(sessions.length) : `${sessions.length} session${sessions.length === 1 ? '' : 's'}`}
                   </span>
                 )}
               </h4>
@@ -2063,7 +2158,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
                 className="cursor-pointer text-xs font-bold text-brand-terracotta hover:underline flex items-center gap-1"
               >
                 <Plus className="h-3.5 w-3.5 stroke-[3]" />
-                <span>Add Session</span>
+                <span>{t('Add Session', 'إضافة جلسة')}</span>
               </button>
             </div>
 
@@ -2106,7 +2201,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
                       />
                     </div>
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
-                      <span className="text-[10px] font-bold text-brand-charcoal/50">Room:</span>
+                      <span className="text-[10px] font-bold text-brand-charcoal/50">{t('Room:', 'القاعة:')}</span>
                       <select
                         value={sess.roomId || ''}
                         onChange={(e) => {
@@ -2118,7 +2213,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
                         }}
                         className="bg-brand-cream border border-brand-clay p-0.5 rounded font-semibold text-[10px] text-brand-charcoal max-w-[150px] min-w-0 flex-shrink"
                       >
-                        <option value="">Workshop default</option>
+                        <option value="">{t('Workshop default', 'افتراضي الورشة')}</option>
                         {studioSpaces.map(space => {
                           // Checked for this session's own date and time.
                           const slotStart = sess.time || sess.startTime;
@@ -2136,14 +2231,14 @@ export const AdminWorkshopFormSection: React.FC = () => {
                           const unavailable = check ? !check.isAvailable : space.status !== 'Active';
                           return (
                             <option key={space.id} value={space.id} disabled={unavailable}>
-                              {check ? check.label : `${space.name} — ${space.status === 'Active' ? 'Available' : space.status}`}
+                              {check ? check.label : `${space.name} — ${space.status === 'Active' ? enumLabel('staffAvailability', 'Available', lang) : enumLabel('resourceStatus', space.status, lang)}`}
                             </option>
                           );
                         })}
                       </select>
 
                       {/* This session's own instructor; blank uses the workshop tutor. */}
-                      <span className="text-[10px] font-bold text-brand-charcoal/50 ml-2">Instructor:</span>
+                      <span className="text-[10px] font-bold text-brand-charcoal/50 ml-2">{t('Instructor:', 'المدرب:')}</span>
                       <select
                         value={sess.staffId || ''}
                         onChange={(e) => {
@@ -2155,7 +2250,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
                         }}
                         className="bg-brand-cream border border-brand-clay p-0.5 rounded font-semibold text-[10px] text-brand-charcoal max-w-[150px] min-w-0 flex-shrink"
                       >
-                        <option value="">Workshop default</option>
+                        <option value="">{t('Workshop default', 'افتراضي الورشة')}</option>
                         {staff
                           .filter(member => member.status === 'Active' || member.id === sess.staffId)
                           .map(member => {
@@ -2175,13 +2270,13 @@ export const AdminWorkshopFormSection: React.FC = () => {
                             const unavailable = avail ? !avail.isAvailable : false;
                             return (
                               <option key={member.id} value={member.id} disabled={unavailable}>
-                                {avail ? `${member.name} — ${avail.status}` : member.name}
+                                {avail ? `${member.name} — ${enumLabel('staffAvailability', avail.status, lang)}` : member.name}
                               </option>
                             );
                           })}
                       </select>
 
-                      <span className="text-[10px] font-bold text-brand-charcoal/50">Capacity:</span>
+                      <span className="text-[10px] font-bold text-brand-charcoal/50">{t('Capacity:', 'السعة:')}</span>
                       <input 
                         type="number"
                         value={sess.capacity}
@@ -2199,7 +2294,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
                         }}
                         className="bg-brand-cream border border-brand-clay p-0.5 rounded font-bold text-xs text-brand-charcoal w-12 text-center"
                       />
-                      <span className="font-bold text-brand-charcoal">chairs</span>
+                      <span className="font-bold text-brand-charcoal">{t('chairs', 'كراسي')}</span>
 
                       {/*
                         Seats left, counted from the live bookings — the same
@@ -2216,18 +2311,18 @@ export const AdminWorkshopFormSection: React.FC = () => {
                         const left = usage.remainingCapacity;
                         return (
                           <>
-                            <span className="text-[10px] font-bold text-brand-charcoal/50 ml-2">Left:</span>
+                            <span className="text-[10px] font-bold text-brand-charcoal/50 ml-2">{t('Left:', 'المتبقي:')}</span>
                             <span className="bg-brand-sand/40 border border-brand-clay/60 p-0.5 rounded font-bold text-xs text-brand-charcoal w-12 text-center">
                               {left}
                             </span>
 
                             {left <= 0 ? (
                               <span className="text-[9px] bg-red-100 text-red-800 border border-red-200 px-1.5 py-0.5 rounded font-extrabold uppercase">
-                                Fully Booked
+                                {t('Fully Booked', 'محجوزة بالكامل')}
                               </span>
                             ) : (
                               <span className="text-[9px] bg-brand-sage/10 text-brand-sage px-1.5 py-0.5 rounded font-bold">
-                                {left} open seats
+                                {left} {t('open seats', 'مقاعد متاحة')}
                               </span>
                             )}
                           </>
@@ -2263,10 +2358,10 @@ export const AdminWorkshopFormSection: React.FC = () => {
           <div>
             <h3 className="font-display font-bold text-lg text-brand-charcoal flex items-center gap-2">
               <Calendar className="h-5 w-5 text-brand-terracotta" />
-              <span>Saved Workshops & Scheduled Sessions</span>
+              <span>{t('Saved Workshops & Scheduled Sessions', 'الورش المحفوظة والجلسات المجدولة')}</span>
             </h3>
             <p className="text-xs text-brand-charcoal/50 mt-0.5">
-              Click any row below to load its full curriculum and scheduled slots into the form above for editing.
+              {t('Click any row below to load its full curriculum and scheduled slots into the form above for editing.', 'انقر على أي صف أدناه لتحميل منهجه ومواعيده في النموذج أعلاه للتعديل.')}
             </p>
           </div>
 
@@ -2275,7 +2370,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-brand-charcoal/40" />
             <input
               type="text"
-              placeholder="Search table by title, tutor, category..."
+              placeholder={t('Search table by title, tutor, category...', 'ابحث في الجدول بالعنوان أو المدرب أو الفئة...')}
               value={tableSearch}
               onChange={(e) => setTableSearch(e.target.value)}
               className="w-full bg-brand-cream/40 border border-brand-clay/70 rounded-xl py-2 pl-9 pr-3 text-xs font-semibold text-brand-charcoal focus:outline-none focus:ring-1 focus:ring-brand-terracotta"
@@ -2290,39 +2385,39 @@ export const AdminWorkshopFormSection: React.FC = () => {
               <tr className="bg-brand-sand/50 text-[11px] font-bold text-brand-charcoal border-b border-brand-clay/70 uppercase tracking-wider">
                 <th onClick={() => toggleSort('title')} className="py-3 px-4 cursor-pointer hover:bg-brand-sand select-none transition-colors">
                   <div className="flex items-center gap-1.5">
-                    <span>Workshop Title</span>
+                    <span>{t('Workshop Title', 'عنوان الورشة')}</span>
                     <ArrowUpDown className="h-3 w-3 text-brand-charcoal/40" />
                   </div>
                 </th>
                 <th onClick={() => toggleSort('category')} className="py-3 px-4 cursor-pointer hover:bg-brand-sand select-none transition-colors">
                   <div className="flex items-center gap-1.5">
-                    <span>Category</span>
+                    <span>{t('Category', 'الفئة')}</span>
                     <ArrowUpDown className="h-3 w-3 text-brand-charcoal/40" />
                   </div>
                 </th>
                 <th onClick={() => toggleSort('skillLevel')} className="py-3 px-4 cursor-pointer hover:bg-brand-sand select-none transition-colors">
                   <div className="flex items-center gap-1.5">
-                    <span>Skill Level</span>
+                    <span>{t('Skill Level', 'مستوى المهارة')}</span>
                     <ArrowUpDown className="h-3 w-3 text-brand-charcoal/40" />
                   </div>
                 </th>
-                <th className="py-3 px-4 text-center">Sessions</th>
-                <th className="py-3 px-4">Duration</th>
-                <th className="py-3 px-4 text-center">Capacity</th>
+                <th className="py-3 px-4 text-center">{t('Sessions', 'الجلسات')}</th>
+                <th className="py-3 px-4">{t('Duration', 'المدة')}</th>
+                <th className="py-3 px-4 text-center">{t('Capacity', 'السعة')}</th>
                 <th onClick={() => toggleSort('price')} className="py-3 px-4 cursor-pointer hover:bg-brand-sand select-none transition-colors text-right">
                   <div className="flex items-center gap-1.5 justify-end">
-                    <span>Price</span>
+                    <span>{t('Price', 'السعر')}</span>
                     <ArrowUpDown className="h-3 w-3 text-brand-charcoal/40" />
                   </div>
                 </th>
-                <th className="py-3 px-4">Instructor</th>
+                <th className="py-3 px-4">{t('Instructor', 'المدرب')}</th>
                 <th onClick={() => toggleSort('status')} className="py-3 px-4 cursor-pointer hover:bg-brand-sand select-none transition-colors text-center">
                   <div className="flex items-center gap-1.5 justify-center">
-                    <span>Status</span>
+                    <span>{t('Status', 'الحالة')}</span>
                     <ArrowUpDown className="h-3 w-3 text-brand-charcoal/40" />
                   </div>
                 </th>
-                <th className="py-3 px-4 text-center">Action</th>
+                <th className="py-3 px-4 text-center">{t('Action', 'الإجراء')}</th>
               </tr>
             </thead>
             <tbody className="text-xs divide-y divide-brand-clay/30 bg-white">
@@ -2351,9 +2446,9 @@ export const AdminWorkshopFormSection: React.FC = () => {
                   <td colSpan={10} className="py-12 px-4 text-center">
                     <div className="max-w-md mx-auto flex flex-col items-center justify-center space-y-2">
                       <AlertCircle className="h-8 w-8 text-brand-charcoal/30" />
-                      <p className="font-bold text-brand-charcoal/75">No scheduled workshops found</p>
+                      <p className="font-bold text-brand-charcoal/75">{t('No scheduled workshops found', 'لا توجد ورش مجدولة')}</p>
                       <p className="text-[11px] text-brand-charcoal/50">
-                        Try clearing or modifying your search query, or publish a new workshop to see it appear here.
+                        {t('Try clearing or modifying your search query, or publish a new workshop to see it appear here.', 'جرّب مسح البحث أو تعديله، أو انشر ورشة جديدة لتظهر هنا.')}
                       </p>
                     </div>
                   </td>
@@ -2406,7 +2501,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
                           ws.skillLevel === 'Advanced' ? 'bg-purple-50 text-purple-700 border-purple-100' :
                           'bg-brand-charcoal/5 text-brand-charcoal border-brand-charcoal/10'
                         }`}>
-                          {ws.skillLevel || 'Beginner'}
+                          {enumLabel('skillLevel', ws.skillLevel || 'Beginner', lang)}
                         </span>
                       </td>
 
@@ -2422,7 +2517,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
                           }`}
                         >
                           <Calendar className="h-3 w-3 text-brand-terracotta" />
-                          <span>{sessionCount} {sessionCount === 1 ? 'Session' : 'Sessions'}</span>
+                          <span>{lang === 'ar' ? sessionsAr(sessionCount) : `${sessionCount} ${sessionCount === 1 ? 'Session' : 'Sessions'}`}</span>
                           {sessionCount > 0 && (
                             isExpanded ? <ChevronUp className="h-3 w-3 ml-0.5" /> : <ChevronDown className="h-3 w-3 ml-0.5" />
                           )}
@@ -2441,7 +2536,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
 
                       {/* Price */}
                       <td className="py-3.5 px-4 text-right font-mono font-bold text-brand-charcoal">
-                        {ws.price} SAR
+                        {ws.price} {t('SAR', 'ريال')}
                       </td>
 
                       {/* Instructor — resolved from the assigned staff ID */}
@@ -2465,9 +2560,9 @@ export const AdminWorkshopFormSection: React.FC = () => {
                               : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                           }`}
                         >
-                          <option value="Published">Published</option>
-                          <option value="Draft">Draft</option>
-                          <option value="Archived">Archived</option>
+                          <option value="Published">{enumLabel('workshopStatus', 'Published', lang)}</option>
+                          <option value="Draft">{enumLabel('workshopStatus', 'Draft', lang)}</option>
+                          <option value="Archived">{enumLabel('workshopStatus', 'Archived', lang)}</option>
                         </select>
                       </td>
 
@@ -2481,7 +2576,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
                           }}
                           className="px-2.5 py-1 bg-brand-cream border border-brand-clay hover:bg-brand-sand text-brand-charcoal font-bold rounded-lg text-xs transition-colors"
                         >
-                          Edit
+                          {t('Edit', 'تعديل')}
                         </button>
                       </td>
                     </tr>
@@ -2493,7 +2588,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
                           <div className="bg-white border border-brand-clay/60 rounded-xl p-3 space-y-2">
                             <h5 className="text-xs font-bold text-brand-charcoal flex items-center gap-1.5 uppercase tracking-wider">
                               <Clock className="h-3.5 w-3.5 text-brand-terracotta" />
-                              <span>Scheduled Timetable Slots for "{ws.title}"</span>
+                              <span>{t('Scheduled Timetable Slots for', 'مواعيد الجدول المجدولة لـ')} "{ws.title}"</span>
                             </h5>
                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
                               {ws.sessions.map((sess: any, sIdx: number) => {
@@ -2515,7 +2610,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
                                       <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
                                         isFull ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
                                       }`}>
-                                        {isFull ? 'Full' : `${usage.remainingCapacity} / ${usage.capacity} Left`}
+                                        {isFull ? t('Full', 'ممتلئة') : t(`${usage.remainingCapacity} / ${usage.capacity} Left`, `${usage.remainingCapacity} / ${usage.capacity} متبقٍ`)}
                                       </span>
                                     </div>
                                   </div>
@@ -2538,7 +2633,9 @@ export const AdminWorkshopFormSection: React.FC = () => {
         {processedWorkshops.length > 0 && (
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
             <p className="text-xs font-semibold text-brand-charcoal/60">
-              Showing <span className="font-bold text-brand-charcoal">{(currentPage - 1) * ITEMS_PER_PAGE + 1}</span>–<span className="font-bold text-brand-charcoal">{Math.min(currentPage * ITEMS_PER_PAGE, processedWorkshops.length)}</span> of <span className="font-bold text-brand-charcoal">{processedWorkshops.length}</span> workshops
+              {lang === 'ar'
+                ? <>عرض <span className="font-bold text-brand-charcoal">{(currentPage - 1) * ITEMS_PER_PAGE + 1}</span>–<span className="font-bold text-brand-charcoal">{Math.min(currentPage * ITEMS_PER_PAGE, processedWorkshops.length)}</span> من <span className="font-bold text-brand-charcoal">{processedWorkshops.length}</span> ورشة</>
+                : <>Showing <span className="font-bold text-brand-charcoal">{(currentPage - 1) * ITEMS_PER_PAGE + 1}</span>–<span className="font-bold text-brand-charcoal">{Math.min(currentPage * ITEMS_PER_PAGE, processedWorkshops.length)}</span> of <span className="font-bold text-brand-charcoal">{processedWorkshops.length}</span> workshops</>}
             </p>
             <div className="flex items-center gap-2">
               <button
@@ -2547,10 +2644,10 @@ export const AdminWorkshopFormSection: React.FC = () => {
                 onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                 className="px-3 py-1.5 bg-white border border-brand-clay rounded-xl text-xs font-bold text-brand-charcoal disabled:opacity-40 disabled:cursor-not-allowed hover:bg-brand-sand transition-colors cursor-pointer"
               >
-                Previous
+                {t('Previous', 'السابق')}
               </button>
               <span className="text-xs font-bold text-brand-charcoal px-2">
-                Page {currentPage} of {totalWorkshopPages}
+                {t('Page', 'الصفحة')} {currentPage} {t('of', 'من')} {totalWorkshopPages}
               </span>
               <button
                 type="button"
@@ -2558,7 +2655,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
                 onClick={() => setCurrentPage(prev => Math.min(totalWorkshopPages, prev + 1))}
                 className="px-3 py-1.5 bg-white border border-brand-clay rounded-xl text-xs font-bold text-brand-charcoal disabled:opacity-40 disabled:cursor-not-allowed hover:bg-brand-sand transition-colors cursor-pointer"
               >
-                Next
+                {t('Next', 'التالي')}
               </button>
             </div>
           </div>
@@ -2583,7 +2680,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
           className="cursor-pointer px-5 py-3 rounded-xl border border-brand-clay bg-white text-xs font-bold text-brand-charcoal hover:bg-brand-sand transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Save className="h-4 w-4" />
-          <span>{uploadingPhotos ? 'Uploading…' : isSaving ? 'Saving...' : 'Save Draft'}</span>
+          <span>{uploadingPhotos ? t('Uploading…', 'جارٍ الرفع…') : isSaving ? t('Saving...', 'جارٍ الحفظ...') : t('Save Draft', 'حفظ المسودة')}</span>
         </button>
 
         <div className="flex gap-3">
@@ -2599,7 +2696,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
             }}
             className="cursor-pointer px-5 py-3 text-xs font-bold text-brand-charcoal/60 hover:text-brand-charcoal disabled:opacity-50"
           >
-            Cancel
+            {t('Cancel', 'إلغاء')}
           </button>
           
           <button
@@ -2609,7 +2706,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
             className="cursor-pointer rounded-xl bg-brand-terracotta px-6 py-3 text-xs font-bold text-brand-cream hover:bg-brand-terracotta-hover transition-all flex items-center gap-1.5 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Check className="h-4 w-4 stroke-[3]" />
-            <span>{uploadingPhotos ? 'Uploading…' : isSaving ? 'Saving...' : (editingWorkshopId ? 'Update Workshop' : 'Publish Workshop')}</span>
+            <span>{uploadingPhotos ? t('Uploading…', 'جارٍ الرفع…') : isSaving ? t('Saving...', 'جارٍ الحفظ...') : (editingWorkshopId ? t('Update Workshop', 'تحديث الورشة') : t('Publish Workshop', 'نشر الورشة'))}</span>
           </button>
         </div>
       </div>,

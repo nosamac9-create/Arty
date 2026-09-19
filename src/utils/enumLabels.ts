@@ -32,7 +32,17 @@ const LABELS: Record<string, Record<string, string>> = {
                     'Workshop Booking': 'حجز ورشة', 'Event Booking': 'حجز فعالية',
                     'Birthday Package': 'باقة عيد ميلاد', 'Live Queue': 'الطابور المباشر',
                     'Admin Created': 'أنشأته الإدارة', 'Manual Admin Entry': 'إدخال يدوي من الإدارة',
-                    'Walk-in': 'زيارة مباشرة' }
+                    'Walk-in': 'زيارة مباشرة' },
+  // workshops.status and birthday_packages.status
+  workshopStatus: { 'Draft': 'مسودة', 'Published': 'منشورة', 'Archived': 'مؤرشفة' },
+  // workshops.skillLevel (option values are stored and compared, e.g. the badge colour)
+  skillLevel:     { 'Beginner': 'مبتدئ', 'Intermediate': 'متوسط', 'Advanced': 'متقدم', 'All Levels': 'كل المستويات' },
+  // birthday_packages.pricingType
+  pricingType:    { 'Per child': 'للطفل', 'Per person': 'للشخص', 'Fixed price': 'سعر ثابت' },
+  // checkStaffMemberAvailability().status, shown next to a staff name in dropdowns.
+  // 'Available' is also reused for space options.
+  staffAvailability: { 'Available': 'متاح', 'Busy': 'مشغول', 'Outside working hours': 'خارج ساعات العمل',
+                       'On Leave': 'في إجازة', 'No schedule set': 'لا يوجد جدول محدد' }
 };
 
 export function enumLabel(group: keyof typeof LABELS, value: string, lang: Lang): string {

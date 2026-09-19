@@ -11,16 +11,21 @@ import {
 import { LineListTextarea } from './ui/LineListTextarea';
 import { matchesQuery } from '../utils/search';
 import { AdminBirthdayPackageEditor } from './AdminBirthdayPackageEditor';
+import { useLanguage } from '../context/LanguageContext';
+import { enumLabel } from '../utils/enumLabels';
 
 /** One label/value line. Optional answers are shown as "Not provided", never dropped. */
-const DetailRow: React.FC<{ label: string; value?: string; mono?: boolean }> = ({ label, value, mono }) => (
-  <div className="flex justify-between gap-3 border-b border-brand-clay/25 last:border-b-0 py-1">
-    <span className="text-brand-charcoal/60 font-semibold">{label}</span>
-    <span className={`font-bold text-brand-charcoal text-right ${mono ? 'font-mono' : ''}`}>
-      {value ? value : <span className="text-brand-charcoal/30 italic font-normal">Not provided</span>}
-    </span>
-  </div>
-);
+const DetailRow: React.FC<{ label: string; value?: string; mono?: boolean }> = ({ label, value, mono }) => {
+  const { t } = useLanguage();
+  return (
+    <div className="flex justify-between gap-3 border-b border-brand-clay/25 last:border-b-0 py-1">
+      <span className="text-brand-charcoal/60 font-semibold">{label}</span>
+      <span className={`font-bold text-brand-charcoal text-right ${mono ? 'font-mono' : ''}`}>
+        {value ? value : <span className="text-brand-charcoal/30 italic font-normal">{t('Not provided', 'غير مُقدَّم')}</span>}
+      </span>
+    </div>
+  );
+};
 
 export const AdminEventsSection: React.FC = () => {
   const {
@@ -40,6 +45,7 @@ export const AdminEventsSection: React.FC = () => {
     // Already provided by the shared data layer.
     bookings: liveBookings
   } = useApp();
+  const { lang, t } = useLanguage();
 
   // Toast message state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -66,7 +72,7 @@ export const AdminEventsSection: React.FC = () => {
   /** Writes to the one shared record the customer site reads from. */
   const handleSavePackage = async (id: string, updates: Partial<BirthdayPackage>) => {
     await updateBirthdayPackage(id, updates);
-    showToast(`"${updates.name || 'Package'}" saved. The customer site now shows these details.`);
+    showToast(t(`"${updates.name || 'Package'}" saved. The customer site now shows these details.`, `تم حفظ "${updates.name || 'الباقة'}". يعرض موقع العملاء هذه التفاصيل الآن.`));
     setEditingPackageId(null);
   };
 
@@ -101,13 +107,13 @@ export const AdminEventsSection: React.FC = () => {
       status: 'Draft',
       displayOrder: birthdayPackages.length
     });
-    showToast('Package created as Draft. Publish it when the details are ready.');
+    showToast(t('Package created as Draft. Publish it when the details are ready.', 'تم إنشاء الباقة كمسودة. انشرها عندما تصبح التفاصيل جاهزة.'));
   };
 
   const handleDeletePackage = async (id: string, name: string) => {
-    if (!window.confirm(`Delete "${name}"? This removes it from the customer site.`)) return;
+    if (!window.confirm(t(`Delete "${name}"? This removes it from the customer site.`, `حذف "${name}"؟ سيؤدي ذلك إلى إزالتها من موقع العملاء.`))) return;
     await deleteBirthdayPackage(id);
-    showToast(`"${name}" deleted.`);
+    showToast(t(`"${name}" deleted.`, `تم حذف "${name}".`));
   };
 
   // Table Filters & Search & Pagination
@@ -189,7 +195,7 @@ export const AdminEventsSection: React.FC = () => {
     const paymentStatusUpdate = refundOption === 'Refunded' ? 'Refunded' : undefined;
     await cancelBooking(id, 'Staff', paymentStatusUpdate);
     setCancellingBookingId(null);
-    showToast(`Booking ${id} has been cancelled.`);
+    showToast(t(`Booking ${id} has been cancelled.`, `تم إلغاء الحجز ${id}.`));
   };
 
   // The editor takes over the page, so the management view stays an overview.
@@ -219,10 +225,10 @@ export const AdminEventsSection: React.FC = () => {
       <div>
         <div className="flex items-center gap-2 mb-1">
           <Sparkles className="h-5 w-5 text-brand-terracotta" />
-          <span className="text-xs font-bold uppercase tracking-wider text-brand-terracotta">Events & Socials Console</span>
+          <span className="text-xs font-bold uppercase tracking-wider text-brand-terracotta">{t('Events & Socials Console', 'لوحة الفعاليات والمناسبات الاجتماعية')}</span>
         </div>
-        <h1 className="font-display text-2xl font-bold text-brand-charcoal">Birthday Package Management</h1>
-        <p className="text-xs text-brand-charcoal/60 mt-0.5">Edit the package details customers see, and view all package reservations.</p>
+        <h1 className="font-display text-2xl font-bold text-brand-charcoal">{t('Birthday Package Management', 'إدارة باقات أعياد الميلاد')}</h1>
+        <p className="text-xs text-brand-charcoal/60 mt-0.5">{t('Edit the package details customers see, and view all package reservations.', 'عدّل تفاصيل الباقات التي يراها العملاء، واطّلع على جميع حجوزات الباقات.')}</p>
       </div>
 
       {/* ========================================================== */}
@@ -234,10 +240,10 @@ export const AdminEventsSection: React.FC = () => {
           <div>
             <h2 className="font-display text-lg font-bold text-brand-charcoal flex items-center gap-2">
               <Package className="h-5 w-5 text-brand-terracotta" />
-              <span>Birthday Package Details</span>
+              <span>{t('Birthday Package Details', 'تفاصيل باقات أعياد الميلاد')}</span>
             </h2>
             <p className="text-xs text-brand-charcoal/60 mt-0.5">
-              These records are what the customer site shows. Booking-form fields are configured in Settings → Events &amp; Birthday.
+              {t('These records are what the customer site shows. Booking-form fields are configured in Settings → Events & Birthday.', 'هذه السجلات هي ما يعرضه موقع العملاء. تُضبط حقول نموذج الحجز من الإعدادات ← الفعاليات وأعياد الميلاد.')}
             </p>
           </div>
 
@@ -247,12 +253,12 @@ export const AdminEventsSection: React.FC = () => {
             className="cursor-pointer px-4 py-2.5 bg-brand-terracotta hover:bg-brand-terracotta/90 text-brand-cream rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs shrink-0"
           >
             <Plus className="h-4 w-4" />
-            <span>Add Package</span>
+            <span>{t('Add Package', 'إضافة باقة')}</span>
           </button>
         </div>
 
         {birthdayPackages.length === 0 ? (
-          <p className="text-xs text-brand-charcoal/50 italic py-4">No birthday packages yet. Add one to publish it on the customer site.</p>
+          <p className="text-xs text-brand-charcoal/50 italic py-4">{t('No birthday packages yet. Add one to publish it on the customer site.', 'لا توجد باقات أعياد ميلاد بعد. أضف باقة لنشرها على موقع العملاء.')}</p>
         ) : (
           <div className="space-y-4">
             {birthdayPackages.map(pkg => {
@@ -272,11 +278,11 @@ export const AdminEventsSection: React.FC = () => {
                       <div className="min-w-0">
                         <p className="text-sm font-bold text-brand-charcoal truncate">{pkg.name}</p>
                         <p className="text-[11px] font-semibold text-brand-charcoal/60">
-                          {pkg.price} SAR · {pkg.pricingType} · {pkg.duration}
+                          {pkg.price} {t('SAR', 'ريال')} · {enumLabel('pricingType', pkg.pricingType, lang)} · {pkg.duration}
                         </p>
                       </div>
                       <span className="ms-auto hidden shrink-0 text-[11px] font-bold text-brand-terracotta sm:block">
-                        Edit package
+                        {t('Edit package', 'تعديل الباقة')}
                       </span>
                     </button>
 
@@ -284,12 +290,12 @@ export const AdminEventsSection: React.FC = () => {
                       <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${
                         pkg.status === 'Published' ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-600'
                       }`}>
-                        {pkg.status}
+                        {enumLabel('workshopStatus', pkg.status, lang)}
                       </span>
 
                       <button
                         type="button"
-                        title="Delete package"
+                        title={t('Delete package', 'حذف الباقة')}
                         onClick={() => handleDeletePackage(pkg.id, pkg.name)}
                         className="p-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 cursor-pointer"
                       >
@@ -316,14 +322,14 @@ export const AdminEventsSection: React.FC = () => {
           <div>
             <h2 className="font-display text-lg font-bold text-brand-charcoal flex items-center gap-2">
               <Users className="h-5 w-5 text-brand-terracotta" />
-              <span>Customer Event & Package Bookings</span>
+              <span>{t('Customer Event & Package Bookings', 'حجوزات العملاء للفعاليات والباقات')}</span>
             </h2>
-            <p className="text-xs text-brand-charcoal/60 mt-0.5">List of all customers who reserved a birthday package or private event.</p>
+            <p className="text-xs text-brand-charcoal/60 mt-0.5">{t('List of all customers who reserved a birthday package or private event.', 'قائمة بجميع العملاء الذين حجزوا باقة عيد ميلاد أو فعالية خاصة.')}</p>
           </div>
 
           <div className="flex items-center gap-2">
             <span className="bg-brand-sand px-3 py-1 rounded-full text-xs font-bold text-brand-charcoal">
-              {eventBookings.length} Total Reservations
+              {lang === 'ar' ? `إجمالي الحجوزات: ${eventBookings.length}` : `${eventBookings.length} Total Reservations`}
             </span>
           </div>
         </div>
@@ -334,7 +340,7 @@ export const AdminEventsSection: React.FC = () => {
             <Search className="absolute left-3.5 top-3 h-4 w-4 text-brand-charcoal/40" />
             <input
               type="text"
-              placeholder="Search by customer name, phone, email, or booking ref..."
+              placeholder={t('Search by customer name, phone, email, or booking ref...', 'ابحث باسم العميل أو الهاتف أو البريد الإلكتروني أو مرجع الحجز...')}
               value={tableSearch}
               onChange={e => setTableSearch(e.target.value)}
               className="w-full bg-brand-sand/20 border border-brand-clay/80 rounded-xl pl-10 pr-4 py-2.5 text-xs text-brand-charcoal focus:outline-none focus:border-brand-terracotta"
@@ -348,11 +354,11 @@ export const AdminEventsSection: React.FC = () => {
               onChange={e => setStatusFilter(e.target.value)}
               className="bg-brand-sand/20 border border-brand-clay/80 rounded-xl px-3 py-2.5 text-xs font-bold text-brand-charcoal focus:outline-none focus:border-brand-terracotta"
             >
-              <option value="all">All Statuses</option>
-              <option value="Pending">Pending</option>
-              <option value="Checked In">Checked In</option>
-              <option value="Completed">Completed</option>
-              <option value="Cancelled">Cancelled</option>
+              <option value="all">{t('All Statuses', 'كل الحالات')}</option>
+              <option value="Pending">{enumLabel('bookingStatus', 'Pending', lang)}</option>
+              <option value="Checked In">{enumLabel('bookingStatus', 'Checked In', lang)}</option>
+              <option value="Completed">{enumLabel('bookingStatus', 'Completed', lang)}</option>
+              <option value="Cancelled">{enumLabel('bookingStatus', 'Cancelled', lang)}</option>
             </select>
           </div>
         </div>
@@ -362,21 +368,21 @@ export const AdminEventsSection: React.FC = () => {
           <table className="w-full text-left text-xs">
             <thead className="bg-brand-sand/40 border-b border-brand-clay/60 font-bold uppercase text-brand-charcoal/70 tracking-wider">
               <tr>
-                <th className="p-3.5">Booking Ref</th>
-                <th className="p-3.5">Customer Details</th>
-                <th className="p-3.5">Event / Package</th>
-                <th className="p-3.5">Date & Time</th>
-                <th className="p-3.5">Guests</th>
-                <th className="p-3.5">Price & Payment</th>
-                <th className="p-3.5">Booking Status</th>
-                <th className="p-3.5 text-right">Actions</th>
+                <th className="p-3.5">{t('Booking Ref', 'مرجع الحجز')}</th>
+                <th className="p-3.5">{t('Customer Details', 'بيانات العميل')}</th>
+                <th className="p-3.5">{t('Event / Package', 'الفعالية / الباقة')}</th>
+                <th className="p-3.5">{t('Date & Time', 'التاريخ والوقت')}</th>
+                <th className="p-3.5">{t('Guests', 'الضيوف')}</th>
+                <th className="p-3.5">{t('Price & Payment', 'السعر والدفع')}</th>
+                <th className="p-3.5">{t('Booking Status', 'حالة الحجز')}</th>
+                <th className="p-3.5 text-right">{t('Actions', 'الإجراءات')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-brand-clay/30 font-medium text-brand-charcoal">
               {eventBookings.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="p-8 text-center text-brand-charcoal/50 bg-brand-cream/30">
-                    No customer event bookings found.
+                    {t('No customer event bookings found.', 'لا توجد حجوزات فعاليات للعملاء.')}
                   </td>
                 </tr>
               ) : (
@@ -415,7 +421,7 @@ export const AdminEventsSection: React.FC = () => {
                           || b.workshopTitle}
                       </span>
                       <span className="text-[10px] text-brand-charcoal/50 uppercase font-bold">
-                        Source: {b.source || 'Website'}
+                        {t('Source:', 'المصدر:')} {enumLabel('source', b.source || 'Website', lang)}
                       </span>
                     </td>
 
@@ -427,12 +433,12 @@ export const AdminEventsSection: React.FC = () => {
 
                     {/* Guests */}
                     <td className="p-3.5 font-bold">
-                      {b.participants} Guests
+                      {b.participants} {t('Guests', 'ضيوف')}
                     </td>
 
                     {/* Price & Payment Status */}
                     <td className="p-3.5">
-                      <div className="font-mono font-bold text-brand-charcoal">{b.totalPrice} SAR</div>
+                      <div className="font-mono font-bold text-brand-charcoal">{b.totalPrice} {t('SAR', 'ريال')}</div>
                       <span className={`inline-block px-2 py-0.5 rounded-md text-[9px] font-bold mt-1 ${
                         b.paymentStatus === 'Paid' 
                           ? 'bg-emerald-100 text-emerald-800' 
@@ -440,7 +446,7 @@ export const AdminEventsSection: React.FC = () => {
                           ? 'bg-purple-100 text-purple-800'
                           : 'bg-amber-100 text-amber-800'
                       }`}>
-                        {b.paymentStatus}
+                        {enumLabel('payment', b.paymentStatus, lang)}
                       </span>
                     </td>
 
@@ -455,7 +461,7 @@ export const AdminEventsSection: React.FC = () => {
                           ? 'bg-red-100 text-red-800 border border-red-200'
                           : 'bg-amber-100 text-amber-800 border border-amber-200'
                       }`}>
-                        {b.status}
+                        {enumLabel('bookingStatus', b.status, lang)}
                       </span>
                     </td>
 
@@ -467,10 +473,10 @@ export const AdminEventsSection: React.FC = () => {
                           onClick={() => { setCancellingBookingId(b.id); setRefundOption('Refunded'); }}
                           className="cursor-pointer px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-[10px] font-bold rounded-lg transition-colors"
                         >
-                          Cancel Booking
+                          {t('Cancel Booking', 'إلغاء الحجز')}
                         </button>
                       ) : (
-                        <span className="text-[10px] text-brand-charcoal/40 font-bold">Cancelled</span>
+                        <span className="text-[10px] text-brand-charcoal/40 font-bold">{enumLabel('bookingStatus', 'Cancelled', lang)}</span>
                       )}
                     </td>
                   </tr>
@@ -484,7 +490,9 @@ export const AdminEventsSection: React.FC = () => {
         {eventBookings.length > 0 && (
           <div className="p-4 border-t border-brand-clay/40 bg-brand-sand/10 flex flex-col sm:flex-row items-center justify-between gap-4">
             <p className="text-xs font-semibold text-brand-charcoal/60">
-              Showing <span className="font-bold text-brand-charcoal">{(currentPage - 1) * ITEMS_PER_PAGE + 1}</span>–<span className="font-bold text-brand-charcoal">{Math.min(currentPage * ITEMS_PER_PAGE, eventBookings.length)}</span> of <span className="font-bold text-brand-charcoal">{eventBookings.length}</span> event bookings
+              {lang === 'ar'
+                ? <>عرض <span className="font-bold text-brand-charcoal">{(currentPage - 1) * ITEMS_PER_PAGE + 1}</span>–<span className="font-bold text-brand-charcoal">{Math.min(currentPage * ITEMS_PER_PAGE, eventBookings.length)}</span> من <span className="font-bold text-brand-charcoal">{eventBookings.length}</span> حجز فعالية</>
+                : <>Showing <span className="font-bold text-brand-charcoal">{(currentPage - 1) * ITEMS_PER_PAGE + 1}</span>–<span className="font-bold text-brand-charcoal">{Math.min(currentPage * ITEMS_PER_PAGE, eventBookings.length)}</span> of <span className="font-bold text-brand-charcoal">{eventBookings.length}</span> event bookings</>}
             </p>
             <div className="flex items-center gap-2">
               <button
@@ -493,10 +501,10 @@ export const AdminEventsSection: React.FC = () => {
                 onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                 className="px-3 py-1.5 bg-white border border-brand-clay rounded-xl text-xs font-bold text-brand-charcoal disabled:opacity-40 disabled:cursor-not-allowed hover:bg-brand-sand transition-colors cursor-pointer"
               >
-                Previous
+                {t('Previous', 'السابق')}
               </button>
               <span className="text-xs font-bold text-brand-charcoal px-2">
-                Page {currentPage} of {totalEventPages}
+                {t('Page', 'الصفحة')} {currentPage} {t('of', 'من')} {totalEventPages}
               </span>
               <button
                 type="button"
@@ -504,7 +512,7 @@ export const AdminEventsSection: React.FC = () => {
                 onClick={() => setCurrentPage(prev => Math.min(totalEventPages, prev + 1))}
                 className="px-3 py-1.5 bg-white border border-brand-clay rounded-xl text-xs font-bold text-brand-charcoal disabled:opacity-40 disabled:cursor-not-allowed hover:bg-brand-sand transition-colors cursor-pointer"
               >
-                Next
+                {t('Next', 'التالي')}
               </button>
             </div>
           </div>
@@ -526,7 +534,7 @@ export const AdminEventsSection: React.FC = () => {
             <div className="flex items-start justify-between gap-4 p-6 border-b border-brand-clay/60">
               <div>
                 <span className="text-[10px] font-bold uppercase tracking-widest text-brand-terracotta block">
-                  Birthday / Event Reservation
+                  {t('Birthday / Event Reservation', 'حجز عيد ميلاد / فعالية')}
                 </span>
                 <h2 className="font-display text-2xl font-bold text-brand-charcoal">
                   {selectedEventBooking.workshopTitle}
@@ -538,6 +546,7 @@ export const AdminEventsSection: React.FC = () => {
 
               <button
                 onClick={() => setSelectedEventBookingId(null)}
+                aria-label={t('Close', 'إغلاق')}
                 className="p-1.5 rounded-lg hover:bg-brand-sand text-brand-charcoal/60 cursor-pointer"
               >
                 <X className="h-4 w-4" />
@@ -549,26 +558,26 @@ export const AdminEventsSection: React.FC = () => {
               {/* Status row */}
               <div className="flex flex-wrap gap-2">
                 <span className="px-2.5 py-1 rounded-lg font-bold bg-white border border-brand-clay/60 text-brand-charcoal">
-                  Booking status: {selectedEventBooking.status}
+                  {t('Booking status:', 'حالة الحجز:')} {enumLabel('bookingStatus', selectedEventBooking.status, lang)}
                 </span>
                 <span className="px-2.5 py-1 rounded-lg font-bold bg-white border border-brand-clay/60 text-brand-charcoal">
-                  Payment: {selectedEventBooking.paymentStatus}
+                  {t('Payment:', 'الدفع:')} {enumLabel('payment', selectedEventBooking.paymentStatus, lang)}
                 </span>
                 <span className="px-2.5 py-1 rounded-lg font-bold bg-white border border-brand-clay/60 text-brand-charcoal">
-                  Source: {selectedEventBooking.source}
+                  {t('Source:', 'المصدر:')} {enumLabel('source', selectedEventBooking.source, lang)}
                 </span>
 
                 {/* Assigned staff. Sized and styled as the pills beside it so
                     the row stays one consistent line. Availability is checked
                     against THIS booking's own date and time. */}
                 <label className="px-2.5 py-1 rounded-lg font-bold bg-white border border-brand-clay/60 text-brand-charcoal inline-flex items-center gap-1.5">
-                  <span>Staff:</span>
+                  <span>{t('Staff:', 'الموظف:')}</span>
                   <select
                     value={selectedEventBooking.staffId || ''}
                     onChange={e => assignBookingStaff(selectedEventBooking.id, e.target.value || null)}
                     className="bg-transparent font-bold text-brand-charcoal cursor-pointer focus:outline-none max-w-[180px]"
                   >
-                    <option value="">Unassigned</option>
+                    <option value="">{t('Unassigned', 'غير معيّن')}</option>
                     {staff
                       .filter(m => m.status === 'Active' || m.id === selectedEventBooking.staffId)
                       .map(member => {
@@ -586,7 +595,7 @@ export const AdminEventsSection: React.FC = () => {
                         const unavailable = avail ? !avail.isAvailable : false;
                         return (
                           <option key={member.id} value={member.id} disabled={unavailable}>
-                            {avail ? `${member.name} — ${avail.status}` : member.name}
+                            {avail ? `${member.name} — ${enumLabel('staffAvailability', avail.status, lang)}` : member.name}
                           </option>
                         );
                       })}
@@ -596,23 +605,23 @@ export const AdminEventsSection: React.FC = () => {
 
               {/* Customer */}
               <section className="bg-white border border-brand-clay/60 rounded-2xl p-4 space-y-2">
-                <h3 className="font-bold text-brand-charcoal uppercase tracking-wider text-[10px]">Customer</h3>
-                <DetailRow label="Name" value={selectedEventBooking.customerName} />
-                <DetailRow label="Phone" value={selectedEventBooking.customerPhone} mono />
-                <DetailRow label="Email" value={selectedEventBooking.customerEmail} />
+                <h3 className="font-bold text-brand-charcoal uppercase tracking-wider text-[10px]">{t('Customer', 'العميل')}</h3>
+                <DetailRow label={t('Name', 'الاسم')} value={selectedEventBooking.customerName} />
+                <DetailRow label={t('Phone', 'الهاتف')} value={selectedEventBooking.customerPhone} mono />
+                <DetailRow label={t('Email', 'البريد الإلكتروني')} value={selectedEventBooking.customerEmail} />
               </section>
 
               {/* Reservation */}
               <section className="bg-white border border-brand-clay/60 rounded-2xl p-4 space-y-2">
-                <h3 className="font-bold text-brand-charcoal uppercase tracking-wider text-[10px]">Reservation</h3>
+                <h3 className="font-bold text-brand-charcoal uppercase tracking-wider text-[10px]">{t('Reservation', 'الحجز')}</h3>
                 <DetailRow
-                  label="Package selected"
+                  label={t('Package selected', 'الباقة المختارة')}
                   value={selectedEventPackage?.name || eventDetails?.packageName || selectedEventBooking.workshopTitle}
                 />
-                <DetailRow label="Event date" value={eventDetails?.eventDate || selectedEventBooking.date} mono />
-                <DetailRow label="Event time" value={eventDetails?.eventTime || selectedEventBooking.time} mono />
-                <DetailRow label="Number of guests" value={String(eventDetails?.guestCount ?? selectedEventBooking.participants)} />
-                <DetailRow label="Submitted" value={eventDetails?.submittedAt ? formatDateTime(eventDetails.submittedAt) : formatDateTime(selectedEventBooking.createdAt)} />
+                <DetailRow label={t('Event date', 'تاريخ الفعالية')} value={eventDetails?.eventDate || selectedEventBooking.date} mono />
+                <DetailRow label={t('Event time', 'وقت الفعالية')} value={eventDetails?.eventTime || selectedEventBooking.time} mono />
+                <DetailRow label={t('Number of guests', 'عدد الضيوف')} value={String(eventDetails?.guestCount ?? selectedEventBooking.participants)} />
+                <DetailRow label={t('Submitted', 'تاريخ التقديم')} value={eventDetails?.submittedAt ? formatDateTime(eventDetails.submittedAt) : formatDateTime(selectedEventBooking.createdAt)} />
               </section>
 
               {/* The Celebration Details card was removed — All Submitted Form
@@ -623,10 +632,10 @@ export const AdminEventsSection: React.FC = () => {
               {eventDetails?.fieldValues && eventDetails.fieldValues.length > 0 && (
                 <section className="bg-white border border-brand-clay/60 rounded-2xl p-4 space-y-2">
                   <h3 className="font-bold text-brand-charcoal uppercase tracking-wider text-[10px]">
-                    All Submitted Form Answers
+                    {t('All Submitted Form Answers', 'جميع إجابات النموذج المقدَّمة')}
                   </h3>
                   <p className="text-[10px] text-brand-charcoal/50">
-                    Everything the customer filled in on the reservation form.
+                    {t('Everything the customer filled in on the reservation form.', 'كل ما أدخله العميل في نموذج الحجز.')}
                   </p>
                   {eventDetails.fieldValues.map(field => {
                     const isImageField = !!field.imageUrl || /photo|image/i.test(field.key);
@@ -643,7 +652,7 @@ export const AdminEventsSection: React.FC = () => {
                               <button
                                 type="button"
                                 onClick={() => setPreviewImage({ url: field.imageUrl!, label: field.label })}
-                                title="Click to enlarge"
+                                title={t('Click to enlarge', 'انقر للتكبير')}
                                 className="h-20 w-20 rounded-xl overflow-hidden border border-brand-clay/60 shrink-0 cursor-zoom-in hover:border-brand-terracotta transition-colors"
                               >
                                 <img src={field.imageUrl} alt={field.label} className="h-full w-full object-cover" />
@@ -655,7 +664,7 @@ export const AdminEventsSection: React.FC = () => {
                                   onClick={() => setPreviewImage({ url: field.imageUrl!, label: field.label })}
                                   className="text-[11px] font-bold text-brand-terracotta hover:underline text-left cursor-pointer"
                                 >
-                                  View larger
+                                  {t('View larger', 'عرض أكبر')}
                                 </button>
                                 <a
                                   href={field.imageUrl}
@@ -663,12 +672,12 @@ export const AdminEventsSection: React.FC = () => {
                                   className="text-[11px] font-bold text-brand-charcoal/70 hover:text-brand-charcoal hover:underline flex items-center gap-1"
                                 >
                                   <Download className="h-3 w-3" />
-                                  <span>Save Image</span>
+                                  <span>{t('Save Image', 'حفظ الصورة')}</span>
                                 </a>
                               </div>
                             </div>
                           ) : (
-                            <p className="text-brand-charcoal/40 italic">No image was submitted for this field.</p>
+                            <p className="text-brand-charcoal/40 italic">{t('No image was submitted for this field.', 'لم تُرسَل صورة لهذا الحقل.')}</p>
                           )}
                         </div>
                       );
@@ -680,7 +689,7 @@ export const AdminEventsSection: React.FC = () => {
                           {field.label}
                         </span>
                         <span className="font-bold text-brand-charcoal text-right">
-                          {field.value || <span className="text-brand-charcoal/30 italic">Not provided</span>}
+                          {field.value || <span className="text-brand-charcoal/30 italic">{t('Not provided', 'غير مُقدَّم')}</span>}
                         </span>
                       </div>
                     );
@@ -690,13 +699,13 @@ export const AdminEventsSection: React.FC = () => {
 
               {/* Money */}
               <section className="bg-white border border-brand-clay/60 rounded-2xl p-4 space-y-2">
-                <h3 className="font-bold text-brand-charcoal uppercase tracking-wider text-[10px]">Payment</h3>
-                <DetailRow label="Total amount" value={eventDetails?.totalAmount !== undefined ? `${eventDetails.totalAmount} SAR` : ''} />
+                <h3 className="font-bold text-brand-charcoal uppercase tracking-wider text-[10px]">{t('Payment', 'الدفع')}</h3>
+                <DetailRow label={t('Total amount', 'المبلغ الإجمالي')} value={eventDetails?.totalAmount !== undefined ? `${eventDetails.totalAmount} ${t('SAR', 'ريال')}` : ''} />
                 <DetailRow
-                  label="Deposit amount"
-                  value={`${eventDetails?.depositAmount ?? selectedEventBooking.totalPrice} SAR`}
+                  label={t('Deposit amount', 'مبلغ العربون')}
+                  value={`${eventDetails?.depositAmount ?? selectedEventBooking.totalPrice} ${t('SAR', 'ريال')}`}
                 />
-                <DetailRow label="Payment status" value={selectedEventBooking.paymentStatus} />
+                <DetailRow label={t('Payment status', 'حالة الدفع')} value={enumLabel('payment', selectedEventBooking.paymentStatus, lang)} />
               </section>
 
               <div className="flex justify-end pt-1">
@@ -704,7 +713,7 @@ export const AdminEventsSection: React.FC = () => {
                   onClick={() => setSelectedEventBookingId(null)}
                   className="px-5 py-2.5 bg-brand-charcoal text-brand-cream rounded-xl text-xs font-bold cursor-pointer"
                 >
-                  Close
+                  {t('Close', 'إغلاق')}
                 </button>
               </div>
             </div>
@@ -733,12 +742,12 @@ export const AdminEventsSection: React.FC = () => {
                   className="px-3 py-1.5 bg-brand-terracotta hover:bg-brand-terracotta/90 text-brand-cream rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
                 >
                   <Download className="h-3.5 w-3.5" />
-                  <span>Save Image</span>
+                  <span>{t('Save Image', 'حفظ الصورة')}</span>
                 </a>
                 <button
                   type="button"
                   onClick={() => setPreviewImage(null)}
-                  title="Close preview"
+                  title={t('Close preview', 'إغلاق المعاينة')}
                   className="p-1.5 rounded-lg hover:bg-brand-sand text-brand-charcoal/60 cursor-pointer"
                 >
                   <X className="h-4 w-4" />
@@ -763,20 +772,31 @@ export const AdminEventsSection: React.FC = () => {
           <div className="bg-brand-cream border border-brand-clay rounded-3xl p-6 max-w-sm w-full text-left space-y-4 shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="flex items-center gap-3 text-red-600">
               <ShieldAlert className="h-6 w-6" />
-              <h3 className="font-display text-base font-bold text-brand-charcoal">Cancel Event Booking?</h3>
+              <h3 className="font-display text-base font-bold text-brand-charcoal">{t('Cancel Event Booking?', 'إلغاء حجز الفعالية؟')}</h3>
             </div>
             <p className="text-xs text-brand-charcoal/70 leading-relaxed">
-              Are you sure you want to cancel booking <strong className="font-mono text-brand-charcoal">{cancellingBookingId}</strong>? This will release reserved seats and mark the reservation as cancelled
-              {refundOption === 'Refunded'
-                ? ', and the payment will be marked as refunded.'
-                : ' — the payment will not be refunded and stays as recorded.'}
+              {lang === 'ar' ? (
+                <>
+                  هل أنت متأكد من إلغاء الحجز <strong className="font-mono text-brand-charcoal">{cancellingBookingId}</strong>؟ سيؤدي هذا إلى تحرير المقاعد المحجوزة ووضع علامة «ملغى» على الحجز
+                  {refundOption === 'Refunded'
+                    ? '، وسيتم وضع علامة «مُسترد» على الدفعة.'
+                    : '، ولن يُسترد المبلغ وسيبقى الدفع كما هو مسجَّل.'}
+                </>
+              ) : (
+                <>
+                  Are you sure you want to cancel booking <strong className="font-mono text-brand-charcoal">{cancellingBookingId}</strong>? This will release reserved seats and mark the reservation as cancelled
+                  {refundOption === 'Refunded'
+                    ? ', and the payment will be marked as refunded.'
+                    : ' — the payment will not be refunded and stays as recorded.'}
+                </>
+              )}
             </p>
 
             {/* Refund Action Selector — same pattern as the Bookings Ledger's
                 cancel modal. Events don't follow the workshop 24h window, so
                 there is no eligibility hint here, only the explicit choice. */}
             <div className="space-y-2">
-              <label className="text-xs font-bold text-brand-charcoal/70 block">Select Payment Action outcome:</label>
+              <label className="text-xs font-bold text-brand-charcoal/70 block">{t('Select Payment Action outcome:', 'اختر نتيجة إجراء الدفع:')}</label>
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
@@ -787,8 +807,8 @@ export const AdminEventsSection: React.FC = () => {
                       : 'bg-white border-brand-clay/60 hover:bg-brand-sand/50'
                   }`}
                 >
-                  <span>Mark as Refunded</span>
-                  <span className="text-[9px] font-normal opacity-85">Reverts payment as Refunded</span>
+                  <span>{t('Mark as Refunded', 'تحديد كمُسترد')}</span>
+                  <span className="text-[9px] font-normal opacity-85">{t('Reverts payment as Refunded', 'يُسجَّل الدفع كمُسترد')}</span>
                 </button>
 
                 <button
@@ -800,8 +820,8 @@ export const AdminEventsSection: React.FC = () => {
                       : 'bg-white border-brand-clay/60 hover:bg-brand-sand/50'
                   }`}
                 >
-                  <span>Mark as Not Refunded</span>
-                  <span className="text-[9px] font-normal opacity-85">No refund issued — payment stays as recorded</span>
+                  <span>{t('Mark as Not Refunded', 'تحديد كغير مُسترد')}</span>
+                  <span className="text-[9px] font-normal opacity-85">{t('No refund issued — payment stays as recorded', 'لا يُصدر استرداد — يبقى الدفع كما هو مسجَّل')}</span>
                 </button>
               </div>
             </div>
@@ -811,13 +831,13 @@ export const AdminEventsSection: React.FC = () => {
                 onClick={() => setCancellingBookingId(null)}
                 className="cursor-pointer py-2.5 border border-brand-clay hover:bg-brand-sand text-brand-charcoal text-xs font-bold rounded-xl"
               >
-                Keep Booking
+                {t('Keep Booking', 'إبقاء الحجز')}
               </button>
               <button
                 onClick={() => confirmCancel(cancellingBookingId)}
                 className="cursor-pointer py-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl shadow-xs"
               >
-                Confirm Cancellation
+                {t('Confirm Cancellation', 'تأكيد الإلغاء')}
               </button>
             </div>
           </div>
