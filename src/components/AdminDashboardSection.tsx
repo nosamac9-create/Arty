@@ -13,6 +13,8 @@ import { Booking, PotteryPiece } from '../types';
 import { getActivitiesForDate, categorizeBooking } from '../utils/activityUtils';
 import { searchText } from '../utils/search';
 import { usePagination, TablePager } from './ui/TablePager';
+import { useLanguage } from '../context/LanguageContext';
+import { enumLabel } from '../utils/enumLabels';
 
 export const AdminDashboardSection: React.FC = () => {
   const {
@@ -27,6 +29,7 @@ export const AdminDashboardSection: React.FC = () => {
     sendPickupReminder,
     setSelectedEventBookingId
   } = useApp();
+  const { lang, t } = useLanguage();
 
   const tomorrowDateStr = useMemo(() => getRelativeRiyadhDateStr(1), [getRelativeRiyadhDateStr]);
   const currentRiyadhMonth = useMemo(() => todayDateStr.slice(0, 7), [todayDateStr]);
@@ -158,9 +161,9 @@ export const AdminDashboardSection: React.FC = () => {
       customerPhone: piece.customerPhone
     });
     if (result.success) {
-      showToast(`Piece ${piece.pieceCode || piece.id} marked as Collected for ${piece.customerName}!`);
+      showToast(t(`Piece ${piece.pieceCode || piece.id} marked as Collected for ${piece.customerName}!`, `تم تسجيل القطعة ${piece.pieceCode || piece.id} كمُستلمة للعميل ${piece.customerName}!`));
     } else {
-      showToast(result.error || 'Could not mark this piece as collected. Please try again.');
+      showToast(result.error || t('Could not mark this piece as collected. Please try again.', 'تعذّر تسجيل هذه القطعة كمُستلمة. يرجى المحاولة مرة أخرى.'));
     }
   };
 
@@ -180,14 +183,14 @@ export const AdminDashboardSection: React.FC = () => {
 
     if (result.outcome === 'sent') {
       if (result.smsSent === true) {
-        showToast(`Pickup reminder texted to ${piece.customerName} for piece ${piece.pieceCode || piece.id}.`);
+        showToast(t(`Pickup reminder texted to ${piece.customerName} for piece ${piece.pieceCode || piece.id}.`, `تم إرسال رسالة تذكير بالاستلام إلى ${piece.customerName} للقطعة ${piece.pieceCode || piece.id}.`));
       } else {
-        showToast(`Reminder recorded for ${piece.pieceCode || piece.id}, but the text message could not be sent: ${result.smsError}`);
+        showToast(t(`Reminder recorded for ${piece.pieceCode || piece.id}, but the text message could not be sent: ${result.smsError}`, `تم تسجيل التذكير للقطعة ${piece.pieceCode || piece.id}، لكن تعذّر إرسال الرسالة النصية: ${result.smsError}`));
       }
     } else if (result.outcome === 'cooldown') {
-      showToast(`${piece.customerName} was already reminded today for piece ${piece.pieceCode || piece.id}.`);
+      showToast(t(`${piece.customerName} was already reminded today for piece ${piece.pieceCode || piece.id}.`, `تم تذكير ${piece.customerName} اليوم بالفعل بشأن القطعة ${piece.pieceCode || piece.id}.`));
     } else {
-      showToast(result.error || 'Could not send a reminder for this piece. Please try again.');
+      showToast(result.error || t('Could not send a reminder for this piece. Please try again.', 'تعذّر إرسال تذكير لهذه القطعة. يرجى المحاولة مرة أخرى.'));
     }
   };
 
@@ -220,16 +223,16 @@ export const AdminDashboardSection: React.FC = () => {
       {/* Header & Riyadh Date Banner */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white border border-brand-clay/70 p-5 rounded-3xl shadow-2xs">
         <div>
-          <h1 className="font-display text-2xl font-bold text-brand-charcoal">Admin Operational Dashboard</h1>
+          <h1 className="font-display text-2xl font-bold text-brand-charcoal">{t('Admin Operational Dashboard', 'لوحة التشغيل الإدارية')}</h1>
           <p className="text-xs text-brand-charcoal/60 mt-0.5">
-            Real-time daily management, studio attendance, and pottery collection lifecycle in Riyadh Time (GMT+3).
+            {t('Real-time daily management, studio attendance, and pottery collection lifecycle in Riyadh Time (GMT+3).', 'إدارة يومية لحظية، وحضور الاستوديو، ودورة استلام الفخار بتوقيت الرياض (GMT+3).')}
           </p>
         </div>
 
         <div className="flex items-center gap-3 bg-brand-sand/50 border border-brand-clay/60 px-4 py-2 rounded-2xl">
           <CalendarDays className="h-4 w-4 text-brand-terracotta" />
           <div className="text-xs">
-            <p className="text-[10px] font-bold text-brand-sage uppercase tracking-wider">Operational Riyadh Date</p>
+            <p className="text-[10px] font-bold text-brand-sage uppercase tracking-wider">{t('Operational Riyadh Date', 'تاريخ التشغيل (الرياض)')}</p>
             <p className="font-bold font-mono text-brand-charcoal">{todayDateStr}</p>
           </div>
         </div>
@@ -241,49 +244,49 @@ export const AdminDashboardSection: React.FC = () => {
         {/* Card 1: Today's Active Bookings */}
         <div className="bg-white border border-brand-clay/70 p-4 rounded-2xl shadow-2xs flex flex-col justify-between">
           <div className="flex justify-between items-start">
-            <span className="text-[10px] font-bold text-brand-charcoal/60 uppercase">Today's Bookings</span>
+            <span className="text-[10px] font-bold text-brand-charcoal/60 uppercase">{t("Today's Bookings", 'حجوزات اليوم')}</span>
             <div className="p-1.5 rounded-lg bg-brand-terracotta/10 text-brand-terracotta">
               <CalendarDays className="h-4 w-4" />
             </div>
           </div>
           <div className="mt-2">
             <p className="text-2xl font-bold text-brand-charcoal">{todaysBookings.length}</p>
-            <p className="text-[10px] font-semibold text-brand-sage mt-0.5">{todaysTotalParticipants} total participants</p>
+            <p className="text-[10px] font-semibold text-brand-sage mt-0.5">{todaysTotalParticipants} {t('total participants', 'إجمالي المشاركين')}</p>
           </div>
         </div>
 
         {/* Card 2: Tomorrow's Active Bookings */}
         <div className="bg-white border border-brand-clay/70 p-4 rounded-2xl shadow-2xs flex flex-col justify-between">
           <div className="flex justify-between items-start">
-            <span className="text-[10px] font-bold text-brand-charcoal/60 uppercase">Tomorrow's Bookings</span>
+            <span className="text-[10px] font-bold text-brand-charcoal/60 uppercase">{t("Tomorrow's Bookings", 'حجوزات الغد')}</span>
             <div className="p-1.5 rounded-lg bg-blue-50 text-blue-600">
               <CalendarDays className="h-4 w-4" />
             </div>
           </div>
           <div className="mt-2">
             <p className="text-2xl font-bold text-brand-charcoal">{tomorrowsBookings.length}</p>
-            <p className="text-[10px] font-semibold text-blue-600 mt-0.5">{tomorrowsTotalParticipants} scheduled guests</p>
+            <p className="text-[10px] font-semibold text-blue-600 mt-0.5">{tomorrowsTotalParticipants} {t('scheduled guests', 'ضيوف مجدولون')}</p>
           </div>
         </div>
 
         {/* Card 3: Monthly Birthday Packages */}
         <div className="bg-white border border-brand-clay/70 p-4 rounded-2xl shadow-2xs flex flex-col justify-between">
           <div className="flex justify-between items-start">
-            <span className="text-[10px] font-bold text-brand-charcoal/60 uppercase">Birthdays This Month</span>
+            <span className="text-[10px] font-bold text-brand-charcoal/60 uppercase">{t('Birthdays This Month', 'أعياد الميلاد هذا الشهر')}</span>
             <div className="p-1.5 rounded-lg bg-pink-50 text-pink-600">
               <Cake className="h-4 w-4" />
             </div>
           </div>
           <div className="mt-2">
             <p className="text-2xl font-bold text-pink-700">{monthlyBirthdayBookings.length}</p>
-            <p className="text-[10px] font-semibold text-pink-600 mt-0.5">{currentRiyadhMonth} reservations</p>
+            <p className="text-[10px] font-semibold text-pink-600 mt-0.5">{currentRiyadhMonth} {t('reservations', 'حجوزات')}</p>
           </div>
         </div>
 
         {/* Card 4: Awaiting Pickup 7+ Days */}
         <div className="bg-white border border-brand-clay/70 p-4 rounded-2xl shadow-2xs flex flex-col justify-between">
           <div className="flex justify-between items-start">
-            <span className="text-[10px] font-bold text-brand-charcoal/60 uppercase">Overdue Pickup (7d+)</span>
+            <span className="text-[10px] font-bold text-brand-charcoal/60 uppercase">{t('Overdue Pickup (7d+)', 'استلام متأخر (7+ أيام)')}</span>
             <div className="p-1.5 rounded-lg bg-amber-50 text-amber-700">
               <Box className="h-4 w-4" />
             </div>
@@ -292,35 +295,35 @@ export const AdminDashboardSection: React.FC = () => {
             <p className={`text-2xl font-bold ${overduePickupPieces.length > 0 ? 'text-amber-700' : 'text-brand-charcoal'}`}>
               {overduePickupPieces.length}
             </p>
-            <p className="text-[10px] font-semibold text-amber-800 mt-0.5">Shelved & ready 7+ days</p>
+            <p className="text-[10px] font-semibold text-amber-800 mt-0.5">{t('Shelved & ready 7+ days', 'على الرف وجاهزة منذ 7+ أيام')}</p>
           </div>
         </div>
 
         {/* Card 5: In Live Queue Now */}
         <div className="bg-white border border-brand-clay/70 p-4 rounded-2xl shadow-2xs flex flex-col justify-between">
           <div className="flex justify-between items-start">
-            <span className="text-[10px] font-bold text-brand-charcoal/60 uppercase">In Live Queue</span>
+            <span className="text-[10px] font-bold text-brand-charcoal/60 uppercase">{t('In Live Queue', 'في قائمة الانتظار الحية')}</span>
             <div className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600">
               <ListOrdered className="h-4 w-4" />
             </div>
           </div>
           <div className="mt-2">
             <p className="text-2xl font-bold text-emerald-700">{metrics.inQueueCount}</p>
-            <p className="text-[10px] font-semibold text-emerald-600 mt-0.5">Walk-in studio guests</p>
+            <p className="text-[10px] font-semibold text-emerald-600 mt-0.5">{t('Walk-in studio guests', 'ضيوف الاستوديو (زيارة مباشرة)')}</p>
           </div>
         </div>
 
         {/* Card 6: Total Recorded Revenue */}
         <div className="bg-white border border-brand-clay/70 p-4 rounded-2xl shadow-2xs flex flex-col justify-between">
           <div className="flex justify-between items-start">
-            <span className="text-[10px] font-bold text-brand-charcoal/60 uppercase">Recorded Revenue</span>
+            <span className="text-[10px] font-bold text-brand-charcoal/60 uppercase">{t('Recorded Revenue', 'الإيرادات المسجلة')}</span>
             <div className="p-1.5 rounded-lg bg-purple-50 text-purple-600">
               <Coins className="h-4 w-4" />
             </div>
           </div>
           <div className="mt-2">
-            <p className="text-2xl font-bold text-purple-800">{metrics.totalRevenue} SAR</p>
-            <p className="text-[10px] font-semibold text-purple-600 mt-0.5">Paid & deposits</p>
+            <p className="text-2xl font-bold text-purple-800">{metrics.totalRevenue} {t('SAR', 'ريال')}</p>
+            <p className="text-[10px] font-semibold text-purple-600 mt-0.5">{t('Paid & deposits', 'المدفوعات والعرابين')}</p>
           </div>
         </div>
 
@@ -336,9 +339,9 @@ export const AdminDashboardSection: React.FC = () => {
               <CalendarDays className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="font-display font-bold text-lg text-brand-charcoal">Today's Bookings</h2>
+              <h2 className="font-display font-bold text-lg text-brand-charcoal">{t("Today's Bookings", 'حجوزات اليوم')}</h2>
               <p className="text-xs text-brand-charcoal/60">
-                Workshops, events, birthday packages and studio walk-ins scheduled for today ({todayDateStr}).
+                {t(`Workshops, events, birthday packages and studio walk-ins scheduled for today (${todayDateStr}).`, `ورش وفعاليات وباقات أعياد ميلاد وزيارات مباشرة مجدولة لليوم (${todayDateStr}).`)}
               </p>
             </div>
           </div>
@@ -347,14 +350,14 @@ export const AdminDashboardSection: React.FC = () => {
             onClick={() => setAdminTab('bookings')}
             className="text-xs font-bold text-brand-terracotta hover:underline flex items-center gap-1 cursor-pointer self-start sm:self-auto"
           >
-            <span>Manage All Bookings</span>
+            <span>{t('Manage All Bookings', 'إدارة كل الحجوزات')}</span>
             <ChevronRight className="h-3.5 w-3.5" />
           </button>
         </div>
 
         {todaysBookings.length === 0 ? (
           <div className="p-8 text-center text-xs text-brand-charcoal/50 italic bg-brand-cream/30 rounded-2xl border border-dashed border-brand-clay">
-            No active bookings or walk-ins for today ({todayDateStr}).
+            {t(`No active bookings or walk-ins for today (${todayDateStr}).`, `لا توجد حجوزات نشطة أو زيارات مباشرة لليوم (${todayDateStr}).`)}
           </div>
         ) : (
           <>
@@ -362,15 +365,15 @@ export const AdminDashboardSection: React.FC = () => {
             <table className="w-full text-xs text-left">
               <thead>
                 <tr className="border-b border-brand-clay/60 text-brand-charcoal/50 uppercase tracking-wider font-bold">
-                  <th className="py-2.5 px-3">Time</th>
-                  <th className="py-2.5 px-3">Customer Name</th>
-                  <th className="py-2.5 px-3">Phone</th>
-                  <th className="py-2.5 px-3">Booking Type</th>
-                  <th className="py-2.5 px-3">Workshop / Event Title</th>
-                  <th className="py-2.5 px-3">Guests</th>
-                  <th className="py-2.5 px-3">Payment</th>
-                  <th className="py-2.5 px-3">Status</th>
-                  <th className="py-2.5 px-3 text-right">Action</th>
+                  <th className="py-2.5 px-3">{t('Time', 'الوقت')}</th>
+                  <th className="py-2.5 px-3">{t('Customer Name', 'اسم العميل')}</th>
+                  <th className="py-2.5 px-3">{t('Phone', 'الجوال')}</th>
+                  <th className="py-2.5 px-3">{t('Booking Type', 'نوع الحجز')}</th>
+                  <th className="py-2.5 px-3">{t('Workshop / Event Title', 'عنوان الورشة / الفعالية')}</th>
+                  <th className="py-2.5 px-3">{t('Guests', 'الضيوف')}</th>
+                  <th className="py-2.5 px-3">{t('Payment', 'الدفع')}</th>
+                  <th className="py-2.5 px-3">{t('Status', 'الحالة')}</th>
+                  <th className="py-2.5 px-3 text-right">{t('Action', 'الإجراء')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-brand-clay/30 font-medium">
@@ -385,21 +388,21 @@ export const AdminDashboardSection: React.FC = () => {
                         a.category === 'Self-Guided' ? 'bg-purple-50 text-purple-800 border-purple-200' :
                         'bg-blue-50 text-blue-800 border-blue-200'
                       }`}>
-                        {a.category}
+                        {enumLabel('category', a.category, lang)}
                       </span>
                       <span className="ml-1.5 inline-flex px-2 py-0.5 rounded text-[10px] font-bold border bg-brand-sand/50 text-brand-charcoal/70 border-brand-clay/50">
-                        {a.source}
+                        {enumLabel('source', a.source, lang)}
                       </span>
                     </td>
                     <td className="py-3 px-3 font-bold text-brand-charcoal">{a.title}</td>
-                    <td className="py-3 px-3 font-mono">{a.participants} guest(s)</td>
+                    <td className="py-3 px-3 font-mono">{/* ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker. */}{a.participants} {t('guest(s)', 'ضيف/ضيوف')}</td>
                     <td className="py-3 px-3">
                       {a.paymentStatus ? (
                         <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold border ${
                           a.paymentStatus === 'Paid' || a.paymentStatus === 'Deposit Paid' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
                           'bg-red-50 text-red-800 border-red-200'
                         }`}>
-                          {a.paymentStatus}
+                          {enumLabel('payment', a.paymentStatus, lang)}
                         </span>
                       ) : (
                         <span className="text-brand-charcoal/40">—</span>
@@ -411,7 +414,7 @@ export const AdminDashboardSection: React.FC = () => {
                           ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                           : 'bg-amber-50 text-amber-800 border-amber-200'
                       }`}>
-                        {a.status}
+                        {enumLabel('bookingStatus', a.status, lang)}
                       </span>
                     </td>
                     <td className="py-3 px-3 text-right">
@@ -428,7 +431,7 @@ export const AdminDashboardSection: React.FC = () => {
                         }}
                         className="bg-brand-sand border border-brand-clay/60 text-brand-charcoal px-2.5 py-1 rounded-lg text-xs font-bold hover:bg-brand-clay/40 transition-all cursor-pointer"
                       >
-                        View Details
+                        {t('View Details', 'عرض التفاصيل')}
                       </button>
                     </td>
                   </tr>
@@ -443,7 +446,7 @@ export const AdminDashboardSection: React.FC = () => {
             to={todaysPager.to}
             total={todaysPager.total}
             onPage={todaysPager.setPage}
-            noun="bookings"
+            noun={t('bookings', 'حجوزات')}
           />
           </>
         )}
@@ -459,21 +462,21 @@ export const AdminDashboardSection: React.FC = () => {
               <CalendarDays className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="font-display font-bold text-lg text-brand-charcoal">Tomorrow's Bookings</h2>
+              <h2 className="font-display font-bold text-lg text-brand-charcoal">{t("Tomorrow's Bookings", 'حجوزات الغد')}</h2>
               <p className="text-xs text-brand-charcoal/60">
-                Advance reservations scheduled for tomorrow ({tomorrowDateStr}).
+                {t(`Advance reservations scheduled for tomorrow (${tomorrowDateStr}).`, `حجوزات مسبقة مجدولة للغد (${tomorrowDateStr}).`)}
               </p>
             </div>
           </div>
 
           <span className="text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1 rounded-xl">
-            {tomorrowsBookings.length} sessions booked ({tomorrowsTotalParticipants} guests)
+            {tomorrowsBookings.length} {t('sessions booked', 'جلسات محجوزة')} ({tomorrowsTotalParticipants} {t('guests', 'ضيوف')})
           </span>
         </div>
 
         {tomorrowsBookings.length === 0 ? (
           <div className="p-8 text-center text-xs text-brand-charcoal/50 italic bg-brand-cream/30 rounded-2xl border border-dashed border-brand-clay">
-            No bookings scheduled for tomorrow ({tomorrowDateStr}) yet.
+            {t(`No bookings scheduled for tomorrow (${tomorrowDateStr}) yet.`, `لا توجد حجوزات مجدولة للغد (${tomorrowDateStr}) بعد.`)}
           </div>
         ) : (
           <>
@@ -481,15 +484,15 @@ export const AdminDashboardSection: React.FC = () => {
             <table className="w-full text-xs text-left">
               <thead>
                 <tr className="border-b border-brand-clay/60 text-brand-charcoal/50 uppercase tracking-wider font-bold">
-                  <th className="py-2.5 px-3">Date & Time</th>
-                  <th className="py-2.5 px-3">Customer Name</th>
-                  <th className="py-2.5 px-3">Phone</th>
-                  <th className="py-2.5 px-3">Booking Type</th>
-                  <th className="py-2.5 px-3">Workshop / Event Title</th>
-                  <th className="py-2.5 px-3">Guests</th>
-                  <th className="py-2.5 px-3">Payment</th>
-                  <th className="py-2.5 px-3">Status</th>
-                  <th className="py-2.5 px-3 text-right">Action</th>
+                  <th className="py-2.5 px-3">{t('Date & Time', 'التاريخ والوقت')}</th>
+                  <th className="py-2.5 px-3">{t('Customer Name', 'اسم العميل')}</th>
+                  <th className="py-2.5 px-3">{t('Phone', 'الجوال')}</th>
+                  <th className="py-2.5 px-3">{t('Booking Type', 'نوع الحجز')}</th>
+                  <th className="py-2.5 px-3">{t('Workshop / Event Title', 'عنوان الورشة / الفعالية')}</th>
+                  <th className="py-2.5 px-3">{t('Guests', 'الضيوف')}</th>
+                  <th className="py-2.5 px-3">{t('Payment', 'الدفع')}</th>
+                  <th className="py-2.5 px-3">{t('Status', 'الحالة')}</th>
+                  <th className="py-2.5 px-3 text-right">{t('Action', 'الإجراء')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-brand-clay/30 font-medium">
@@ -503,22 +506,22 @@ export const AdminDashboardSection: React.FC = () => {
                     <td className="py-3 px-3 font-mono text-brand-charcoal/80">{b.customerPhone}</td>
                     <td className="py-3 px-3">
                       <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
-                        {searchText(b.workshopTitle).includes('birthday') ? 'Birthday Package' : 'Workshop'}
+                        {searchText(b.workshopTitle).includes('birthday') ? t('Birthday Package', 'باقة عيد ميلاد') : t('Workshop', 'ورشة')}
                       </span>
                     </td>
                     <td className="py-3 px-3 font-bold text-brand-charcoal">{b.workshopTitle}</td>
-                    <td className="py-3 px-3 font-mono">{b.participants} guest(s)</td>
+                    <td className="py-3 px-3 font-mono">{/* ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker. */}{b.participants} {t('guest(s)', 'ضيف/ضيوف')}</td>
                     <td className="py-3 px-3">
                       <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold border ${
                         b.paymentStatus === 'Paid' || b.paymentStatus === 'Deposit Paid' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
                         'bg-red-50 text-red-800 border-red-200'
                       }`}>
-                        {b.paymentStatus}
+                        {enumLabel('payment', b.paymentStatus, lang)}
                       </span>
                     </td>
                     <td className="py-3 px-3">
                       <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                        {b.status}
+                        {enumLabel('bookingStatus', b.status, lang)}
                       </span>
                     </td>
                     <td className="py-3 px-3 text-right">
@@ -526,7 +529,7 @@ export const AdminDashboardSection: React.FC = () => {
                         onClick={() => openBookingDetails(b)}
                         className="bg-brand-sand border border-brand-clay/60 text-brand-charcoal px-2.5 py-1 rounded-lg text-xs font-bold hover:bg-brand-clay/40 transition-all cursor-pointer"
                       >
-                        View Details
+                        {t('View Details', 'عرض التفاصيل')}
                       </button>
                     </td>
                   </tr>
@@ -541,7 +544,7 @@ export const AdminDashboardSection: React.FC = () => {
             to={tomorrowsPager.to}
             total={tomorrowsPager.total}
             onPage={tomorrowsPager.setPage}
-            noun="bookings"
+            noun={t('bookings', 'حجوزات')}
           />
           </>
         )}
@@ -557,21 +560,21 @@ export const AdminDashboardSection: React.FC = () => {
               <Cake className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="font-display font-bold text-lg text-brand-charcoal">Birthday Package Reservations ({currentRiyadhMonth})</h2>
+              <h2 className="font-display font-bold text-lg text-brand-charcoal">{t(`Birthday Package Reservations (${currentRiyadhMonth})`, `حجوزات باقات أعياد الميلاد (${currentRiyadhMonth})`)}</h2>
               <p className="text-xs text-brand-charcoal/60">
-                All confirmed birthday celebration bookings scheduled for this month.
+                {t('All confirmed birthday celebration bookings scheduled for this month.', 'جميع حجوزات احتفالات أعياد الميلاد المؤكدة لهذا الشهر.')}
               </p>
             </div>
           </div>
 
           <span className="text-xs font-bold text-pink-700 bg-pink-50 border border-pink-200 px-3 py-1 rounded-xl">
-            {monthlyBirthdayBookings.length} birthday events
+            {monthlyBirthdayBookings.length} {t('birthday events', 'حفلات أعياد ميلاد')}
           </span>
         </div>
 
         {monthlyBirthdayBookings.length === 0 ? (
           <div className="p-8 text-center text-xs text-brand-charcoal/50 italic bg-brand-cream/30 rounded-2xl border border-dashed border-brand-clay">
-            No birthday packages are booked for this month ({currentRiyadhMonth}).
+            {t(`No birthday packages are booked for this month (${currentRiyadhMonth}).`, `لا توجد باقات أعياد ميلاد محجوزة لهذا الشهر (${currentRiyadhMonth}).`)}
           </div>
         ) : (
           <>
@@ -579,15 +582,15 @@ export const AdminDashboardSection: React.FC = () => {
             <table className="w-full text-xs text-left">
               <thead>
                 <tr className="border-b border-brand-clay/60 text-brand-charcoal/50 uppercase tracking-wider font-bold">
-                  <th className="py-2.5 px-3">Session Date & Time</th>
-                  <th className="py-2.5 px-3">Customer Name</th>
-                  <th className="py-2.5 px-3">Contact Phone</th>
-                  <th className="py-2.5 px-3">Birthday Package Name</th>
-                  <th className="py-2.5 px-3">Guests</th>
-                  <th className="py-2.5 px-3">Deposit / Price</th>
-                  <th className="py-2.5 px-3">Payment</th>
-                  <th className="py-2.5 px-3">Status</th>
-                  <th className="py-2.5 px-3 text-right">Action</th>
+                  <th className="py-2.5 px-3">{t('Session Date & Time', 'تاريخ ووقت الجلسة')}</th>
+                  <th className="py-2.5 px-3">{t('Customer Name', 'اسم العميل')}</th>
+                  <th className="py-2.5 px-3">{t('Contact Phone', 'جوال التواصل')}</th>
+                  <th className="py-2.5 px-3">{t('Birthday Package Name', 'اسم باقة عيد الميلاد')}</th>
+                  <th className="py-2.5 px-3">{t('Guests', 'الضيوف')}</th>
+                  <th className="py-2.5 px-3">{t('Deposit / Price', 'العربون / السعر')}</th>
+                  <th className="py-2.5 px-3">{t('Payment', 'الدفع')}</th>
+                  <th className="py-2.5 px-3">{t('Status', 'الحالة')}</th>
+                  <th className="py-2.5 px-3 text-right">{t('Action', 'الإجراء')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-brand-clay/30 font-medium">
@@ -603,19 +606,19 @@ export const AdminDashboardSection: React.FC = () => {
                       <Cake className="h-3.5 w-3.5 text-pink-500 shrink-0" />
                       <span>{b.workshopTitle}</span>
                     </td>
-                    <td className="py-3 px-3 font-mono">{b.participants} guests</td>
-                    <td className="py-3 px-3 font-bold text-emerald-800">{b.totalPrice} SAR</td>
+                    <td className="py-3 px-3 font-mono">{b.participants} {t('guests', 'ضيوف')}</td>
+                    <td className="py-3 px-3 font-bold text-emerald-800">{b.totalPrice} {t('SAR', 'ريال')}</td>
                     <td className="py-3 px-3">
                       <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold border ${
                         b.paymentStatus === 'Paid' || b.paymentStatus === 'Deposit Paid' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
                         'bg-red-50 text-red-800 border-red-200'
                       }`}>
-                        {b.paymentStatus}
+                        {enumLabel('payment', b.paymentStatus, lang)}
                       </span>
                     </td>
                     <td className="py-3 px-3">
                       <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-bold bg-pink-50 text-pink-800 border border-pink-200">
-                        {b.status}
+                        {enumLabel('bookingStatus', b.status, lang)}
                       </span>
                     </td>
                     <td className="py-3 px-3 text-right">
@@ -623,7 +626,7 @@ export const AdminDashboardSection: React.FC = () => {
                         onClick={() => openBookingDetails(b)}
                         className="bg-brand-sand border border-brand-clay/60 text-brand-charcoal px-2.5 py-1 rounded-lg text-xs font-bold hover:bg-brand-clay/40 transition-all cursor-pointer"
                       >
-                        View Details
+                        {t('View Details', 'عرض التفاصيل')}
                       </button>
                     </td>
                   </tr>
@@ -638,7 +641,7 @@ export const AdminDashboardSection: React.FC = () => {
             to={birthdayPager.to}
             total={birthdayPager.total}
             onPage={birthdayPager.setPage}
-            noun="bookings"
+            noun={t('bookings', 'حجوزات')}
           />
           </>
         )}
@@ -654,22 +657,22 @@ export const AdminDashboardSection: React.FC = () => {
               <Box className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="font-display font-bold text-lg text-brand-charcoal">Pottery Awaiting Pickup for 7+ Days</h2>
+              <h2 className="font-display font-bold text-lg text-brand-charcoal">{t('Pottery Awaiting Pickup for 7+ Days', 'فخار بانتظار الاستلام منذ 7+ أيام')}</h2>
               <p className="text-xs text-brand-charcoal/60">
-                Pieces in "Ready for Pickup" status that have been waiting on storage shelves for 7 days or longer.
+                {t('Pieces in "Ready for Pickup" status that have been waiting on storage shelves for 7 days or longer.', 'قطع بحالة «جاهزة للاستلام» ينتظر أصحابها على أرفف التخزين منذ 7 أيام أو أكثر.')}
               </p>
             </div>
           </div>
 
           <span className="text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 px-3 py-1 rounded-xl">
-            {overduePickupPieces.length} items overdue
+            {overduePickupPieces.length} {t('items overdue', 'قطع متأخرة')}
           </span>
         </div>
 
         {overduePickupPieces.length === 0 ? (
           <div className="p-8 text-center text-xs text-brand-charcoal/50 italic bg-brand-cream/30 rounded-2xl border border-dashed border-brand-clay">
             <CheckCircle2 className="inline h-4 w-4 me-1.5 align-[-3px] text-brand-sage" />
-            Excellent! No pottery pieces are currently overdue for collection (7+ days).
+            {t('Excellent! No pottery pieces are currently overdue for collection (7+ days).', 'ممتاز! لا توجد قطع فخار متأخرة حاليًا عن الاستلام (7+ أيام).')}
           </div>
         ) : (
           <>
@@ -677,14 +680,14 @@ export const AdminDashboardSection: React.FC = () => {
             <table className="w-full text-xs text-left">
               <thead>
                 <tr className="border-b border-brand-clay/60 text-brand-charcoal/50 uppercase tracking-wider font-bold">
-                  <th className="py-2.5 px-3">Piece Code</th>
-                  <th className="py-2.5 px-3">Pottery Item</th>
-                  <th className="py-2.5 px-3">Customer Name</th>
-                  <th className="py-2.5 px-3">Contact Phone</th>
-                  <th className="py-2.5 px-3">Ready Date</th>
-                  <th className="py-2.5 px-3">Days Waiting</th>
-                  <th className="py-2.5 px-3">Last Reminder</th>
-                  <th className="py-2.5 px-3 text-right">Actions</th>
+                  <th className="py-2.5 px-3">{t('Piece Code', 'رمز القطعة')}</th>
+                  <th className="py-2.5 px-3">{t('Pottery Item', 'القطعة الفخارية')}</th>
+                  <th className="py-2.5 px-3">{t('Customer Name', 'اسم العميل')}</th>
+                  <th className="py-2.5 px-3">{t('Contact Phone', 'جوال التواصل')}</th>
+                  <th className="py-2.5 px-3">{t('Ready Date', 'تاريخ الجاهزية')}</th>
+                  <th className="py-2.5 px-3">{t('Days Waiting', 'أيام الانتظار')}</th>
+                  <th className="py-2.5 px-3">{t('Last Reminder', 'آخر تذكير')}</th>
+                  <th className="py-2.5 px-3 text-right">{t('Actions', 'الإجراءات')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-brand-clay/30 font-medium">
@@ -713,11 +716,11 @@ export const AdminDashboardSection: React.FC = () => {
                     </td>
                     <td className="py-3 px-3">
                       <span className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
-                        {p.daysWaiting} days waiting
+                        {p.daysWaiting} {t('days waiting', 'أيام انتظار')}
                       </span>
                     </td>
                     <td className="py-3 px-3 font-mono text-[10px] text-brand-charcoal/60">
-                      {p.lastNotificationDate || 'No reminder sent'}
+                      {p.lastNotificationDate || t('No reminder sent', 'لم يُرسل تذكير')}
                     </td>
                     <td className="py-3 px-3 text-right">
                       <div className="flex items-center justify-end gap-2">
@@ -726,7 +729,7 @@ export const AdminDashboardSection: React.FC = () => {
                           className="bg-brand-sand border border-brand-clay/70 text-brand-charcoal hover:bg-brand-clay/30 px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
                         >
                           <Bell className="h-3 w-3 text-amber-600" />
-                          <span>Send Reminder</span>
+                          <span>{t('Send Reminder', 'إرسال تذكير')}</span>
                         </button>
 
                         <button
@@ -734,7 +737,7 @@ export const AdminDashboardSection: React.FC = () => {
                           className="bg-emerald-600 text-white hover:bg-emerald-700 px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer shadow-2xs"
                         >
                           <CheckCircle2 className="h-3 w-3" />
-                          <span>Mark Collected</span>
+                          <span>{t('Mark Collected', 'تسجيل كمُستلمة')}</span>
                         </button>
                       </div>
                     </td>
@@ -750,7 +753,7 @@ export const AdminDashboardSection: React.FC = () => {
             to={overduePager.to}
             total={overduePager.total}
             onPage={overduePager.setPage}
-            noun="pieces"
+            noun={t('pieces', 'قطع')}
           />
           </>
         )}

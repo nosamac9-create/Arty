@@ -5,6 +5,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useLanguage } from '../../context/LanguageContext';
 
 /**
  * Page state for a table.
@@ -59,14 +60,16 @@ interface Props {
 
 /** Previous / Next with the range being shown. Hidden when there is one page. */
 export const TablePager: React.FC<Props> = ({
-  page, totalPages, from, to, total, onPage, noun = 'entries'
+  page, totalPages, from, to, total, onPage, noun
 }) => {
+  const { t } = useLanguage();
   if (totalPages <= 1) return null;
+  const nounText = noun ?? t('entries', 'سجلات');
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-brand-clay/40">
       <p className="text-[11px] font-semibold text-brand-charcoal/55 ltr-numerals">
-        Showing {from}–{to} of {total} {noun}
+        {t(`Showing ${from}–${to} of ${total} ${nounText}`, `عرض ${from}–${to} من ${total} ${nounText}`)}
       </p>
 
       <div className="flex items-center gap-2">
@@ -77,11 +80,11 @@ export const TablePager: React.FC<Props> = ({
           className="inline-flex items-center gap-1 rounded-xl border border-brand-clay bg-white px-3 py-1.5 text-[11px] font-bold text-brand-charcoal transition-colors hover:bg-brand-sand/50 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
         >
           <ChevronLeft className="h-3.5 w-3.5" />
-          <span>Previous</span>
+          <span>{t('Previous', 'السابق')}</span>
         </button>
 
         <span className="text-[11px] font-bold text-brand-charcoal/60 ltr-numerals">
-          Page {page} of {totalPages}
+          {t(`Page ${page} of ${totalPages}`, `صفحة ${page} من ${totalPages}`)}
         </span>
 
         <button
@@ -90,7 +93,7 @@ export const TablePager: React.FC<Props> = ({
           disabled={page === totalPages}
           className="inline-flex items-center gap-1 rounded-xl border border-brand-clay bg-white px-3 py-1.5 text-[11px] font-bold text-brand-charcoal transition-colors hover:bg-brand-sand/50 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
         >
-          <span>Next</span>
+          <span>{t('Next', 'التالي')}</span>
           <ChevronRight className="h-3.5 w-3.5" />
         </button>
       </div>
