@@ -35,6 +35,20 @@ import {
   tableNamesFor, TableSeatState
 } from '../utils/tableSeatingUtils';
 import { TableSelector, TableMultiPicker } from './ui/TableSelector';
+import { useLanguage } from '../context/LanguageContext';
+import { enumLabel } from '../utils/enumLabels';
+
+/**
+ * Display text for a queue entry's activity. It stays English in the data
+ * (categorizeQueueItem, the Dashboard and Bookings all read it); only the
+ * self-guided pattern this page writes is translated, and anything else is shown
+ * exactly as stored.
+ */
+const SELF_GUIDED_ACTIVITY = /^Walk-in \(No Instructor - (.+) hrs\)$/;
+function displayActivity(activity: string, t: (en: string, ar: string) => string) {
+  const m = SELF_GUIDED_ACTIVITY.exec(activity);
+  return m ? t(activity, `زيارة مباشرة (بدون مدرب - ${m[1]} ساعة)`) : activity;
+}
 
 // ==========================================
 // ======== MODULAR QUEUE CARD COMPONENTS ===
@@ -51,6 +65,7 @@ const WaitingCard: React.FC<{
   updateQueueStatus: (id: string, status: any) => void;
   onSeat: (item: QueueItem) => void;
 }> = ({ item, isExpanded, instructorName, tableLabel, onToggle, onEdit, onCancel, updateQueueStatus, onSeat }) => {
+  const { lang, t } = useLanguage();
   const handleCardClick = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('button')) return;
     onToggle();
@@ -74,14 +89,14 @@ const WaitingCard: React.FC<{
         <div className="flex justify-between items-start">
           <div className="flex items-center gap-2">
             <div className="bg-brand-charcoal text-brand-cream text-xs font-extrabold px-2.5 py-1.5 rounded-lg font-mono">
-              No. {formatQueueNumber(item.queueNumber)}
+              {t('No.', 'رقم')} {formatQueueNumber(item.queueNumber)}
             </div>
             <span className={`text-[10px] font-bold px-2 py-1 rounded-md border ${
               item.source === 'Website' 
                 ? 'bg-blue-50 border-blue-200 text-blue-700' 
                 : 'bg-amber-50 border-amber-200 text-amber-700'
             }`}>
-              {item.source}
+              {enumLabel('source', item.source, lang)}
             </span>
           </div>
           <div className="text-brand-charcoal/40 p-1">
@@ -108,18 +123,18 @@ const WaitingCard: React.FC<{
             <div className="pt-2 border-t border-brand-clay/40 space-y-3 text-left">
               {/* Controls inside expanded view */}
               <div className="flex justify-between items-center bg-brand-sand/15 p-2 rounded-xl border border-brand-clay/30">
-                <span className="text-[11px] font-bold text-brand-charcoal/50">Controls:</span>
+                <span className="text-[11px] font-bold text-brand-charcoal/50">{t('Controls:', 'التحكم:')}</span>
                 <div className="flex items-center gap-1.5">
                   <button 
                     onClick={() => onEdit(item)}
-                    title="Edit entry"
+                    title={t('Edit entry', 'تعديل الإدخال')}
                     className="p-1.5 rounded-lg hover:bg-brand-sand border border-brand-clay/50 text-brand-charcoal/70 cursor-pointer flex items-center justify-center"
                   >
                     <Edit2 className="h-3.5 w-3.5" />
                   </button>
                   <button 
                     onClick={() => onCancel(item)}
-                    title="Cancel Entry"
+                    title={t('Cancel Entry', 'إلغاء الإدخال')}
                     className="p-1.5 rounded-lg hover:bg-red-50 border border-red-200 text-red-500 cursor-pointer flex items-center justify-center"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -129,9 +144,9 @@ const WaitingCard: React.FC<{
 
               {/* Activity / Session Type */}
               <div className="space-y-1">
-                <span className="text-[10px] font-bold text-brand-charcoal/40 uppercase tracking-wider">Activity / Session:</span>
+                <span className="text-[10px] font-bold text-brand-charcoal/40 uppercase tracking-wider">{t('Activity / Session:', 'النشاط / الجلسة:')}</span>
                 <p className="text-xs text-brand-charcoal/70 bg-brand-cream/50 p-2 rounded-lg border border-brand-clay/30 leading-relaxed">
-                  {item.activity}
+                  {displayActivity(item.activity, t)}
                 </p>
               </div>
 
@@ -139,7 +154,7 @@ const WaitingCard: React.FC<{
               <div className="flex flex-wrap gap-2 pt-1 text-[11px] text-brand-charcoal/60">
                 <span className="font-bold flex items-center gap-1 bg-brand-sand/50 px-2 py-0.5 rounded">
                   <Users className="h-3 w-3" />
-                  <span>{item.participants} Guests</span>
+                  <span>{/* ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker. */}{item.participants} {t('Guests', 'ضيوف')}</span>
                 </span>
                 {!isSelfGuided(item) ? (
                   <span className="font-bold flex items-center gap-1 bg-brand-sage/20 text-brand-sage-hover px-2 py-0.5 rounded">
@@ -148,13 +163,13 @@ const WaitingCard: React.FC<{
                   </span>
                 ) : (
                   <span className="font-bold flex items-center gap-1 bg-purple-50 text-purple-700 px-2 py-0.5 rounded">
-                    Self-Guided
+                    {enumLabel('category', 'Self-Guided', lang)}
                   </span>
                 )}
                 {tableLabel && (
                   <span className="font-bold flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-0.5 rounded">
                     <LayoutGrid className="h-3 w-3" />
-                    <span>Reserved: {tableLabel}</span>
+                    <span>{t('Reserved', 'محجوز')}: {tableLabel}</span>
                   </span>
                 )}
               </div>
@@ -168,12 +183,12 @@ const WaitingCard: React.FC<{
               {/* Check-in time and elapsed wait time */}
               <div className="bg-brand-sand/10 p-2 rounded-xl border border-brand-clay/20 text-[11px] space-y-1 text-brand-charcoal/70">
                 <div className="flex justify-between font-bold">
-                  <span className="flex items-center gap-1"><Clock className="h-3 w-3" />Check-In Time:</span>
+                  <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{t('Check-In Time:', 'وقت تسجيل الحضور:')}</span>
                   <span className="font-mono">{item.checkInTime}</span>
                 </div>
                 <div className="flex justify-between font-bold">
-                  <span>⏳ Wait Duration:</span>
-                  <span className="font-mono">{item.elapsedMinutes} mins</span>
+                  <span>{t('⏳ Wait Duration:', '⏳ مدة الانتظار:')}</span>
+                  <span className="font-mono">{/* ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker. */}{item.elapsedMinutes} {t('mins', 'دقيقة')}</span>
                 </div>
               </div>
             </div>
@@ -188,14 +203,14 @@ const WaitingCard: React.FC<{
           className="cursor-pointer py-2 px-3 bg-amber-500 hover:bg-amber-600 text-brand-cream text-xs font-bold rounded-xl flex items-center justify-center gap-1 shadow-2xs"
         >
           <PhoneCall className="h-3 w-3" />
-          <span>Call</span>
+          <span>{t('Call', 'نداء')}</span>
         </button>
         <button
           onClick={() => onSeat(item)}
           className="cursor-pointer py-2 px-3 bg-brand-sage hover:bg-brand-sage-hover text-brand-cream text-xs font-bold rounded-xl flex items-center justify-center gap-1 shadow-2xs"
         >
           <Play className="h-3 w-3" />
-          <span>Seat</span>
+          <span>{t('Seat', 'إجلاس')}</span>
         </button>
       </div>
     </div>
@@ -212,6 +227,7 @@ const CalledCard: React.FC<{
   updateQueueStatus: (id: string, status: any) => void;
   onSeat: (item: QueueItem) => void;
 }> = ({ item, isExpanded, instructorName, tableLabel, onToggle, onCancel, updateQueueStatus, onSeat }) => {
+  const { lang, t } = useLanguage();
   const handleCardClick = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('button')) return;
     onToggle();
@@ -235,14 +251,14 @@ const CalledCard: React.FC<{
         <div className="flex justify-between items-start">
           <div className="flex items-center gap-2">
             <div className="bg-brand-charcoal text-brand-cream text-xs font-extrabold px-2.5 py-1.5 rounded-lg font-mono animate-pulse">
-              No. {formatQueueNumber(item.queueNumber)}
+              {t('No.', 'رقم')} {formatQueueNumber(item.queueNumber)}
             </div>
             <span className={`text-[10px] font-bold px-2 py-1 rounded-md border ${
               item.source === 'Website' 
                 ? 'bg-blue-50 border-blue-200 text-blue-700' 
                 : 'bg-amber-50 border-amber-200 text-amber-700'
             }`}>
-              {item.source}
+              {enumLabel('source', item.source, lang)}
             </span>
           </div>
           <div className="text-brand-charcoal/40 p-1">
@@ -269,10 +285,10 @@ const CalledCard: React.FC<{
             <div className="pt-2 border-t border-brand-clay/40 space-y-3 text-left">
               {/* Controls inside expanded view */}
               <div className="flex justify-between items-center bg-brand-sand/15 p-2 rounded-xl border border-brand-clay/30">
-                <span className="text-[11px] font-bold text-brand-charcoal/50">Controls:</span>
+                <span className="text-[11px] font-bold text-brand-charcoal/50">{t('Controls:', 'التحكم:')}</span>
                 <button 
                   onClick={() => onCancel(item)}
-                  title="Cancel Entry"
+                  title={t('Cancel Entry', 'إلغاء الإدخال')}
                   className="p-1.5 rounded-lg hover:bg-red-50 border border-red-200 text-red-500 cursor-pointer flex items-center justify-center"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -281,9 +297,9 @@ const CalledCard: React.FC<{
 
               {/* Activity / Session Type */}
               <div className="space-y-1">
-                <span className="text-[10px] font-bold text-brand-charcoal/40 uppercase tracking-wider">Activity / Session:</span>
+                <span className="text-[10px] font-bold text-brand-charcoal/40 uppercase tracking-wider">{t('Activity / Session:', 'النشاط / الجلسة:')}</span>
                 <p className="text-xs text-brand-charcoal/70 bg-brand-cream/50 p-2 rounded-lg border border-brand-clay/30 leading-relaxed">
-                  {item.activity}
+                  {displayActivity(item.activity, t)}
                 </p>
               </div>
 
@@ -291,7 +307,7 @@ const CalledCard: React.FC<{
               <div className="flex flex-wrap gap-2 pt-1 text-[11px] text-brand-charcoal/60">
                 <span className="font-bold flex items-center gap-1 bg-brand-sand/50 px-2 py-0.5 rounded">
                   <Users className="h-3 w-3" />
-                  <span>{item.participants} Guests</span>
+                  <span>{/* ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker. */}{item.participants} {t('Guests', 'ضيوف')}</span>
                 </span>
                 {!isSelfGuided(item) && (
                   <span className="font-bold flex items-center gap-1 bg-brand-sage/20 text-brand-sage-hover px-2 py-0.5 rounded">
@@ -302,7 +318,7 @@ const CalledCard: React.FC<{
                 {tableLabel && (
                   <span className="font-bold flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-0.5 rounded">
                     <LayoutGrid className="h-3 w-3" />
-                    <span>Reserved: {tableLabel}</span>
+                    <span>{t('Reserved', 'محجوز')}: {tableLabel}</span>
                   </span>
                 )}
               </div>
@@ -310,12 +326,12 @@ const CalledCard: React.FC<{
               {/* Check-in time and elapsed wait time */}
               <div className="bg-brand-sand/10 p-2 rounded-xl border border-brand-clay/20 text-[11px] space-y-1 text-brand-charcoal/70">
                 <div className="flex justify-between font-bold">
-                  <span className="flex items-center gap-1"><Clock className="h-3 w-3" />Check-In Time:</span>
+                  <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{t('Check-In Time:', 'وقت تسجيل الحضور:')}</span>
                   <span className="font-mono">{item.checkInTime}</span>
                 </div>
                 <div className="flex justify-between font-bold">
-                  <span>⏳ Wait Duration:</span>
-                  <span className="font-mono">{item.elapsedMinutes} mins</span>
+                  <span>{t('⏳ Wait Duration:', '⏳ مدة الانتظار:')}</span>
+                  <span className="font-mono">{/* ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker. */}{item.elapsedMinutes} {t('mins', 'دقيقة')}</span>
                 </div>
               </div>
             </div>
@@ -330,14 +346,14 @@ const CalledCard: React.FC<{
           className="cursor-pointer py-2 px-3 border border-red-200 text-red-500 hover:bg-red-50 text-xs font-bold rounded-xl flex items-center justify-center gap-1"
         >
           <X className="h-3 w-3" />
-          <span>Cancel</span>
+          <span>{t('Cancel', 'إلغاء')}</span>
         </button>
         <button
           onClick={() => onSeat(item)}
           className="cursor-pointer py-2 px-3 bg-brand-sage hover:bg-brand-sage-hover text-brand-cream text-xs font-bold rounded-xl flex items-center justify-center gap-1 shadow-2xs"
         >
           <Play className="h-3 w-3" />
-          <span>Seat</span>
+          <span>{t('Seat', 'إجلاس')}</span>
         </button>
       </div>
     </div>
@@ -405,6 +421,7 @@ const InProgressCard: React.FC<{
   now: Date;
   todayDateStr: string;
 }> = ({ item, isExpanded, instructorName, tableLabel, onToggle, updateQueueStatus, onChangeTable, now, todayDateStr }) => {
+  const { lang, t } = useLanguage();
   const handleCardClick = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('button')) return;
     onToggle();
@@ -439,7 +456,7 @@ const InProgressCard: React.FC<{
     const rMins = Math.floor(Math.abs(remainingMs) / 60000);
     const rHrs = Math.floor(rMins / 60);
     const spread = `${rHrs > 0 ? rHrs + 'h ' : ''}${rMins % 60}m`;
-    remainingTimeStr = isExceeded ? `Overtime by ${spread}` : `${spread} left`;
+    remainingTimeStr = isExceeded ? t(`Overtime by ${spread}`, `تجاوز بمقدار ${spread}`) : t(`${spread} left`, `متبقي ${spread}`);
   }
 
   return (
@@ -466,14 +483,14 @@ const InProgressCard: React.FC<{
             whichever source it is. */}
         <div className="flex flex-wrap items-center gap-2">
           <span className="inline-flex h-6 items-center rounded-lg bg-brand-charcoal px-2.5 font-mono text-xs font-extrabold text-brand-cream">
-            No. {formatQueueNumber(item.queueNumber)}
+            {t('No.', 'رقم')} {formatQueueNumber(item.queueNumber)}
           </span>
           <span className={`inline-flex h-6 items-center rounded-md border px-2 text-[10px] font-bold ${
             item.source === 'Website'
               ? 'bg-blue-50 border-blue-200 text-blue-700'
               : 'bg-amber-50 border-amber-200 text-amber-700'
           }`}>
-            {item.source}
+            {enumLabel('source', item.source, lang)}
           </span>
 
           {(isExceeded || isEndingSoon) && (
@@ -483,7 +500,7 @@ const InProgressCard: React.FC<{
                 : 'border-amber-300 bg-amber-50 text-amber-800'
             }`}>
               <AlertTriangle className="h-3 w-3" />
-              <span>{isExceeded ? 'Overtime' : '5 min left'}</span>
+              <span>{isExceeded ? t('Overtime', 'تجاوز الوقت') : t('5 min left', 'تبقى 5 دقائق')}</span>
             </span>
           )}
 
@@ -525,9 +542,9 @@ const InProgressCard: React.FC<{
             <div className="pt-2 border-t border-brand-clay/30 space-y-3 text-left">
               {/* Activity / Session Type */}
               <div className="space-y-1">
-                <span className="text-[10px] font-bold text-brand-charcoal/40 uppercase tracking-wider">Activity / Session:</span>
+                <span className="text-[10px] font-bold text-brand-charcoal/40 uppercase tracking-wider">{t('Activity / Session:', 'النشاط / الجلسة:')}</span>
                 <p className="text-xs text-brand-charcoal/70 bg-brand-cream/50 p-2 rounded-lg border border-brand-clay/30 leading-relaxed">
-                  {item.activity}
+                  {displayActivity(item.activity, t)}
                 </p>
               </div>
 
@@ -541,7 +558,7 @@ const InProgressCard: React.FC<{
               <div className="flex flex-wrap gap-2 pt-1 text-[11px] text-brand-charcoal/60">
                 <span className="font-bold flex items-center gap-1 bg-brand-sand/50 px-2 py-0.5 rounded">
                   <Users className="h-3 w-3" />
-                  <span>{item.participants} Guests</span>
+                  <span>{/* ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker. */}{item.participants} {t('Guests', 'ضيوف')}</span>
                 </span>
                 {!isSelfGuided(item) && (
                   <span className="font-bold flex items-center gap-1 bg-brand-sage/20 text-brand-sage-hover px-2 py-0.5 rounded">
@@ -552,7 +569,7 @@ const InProgressCard: React.FC<{
                 {tableLabel && (
                   <span className="font-bold flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-0.5 rounded">
                     <LayoutGrid className="h-3 w-3" />
-                    <span>Seated: {tableLabel}</span>
+                    <span>{t('Seated', 'جالس عند')}: {tableLabel}</span>
                   </span>
                 )}
               </div>
@@ -566,16 +583,16 @@ const InProgressCard: React.FC<{
                 }`}>
                   {isWithoutInstructor && hasHours && (
                     <div className="flex justify-between font-bold">
-                      <span>Paid Hours:</span>
-                      <span>{item.hours} hrs</span>
+                      <span>{t('Paid Hours:', 'الساعات المدفوعة:')}</span>
+                      <span>{/* ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker. */}{item.hours} {t('hrs', 'ساعة')}</span>
                     </div>
                   )}
                   <div className="flex justify-between font-bold">
-                    <span>{isWithoutInstructor ? 'Est Checkout:' : 'Session Ends:'}</span>
+                    <span>{isWithoutInstructor ? t('Est Checkout:', 'الخروج المتوقع:') : t('Session Ends:', 'تنتهي الجلسة:')}</span>
                     <span>{expectedCheckout}</span>
                   </div>
                   <div className="flex justify-between font-extrabold border-t border-brand-clay/20 mt-1 pt-1">
-                    <span>Status:</span>
+                    <span>{t('Status:', 'الحالة:')}</span>
                     <span className={isExceeded || isEndingSoon ? 'text-red-600 animate-pulse' : 'text-brand-sage-hover'}>
                       {remainingTimeStr}
                     </span>
@@ -586,11 +603,11 @@ const InProgressCard: React.FC<{
               {/* Check-in time & Seated time */}
               <div className="bg-brand-sand/10 p-2 rounded-xl border border-brand-clay/20 text-[11px] space-y-1 text-brand-charcoal/70 font-bold">
                 <div className="flex justify-between">
-                  <span className="flex items-center gap-1"><Clock className="h-3 w-3" />Check-In Time:</span>
+                  <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{t('Check-In Time:', 'وقت تسجيل الحضور:')}</span>
                   <span className="font-mono">{item.checkInTime}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="flex items-center gap-1"><Clock className="h-3 w-3" />Seated At:</span>
+                  <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{t('Seated At:', 'وقت الجلوس:')}</span>
                   <span className="font-mono">{item.seatedTime ? new Date(item.seatedTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : ''}</span>
                 </div>
               </div>
@@ -607,7 +624,7 @@ const InProgressCard: React.FC<{
             className="cursor-pointer py-2.5 px-2 border border-brand-clay hover:bg-brand-sand text-brand-charcoal text-[10px] font-bold rounded-xl flex items-center justify-center gap-1.5"
           >
             <ArrowLeftRight className="h-3.5 w-3.5" />
-            <span className="whitespace-nowrap">Change Table</span>
+            <span className="whitespace-nowrap">{t('Change Table', 'تغيير الطاولة')}</span>
           </button>
         )}
         <button
@@ -615,7 +632,7 @@ const InProgressCard: React.FC<{
           className="cursor-pointer py-3 bg-brand-sage hover:bg-brand-sage-hover text-brand-cream text-[11px] font-bold rounded-xl flex items-center justify-center gap-2 shadow-xs"
         >
           <CheckCircle className="h-3.5 w-3.5" />
-          <span className="whitespace-nowrap">Complete Session</span>
+          <span className="whitespace-nowrap">{t('Complete Session', 'إنهاء الجلسة')}</span>
         </button>
       </div>
     </div>
@@ -629,6 +646,7 @@ const CompletedCard: React.FC<{
   onToggle: () => void;
   onReturnToWaiting: (item: QueueItem) => void;
 }> = ({ item, isExpanded, instructorName, onToggle, onReturnToWaiting }) => {
+  const { lang, t } = useLanguage();
   const handleCardClick = () => {
     onToggle();
   };
@@ -642,9 +660,9 @@ const CompletedCard: React.FC<{
     const tEnd = new Date(completedEvent.timestamp).getTime();
     const totalSecs = Math.max(0, Math.floor((tEnd - tStart) / 1000));
     const totalMins = Math.max(1, Math.round(totalSecs / 60));
-    timeSpentStr = `${totalMins} mins`;
+    timeSpentStr = t(`${totalMins} mins`, `${totalMins} دقيقة`);
   } else {
-    timeSpentStr = `${item.elapsedMinutes} mins`;
+    timeSpentStr = t(`${item.elapsedMinutes} mins`, `${item.elapsedMinutes} دقيقة`);
   }
 
   return (
@@ -668,14 +686,14 @@ const CompletedCard: React.FC<{
             2-unit gap, with only the chevron pinned to the end. */}
         <div className="flex flex-wrap items-center gap-2">
           <span className="inline-flex h-6 items-center rounded-md bg-brand-clay px-2 font-mono text-[11px] font-extrabold text-brand-charcoal/70">
-            No. {formatQueueNumber(item.queueNumber)}
+            {t('No.', 'رقم')} {formatQueueNumber(item.queueNumber)}
           </span>
           <span className="inline-flex h-6 items-center rounded-md border border-blue-100 bg-blue-50 px-2 text-[10px] font-bold text-blue-700">
-            {item.source}
+            {enumLabel('source', item.source, lang)}
           </span>
           <span className="inline-flex h-6 items-center gap-1 rounded-md border border-brand-sage-line bg-brand-sage-soft px-2 text-[10px] font-bold text-brand-sage-hover">
             <CheckCircle className="h-3.5 w-3.5" />
-            <span>Completed</span>
+            <span>{enumLabel('bookingStatus', 'Completed', lang)}</span>
           </span>
           <ChevronDown className={`ms-auto h-4 w-4 shrink-0 text-brand-charcoal/40 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
         </div>
@@ -698,9 +716,9 @@ const CompletedCard: React.FC<{
           >
             <div className="pt-2 border-t border-brand-clay/30 space-y-2 text-left text-xs text-brand-charcoal/80 font-bold">
               <div className="space-y-1">
-                <span className="text-[10px] font-bold text-brand-charcoal/40 uppercase tracking-wider">Activity:</span>
+                <span className="text-[10px] font-bold text-brand-charcoal/40 uppercase tracking-wider">{t('Activity:', 'النشاط:')}</span>
                 <p className="text-xs text-brand-charcoal/70 bg-brand-cream/50 p-2 rounded-lg border border-brand-clay/30 font-medium">
-                  {item.activity}
+                  {displayActivity(item.activity, t)}
                 </p>
               </div>
 
@@ -708,11 +726,11 @@ const CompletedCard: React.FC<{
               <div className="flex items-center justify-between text-[11px] font-bold text-brand-charcoal/60 pt-2 border-t border-brand-clay/30">
                 <span className="flex items-center gap-1">
                   <Users className="h-3 w-3" />
-                  <span>{item.participants} Guests</span>
+                  <span>{/* ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker. */}{item.participants} {t('Guests', 'ضيوف')}</span>
                 </span>
                 <span className="flex items-center gap-1 font-mono text-brand-sage-hover">
                   <Clock className="h-3 w-3" />
-                  <span>{timeSpentStr} spent</span>
+                  <span>{t(`${timeSpentStr} spent`, `استغرق ${timeSpentStr}`)}</span>
                 </span>
               </div>
 
@@ -729,7 +747,7 @@ const CompletedCard: React.FC<{
                     </span>
                   )}
                   {item.hours !== undefined && (
-                    <span className={isSelfGuided(item) ? 'ms-auto' : ''}>{item.hours} hrs booked</span>
+                    <span className={isSelfGuided(item) ? 'ms-auto' : ''}>{/* ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker. */}{item.hours} {t('hrs booked', 'ساعة محجوزة')}</span>
                   )}
                 </div>
               )}
@@ -755,7 +773,7 @@ const CompletedCard: React.FC<{
             className="flex h-9 w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-brand-terracotta/50 px-3 text-[11px] font-bold text-brand-terracotta transition-colors hover:bg-brand-terracotta/5"
           >
             <Plus className="h-3.5 w-3.5 shrink-0" />
-            <span className="whitespace-nowrap">Add Time</span>
+            <span className="whitespace-nowrap">{t('Add Time', 'إضافة وقت')}</span>
           </button>
         </div>
       )}
@@ -778,6 +796,7 @@ const SeatingManagerModal: React.FC<{
   onRelease: (item: QueueItem) => void;
   onAssign: (item: QueueItem, tableId: string) => void;
 }> = ({ tables, queue, onClose, onSeatWaiting, onChangeTable, onRelease, onAssign }) => {
+  const { lang, t } = useLanguage();
   const [assigningTableId, setAssigningTableId] = useState<string | null>(null);
   const [assignSelection, setAssignSelection] = useState<Record<string, string>>({});
 
@@ -798,8 +817,8 @@ const SeatingManagerModal: React.FC<{
 
         <div className="flex justify-between items-center border-b border-brand-clay/60 pb-3 sticky -top-6 bg-brand-cream pt-1">
           <div>
-            <h3 className="font-display text-base font-bold text-brand-charcoal">Seating Manager</h3>
-            <p className="text-[11px] font-bold text-brand-charcoal/50">Every configured café table, live.</p>
+            <h3 className="font-display text-base font-bold text-brand-charcoal">{t('Seating Manager', 'مدير الجلوس')}</h3>
+            <p className="text-[11px] font-bold text-brand-charcoal/50">{t('Every configured café table, live.', 'كل طاولات المقهى المُعدّة، مباشرةً.')}</p>
           </div>
           <button onClick={onClose} className="text-brand-charcoal hover:bg-brand-sand p-1.5 rounded-lg cursor-pointer">
             <X className="h-4 w-4" />
@@ -808,7 +827,7 @@ const SeatingManagerModal: React.FC<{
 
         {tables.length === 0 ? (
           <p className="text-xs font-semibold text-brand-charcoal/50 bg-white border border-brand-clay/40 rounded-xl p-4 text-center">
-            No café tables are configured yet. Add them in Settings → Capacity → Table Inventory.
+            {t('No café tables are configured yet. Add them in Settings → Capacity → Table Inventory.', 'لم يتم إعداد أي طاولات مقهى بعد. أضفها من الإعدادات ← السعة ← جرد الطاولات.')}
           </p>
         ) : (
           <div className="space-y-3">
@@ -828,25 +847,25 @@ const SeatingManagerModal: React.FC<{
                           ? 'bg-red-50 border-red-200 text-red-700'
                           : 'bg-emerald-50 border-emerald-200 text-emerald-700'
                     }`}>
-                      {table.status !== 'Active' ? table.status : table.freeSeats === 0 ? 'Full' : 'Available'}
+                      {table.status !== 'Active' ? enumLabel('resourceStatus', table.status, lang) : table.freeSeats === 0 ? t('Full', 'ممتلئة') : t('Available', 'متاحة')}
                     </span>
                   </div>
 
                   <p className="text-[11px] font-bold text-brand-charcoal/60 font-mono">
-                    {table.seats} seats · {table.occupiedSeats} occupied · {table.reservedSeats} reserved · {table.freeSeats} free
+                    {/* ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker. */}{t(`${table.seats} seats · ${table.occupiedSeats} occupied · ${table.reservedSeats} reserved · ${table.freeSeats} free`, `${table.seats} مقاعد · ${table.occupiedSeats} مشغولة · ${table.reservedSeats} محجوزة · ${table.freeSeats} شاغرة`)}
                   </p>
 
                   {occupied.map(o => (
                     <div key={o.queueId} className="flex items-center justify-between bg-brand-sage/10 border border-brand-sage/30 rounded-xl px-3 py-2">
                       <span className="text-[11px] font-bold text-brand-charcoal">
-                        Customer: {o.name} / {o.participants} guests
+                        {/* ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker. */}{t(`Customer: ${o.name} / ${o.participants} guests`, `العميل: ${o.name} / ${o.participants} ضيوف`)}
                       </span>
                       <button
                         type="button"
                         onClick={() => { const q = queueById.get(o.queueId); if (q) onChangeTable(q); }}
                         className="text-[10px] font-bold text-brand-terracotta hover:underline cursor-pointer shrink-0"
                       >
-                        Move
+                        {t('Move', 'نقل')}
                       </button>
                     </div>
                   ))}
@@ -854,7 +873,7 @@ const SeatingManagerModal: React.FC<{
                   {reserved.map(o => (
                     <div key={o.queueId} className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-xl px-3 py-2">
                       <span className="text-[11px] font-bold text-brand-charcoal">
-                        Reserved for: {o.name} / {o.participants} guests
+                        {/* ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker. */}{t(`Reserved for: ${o.name} / ${o.participants} guests`, `محجوزة لـ: ${o.name} / ${o.participants} ضيوف`)}
                       </span>
                       <div className="flex items-center gap-2 shrink-0">
                         <button
@@ -862,21 +881,21 @@ const SeatingManagerModal: React.FC<{
                           onClick={() => { const q = queueById.get(o.queueId); if (q) onSeatWaiting(q); }}
                           className="text-[10px] font-bold text-brand-terracotta hover:underline cursor-pointer"
                         >
-                          Seat
+                          {t('Seat', 'إجلاس')}
                         </button>
                         <button
                           type="button"
                           onClick={() => { const q = queueById.get(o.queueId); if (q) onRelease(q); }}
                           className="text-[10px] font-bold text-red-500 hover:underline cursor-pointer"
                         >
-                          Release
+                          {t('Release', 'تحرير')}
                         </button>
                       </div>
                     </div>
                   ))}
 
                   {table.occupants.length === 0 && table.status === 'Active' && (
-                    <p className="text-[11px] font-semibold text-brand-charcoal/40">Available</p>
+                    <p className="text-[11px] font-semibold text-brand-charcoal/40">{t('Available', 'متاحة')}</p>
                   )}
 
                   {/* Pull an unassigned Waiting/Called guest straight onto this table. */}
@@ -888,9 +907,9 @@ const SeatingManagerModal: React.FC<{
                           onChange={e => setAssignSelection(prev => ({ ...prev, [table.id]: e.target.value }))}
                           className="flex-1 bg-white border border-brand-clay rounded-lg py-1.5 px-2 text-[11px] font-bold text-brand-charcoal"
                         >
-                          <option value="">Choose a waiting guest…</option>
+                          <option value="">{t('Choose a waiting guest…', 'اختر ضيفًا من قائمة الانتظار…')}</option>
                           {eligible.map(c => (
-                            <option key={c.id} value={c.id}>{c.name} — {c.participants} guests</option>
+                            <option key={c.id} value={c.id}>{/* ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker. */}{t(`${c.name} — ${c.participants} guests`, `${c.name} — ${c.participants} ضيوف`)}</option>
                           ))}
                         </select>
                         <button
@@ -905,7 +924,7 @@ const SeatingManagerModal: React.FC<{
                           }}
                           className="px-3 py-1.5 rounded-lg bg-brand-terracotta text-brand-cream text-[11px] font-bold disabled:opacity-50 cursor-pointer"
                         >
-                          Assign
+                          {t('Assign', 'تعيين')}
                         </button>
                       </div>
                     ) : (
@@ -914,7 +933,7 @@ const SeatingManagerModal: React.FC<{
                         onClick={() => setAssigningTableId(table.id)}
                         className="text-[11px] font-bold text-brand-terracotta hover:underline cursor-pointer pt-1"
                       >
-                        + Assign a waiting guest
+                        {t('+ Assign a waiting guest', '+ تعيين ضيف من قائمة الانتظار')}
                       </button>
                     )
                   )}
@@ -939,6 +958,7 @@ export const LiveQueueSection: React.FC = () => {
     updateWorkshopSession, appendBookingTimeline,
     birthdayPackages,
 } = useApp();
+  const { lang, t } = useLanguage();
 
   // One shared view of the real records the queue depends on.
   const recordSources: QueueRecordSources = useMemo(
@@ -1217,7 +1237,7 @@ export const LiveQueueSection: React.FC = () => {
     // resolveCustomer reuses that record — so the duplicate check is skipped.
     const newErrors: Record<string, string> = await validateCustomerForm(
       { name: newName, phone: newPhone },
-      { requireEmail: false, allowExistingCustomer: true }
+      { requireEmail: false, allowExistingCustomer: true, lang }
     );
 
     if (walkInType === 'With Instructor') {
@@ -1226,7 +1246,7 @@ export const LiveQueueSection: React.FC = () => {
       const bookingErrors = await validateBookingForm({
         sessionId: newSessionId,
         participants: newGuests
-      });
+      }, undefined, undefined, lang);
       if (bookingErrors.sessionId) newErrors.session = bookingErrors.sessionId;
       else if (bookingErrors.participants) newErrors.session = bookingErrors.participants;
     } else {
@@ -1320,7 +1340,7 @@ export const LiveQueueSection: React.FC = () => {
     });
 
     if (!result.success) {
-      setErrors({ tables: result.error || 'Could not check in this guest.' });
+      setErrors({ tables: result.error || t('Could not check in this guest.', 'تعذّر تسجيل حضور هذا الضيف.') });
       return;
     }
 
@@ -1413,14 +1433,16 @@ export const LiveQueueSection: React.FC = () => {
     if (!selfGuided && editingCapacity) {
       const guests = Number(editGuests);
       if (Number.isFinite(guests) && guests > editingCapacity.remainingCapacity) {
-        validationErrors.guests =
+        validationErrors.guests = t(
           `Only ${editingCapacity.remainingCapacity} seat(s) remain in this session ` +
-          `(capacity ${editingCapacity.capacity}, ${editingCapacity.seatsTaken} already taken).`;
+          `(capacity ${editingCapacity.capacity}, ${editingCapacity.seatsTaken} already taken).`,
+          `تبقّى ${editingCapacity.remainingCapacity} مقاعد فقط في هذه الجلسة (السعة ${editingCapacity.capacity}، المحجوز ${editingCapacity.seatsTaken}).`
+        );
       }
     }
 
     if (!selfGuided && !editStaffId) {
-      validationErrors.instructor = 'Select an instructor for this session.';
+      validationErrors.instructor = t('Select an instructor for this session.', 'اختر مدرّبًا لهذه الجلسة.');
     }
 
     if (Object.keys(validationErrors).length > 0) {
@@ -1438,7 +1460,7 @@ export const LiveQueueSection: React.FC = () => {
     } else if (editStaffId && editStaffId !== editingItem.staffId) {
       const member = staff.find(m => m.id === editStaffId);
       if (!member) {
-        setEditErrors({ instructor: 'That staff member no longer exists.' });
+        setEditErrors({ instructor: t('That staff member no longer exists.', 'لم يعد هذا الموظف موجودًا.') });
         return;
       }
       // Store the stable id; the name is denormalized for display only.
@@ -1518,7 +1540,7 @@ export const LiveQueueSection: React.FC = () => {
     });
 
     if (!result.success) {
-      setReturnErrors({ form: result.message || 'Could not continue this session.' });
+      setReturnErrors({ form: result.message || t('Could not continue this session.', 'تعذّر متابعة هذه الجلسة.') });
       return;
     }
 
@@ -1572,7 +1594,7 @@ export const LiveQueueSection: React.FC = () => {
       : await changeQueueItemTables(seatModalItem.id, seatModalTableIds);
 
     if (!result.success) {
-      setSeatModalError(result.error || 'Could not update the table assignment.');
+      setSeatModalError(result.error || t('Could not update the table assignment.', 'تعذّر تحديث تعيين الطاولة.'));
       return;
     }
 
@@ -1662,7 +1684,7 @@ export const LiveQueueSection: React.FC = () => {
       {/* High-visibility Tablet Friendly Header - Read-only static date */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center p-6 bg-brand-charcoal text-brand-cream rounded-3xl shadow-md gap-4">
         <div className="space-y-1">
-          <p className="text-[10px] font-bold text-brand-sage uppercase tracking-widest">Live Studio Queue &bull; Riyadh Local Time</p>
+          <p className="text-[10px] font-bold text-brand-sage uppercase tracking-widest">{t('Live Studio Queue • Riyadh Local Time', 'طابور الاستوديو المباشر • بتوقيت الرياض')}</p>
           <div className="flex items-center gap-3">
             <h1 className="font-display text-2xl font-bold select-none">{formattedTodayDate}</h1>
             <span className="h-2 w-2 rounded-full bg-red-500 animate-ping"></span>
@@ -1670,11 +1692,11 @@ export const LiveQueueSection: React.FC = () => {
           <div className="flex items-center gap-4 text-xs text-brand-cream/70 font-semibold pt-1">
             <span className="flex items-center gap-1">
               <Users className="h-4 w-4 text-brand-terracotta" />
-              <span>{activeQueueCount} active artists today</span>
+              <span>{/* ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker. */}{t(`${activeQueueCount} active artists today`, `${activeQueueCount} فنانين نشطين اليوم`)}</span>
             </span>
             <span className="flex items-center gap-1">
               <Clock className="h-4 w-4 text-brand-sage" />
-              <span>Avg Wait Time: {avgWaitTime} minutes</span>
+              <span>{/* ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker. */}{t(`Avg Wait Time: ${avgWaitTime} minutes`, `متوسط وقت الانتظار: ${avgWaitTime} دقيقة`)}</span>
             </span>
           </div>
         </div>
@@ -1686,7 +1708,7 @@ export const LiveQueueSection: React.FC = () => {
             className="cursor-pointer w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-brand-terracotta text-brand-cream text-sm font-bold px-5 py-4 rounded-xl hover:bg-brand-terracotta-hover transition-colors shadow-sm"
           >
             <Plus className="h-5 w-5 stroke-[3]" />
-            <span>Check In Walk-In</span>
+            <span>{t('Check In Walk-In', 'تسجيل زيارة مباشرة')}</span>
           </button>
         </div>
       </div>
@@ -1696,9 +1718,9 @@ export const LiveQueueSection: React.FC = () => {
         {/* Seats Occupancy Metric */}
         <div className="space-y-2">
           <div className="flex justify-between items-center text-xs font-bold">
-            <span className="text-brand-charcoal/70 uppercase tracking-wider text-[10px]">Studio Seats Occupied</span>
+            <span className="text-brand-charcoal/70 uppercase tracking-wider text-[10px]">{t('Studio Seats Occupied', 'مقاعد الاستوديو المشغولة')}</span>
             <span className="font-mono text-brand-charcoal">
-              {occupiedSeats} / {totalSeats} Seats ({capacityPct}%)
+              {/* ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker. */}{t(`${occupiedSeats} / ${totalSeats} Seats (${capacityPct}%)`, `${occupiedSeats} / ${totalSeats} مقعد (${capacityPct}%)`)}
             </span>
           </div>
           <div className="w-full h-3 bg-brand-cream border border-brand-clay/40 rounded-full overflow-hidden">
@@ -1714,7 +1736,7 @@ export const LiveQueueSection: React.FC = () => {
             ></div>
           </div>
           <p className="text-[11px] text-brand-charcoal/60 font-medium">
-            Available: <strong className="text-emerald-700 font-bold font-mono">{availableSeats} seats</strong> left
+            {t('Available:', 'المتاح: تبقى')} <strong className="text-emerald-700 font-bold font-mono">{/* ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker. */}{availableSeats} {t('seats', 'مقاعد')}</strong>{t(' left', '')}
           </p>
         </div>
 
@@ -1725,9 +1747,9 @@ export const LiveQueueSection: React.FC = () => {
           className="p-3 bg-brand-cream/40 border border-brand-clay/40 rounded-2xl flex items-center justify-between cursor-pointer text-left hover:border-brand-terracotta/50 hover:bg-brand-cream/60 transition-colors"
         >
           <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-brand-charcoal/60 block">Table Inventory</span>
-            <span className="text-sm font-extrabold text-brand-charcoal font-mono">{availableTables} / {totalTables} Tables Free</span>
-            <span className="text-[10px] font-bold text-brand-terracotta block mt-0.5">Open Seating Manager →</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-brand-charcoal/60 block">{t('Table Inventory', 'جرد الطاولات')}</span>
+            <span className="text-sm font-extrabold text-brand-charcoal font-mono">{/* ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker. */}{t(`${availableTables} / ${totalTables} Tables Free`, `${availableTables} / ${totalTables} طاولات شاغرة`)}</span>
+            <span className="text-[10px] font-bold text-brand-terracotta block mt-0.5">{t('Open Seating Manager →', 'فتح مدير الجلوس ←')}</span>
           </div>
           <div className="flex items-center justify-center h-10 w-10 bg-brand-sand/60 text-brand-terracotta rounded-xl font-bold text-xs shrink-0">
             {occupiedTables}/{totalTables}
@@ -1737,9 +1759,9 @@ export const LiveQueueSection: React.FC = () => {
         {/* Dynamic Queue Wait-Time Throughput */}
         <div className="p-3 bg-brand-cream/40 border border-brand-clay/40 rounded-2xl flex items-center justify-between">
           <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-brand-charcoal/60 block">Queue Throughput</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-brand-charcoal/60 block">{t('Queue Throughput', 'معدل سير الطابور')}</span>
             <span className="text-sm font-extrabold text-brand-charcoal font-mono">
-              ~{waitingItems.length > 0 ? Math.max(10, Math.round((waitingItems.length * 15) / Math.max(1, availableTables))) : 0} min wait
+              {/* ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker. */}{t(`~${waitingItems.length > 0 ? Math.max(10, Math.round((waitingItems.length * 15) / Math.max(1, availableTables))) : 0} min wait`, `انتظار ~${waitingItems.length > 0 ? Math.max(10, Math.round((waitingItems.length * 15) / Math.max(1, availableTables))) : 0} دقيقة`)}
             </span>
           </div>
           <div className="flex items-center justify-center h-10 w-10 bg-brand-sage/30 text-brand-sage-hover rounded-xl">
@@ -1766,7 +1788,7 @@ export const LiveQueueSection: React.FC = () => {
                   : 'border-transparent text-brand-charcoal/50 hover:text-brand-terracotta'
               }`}
             >
-              <span>{tab}</span>
+              <span>{enumLabel('bookingStatus', tab, lang)}</span>
               {list.length > 0 && (
                 <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-brand-sand text-brand-charcoal">
                   {list.length}
@@ -1800,13 +1822,13 @@ export const LiveQueueSection: React.FC = () => {
 
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-bold text-brand-charcoal">
-                  {warning.item.name} · {warning.minutesLeft} minute{warning.minutesLeft === 1 ? '' : 's'} remaining
+                  {/* ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker. */}{t(`${warning.item.name} · ${warning.minutesLeft} minute${warning.minutesLeft === 1 ? '' : 's'} remaining`, `${warning.item.name} · تبقى ${warning.minutesLeft} دقيقة`)}
                 </p>
                 <p className="mt-0.5 text-[11px] font-semibold text-brand-charcoal/55">
                   {[
-                    warning.item.activity,
-                    warning.item.staffName ? `with ${warning.item.staffName}` : null,
-                    `No. ${formatQueueNumber(warning.item.queueNumber)}`
+                    displayActivity(warning.item.activity, t),
+                    warning.item.staffName ? t(`with ${warning.item.staffName}`, `مع ${warning.item.staffName}`) : null,
+                    `${t('No.', 'رقم')} ${formatQueueNumber(warning.item.queueNumber)}`
                   ].filter(Boolean).join(' · ')}
                 </p>
               </div>
@@ -1814,7 +1836,7 @@ export const LiveQueueSection: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setDismissedWarnings(prev => [...prev, warning.key])}
-                aria-label={`Dismiss the warning for ${warning.item.name}`}
+                aria-label={t(`Dismiss the warning for ${warning.item.name}`, `تجاهل التنبيه الخاص بـ ${warning.item.name}`)}
                 className="shrink-0 rounded-lg p-1 text-brand-charcoal/40 transition-colors hover:bg-brand-sand hover:text-brand-charcoal cursor-pointer"
               >
                 <X className="h-4 w-4" />
@@ -1832,7 +1854,7 @@ export const LiveQueueSection: React.FC = () => {
           <div className="flex justify-between items-center pb-2 border-b border-brand-clay/40">
             <h2 className="font-display text-sm font-bold text-brand-charcoal flex items-center gap-2">
               <span className="h-2 w-2 rounded-full bg-amber-500"></span>
-              <span>Waiting List</span>
+              <span>{t('Waiting List', 'قائمة الانتظار')}</span>
             </h2>
             <span className="bg-brand-sand px-2 py-0.5 rounded-full text-xs font-bold text-brand-charcoal/60">{waitingItems.length}</span>
           </div>
@@ -1844,7 +1866,7 @@ export const LiveQueueSection: React.FC = () => {
           <div className="max-h-[27rem] space-y-4 overflow-y-auto always-scrollbar pe-1">
             {waitingItems.length === 0 ? (
               <div className="py-12 text-center text-xs text-brand-charcoal/40 bg-white/40 rounded-2xl border border-dashed border-brand-clay/50">
-                No guests waiting.
+                {t('No guests waiting.', 'لا يوجد ضيوف في الانتظار.')}
               </div>
             ) : (
               waitingItems.map(item => (
@@ -1870,7 +1892,7 @@ export const LiveQueueSection: React.FC = () => {
           <div className="flex justify-between items-center pb-2 border-b border-brand-clay/40">
             <h2 className="font-display text-sm font-bold text-brand-charcoal flex items-center gap-2">
               <span className="h-2 w-2 rounded-full bg-amber-600 animate-pulse"></span>
-              <span>Called List</span>
+              <span>{t('Called List', 'قائمة المنادَين')}</span>
             </h2>
             <span className="bg-brand-sand px-2 py-0.5 rounded-full text-xs font-bold text-brand-charcoal/60">{calledItems.length}</span>
           </div>
@@ -1878,7 +1900,7 @@ export const LiveQueueSection: React.FC = () => {
           <div className="max-h-[27rem] space-y-4 overflow-y-auto always-scrollbar pe-1">
             {calledItems.length === 0 ? (
               <div className="py-12 text-center text-xs text-brand-charcoal/40 bg-white/40 rounded-2xl border border-dashed border-brand-clay/50">
-                No called entries.
+                {t('No called entries.', 'لا توجد إدخالات منادى عليها.')}
               </div>
             ) : (
               calledItems.map(item => (
@@ -1903,7 +1925,7 @@ export const LiveQueueSection: React.FC = () => {
           <div className="flex justify-between items-center pb-2 border-b border-brand-clay/40">
             <h2 className="font-display text-sm font-bold text-brand-charcoal flex items-center gap-2">
               <span className="h-2 w-2 rounded-full bg-green-500 animate-ping"></span>
-              <span>In Progress</span>
+              <span>{t('In Progress', 'جارية الآن')}</span>
             </h2>
             <span className="bg-brand-sand px-2 py-0.5 rounded-full text-xs font-bold text-brand-charcoal/60">{inProgressItems.length}</span>
           </div>
@@ -1911,7 +1933,7 @@ export const LiveQueueSection: React.FC = () => {
           <div className="max-h-[27rem] space-y-4 overflow-y-auto always-scrollbar pe-1">
             {inProgressItems.length === 0 ? (
               <div className="py-12 text-center text-xs text-brand-charcoal/40 bg-white/40 rounded-2xl border border-dashed border-brand-clay/50">
-                No active studio sessions.
+                {t('No active studio sessions.', 'لا توجد جلسات استوديو نشطة.')}
               </div>
             ) : (
               inProgressItems.map(item => (
@@ -1937,7 +1959,7 @@ export const LiveQueueSection: React.FC = () => {
           <div className="flex justify-between items-center pb-2 border-b border-brand-clay/40">
             <h2 className="font-display text-sm font-bold text-brand-charcoal flex items-center gap-2">
               <span className="h-2 w-2 rounded-full bg-blue-500"></span>
-              <span>Completed Today</span>
+              <span>{t('Completed Today', 'المكتملة اليوم')}</span>
             </h2>
             <span className="bg-brand-sand px-2 py-0.5 rounded-full text-xs font-bold text-brand-charcoal/60">{completedItems.length}</span>
           </div>
@@ -1945,7 +1967,7 @@ export const LiveQueueSection: React.FC = () => {
           <div className="max-h-[27rem] space-y-4 overflow-y-auto always-scrollbar pe-1">
             {completedItems.length === 0 ? (
               <div className="py-12 text-center text-xs text-brand-charcoal/40 bg-white/40 rounded-2xl border border-dashed border-brand-clay/50">
-                No sessions completed yet today.
+                {t('No sessions completed yet today.', 'لم تكتمل أي جلسات اليوم بعد.')}
               </div>
             ) : (
               completedItems.map(item => (
@@ -1971,18 +1993,18 @@ export const LiveQueueSection: React.FC = () => {
       {nameConflict && (
         <div className="fixed inset-0 bg-brand-charcoal/60 backdrop-blur-xs z-[60] flex items-center justify-center p-4 animate-in fade-in duration-150">
           <div className="bg-white border border-brand-clay rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl text-left">
-            <h3 className="text-base font-bold text-brand-charcoal">This number already has an account</h3>
+            <h3 className="text-base font-bold text-brand-charcoal">{t('This number already has an account', 'هذا الرقم لديه حساب بالفعل')}</h3>
 
             <div className="space-y-2 text-xs text-brand-charcoal/80">
               <p>
-                This number already has an account under{' '}
+                {t('This number already has an account under', 'هذا الرقم لديه حساب باسم')}{' '}
                 <span className="font-bold text-brand-charcoal">"{nameConflict.existing.name}"</span>.
               </p>
               <p>
-                You entered <span className="font-bold text-brand-charcoal">"{nameConflict.enteredName}"</span>.
+                {t('You entered', 'لقد أدخلت')} <span className="font-bold text-brand-charcoal">"{nameConflict.enteredName}"</span>.
               </p>
               <p className="text-brand-charcoal/60">
-                The visit is linked to the existing account either way — choose which name it should keep.
+                {t('The visit is linked to the existing account either way — choose which name it should keep.', 'تُربط الزيارة بالحساب الحالي في الحالتين — اختر الاسم الذي يجب الاحتفاظ به.')}
               </p>
             </div>
 
@@ -1996,7 +2018,7 @@ export const LiveQueueSection: React.FC = () => {
                 }}
                 className="w-full py-2.5 rounded-xl bg-brand-terracotta text-brand-cream text-xs font-bold cursor-pointer hover:bg-brand-terracotta-hover transition-colors"
               >
-                Keep existing name ("{nameConflict.existing.name}")
+                {t(`Keep existing name ("${nameConflict.existing.name}")`, `الاحتفاظ بالاسم الحالي ("${nameConflict.existing.name}")`)}
               </button>
               <button
                 type="button"
@@ -2007,14 +2029,14 @@ export const LiveQueueSection: React.FC = () => {
                 }}
                 className="w-full py-2.5 rounded-xl bg-brand-sand text-brand-charcoal border border-brand-clay text-xs font-bold cursor-pointer hover:bg-brand-clay/30 transition-colors"
               >
-                Update to new name ("{nameConflict.enteredName}")
+                {t(`Update to new name ("${nameConflict.enteredName}")`, `التحديث إلى الاسم الجديد ("${nameConflict.enteredName}")`)}
               </button>
               <button
                 type="button"
                 onClick={() => setNameConflict(null)}
                 className="w-full py-2 rounded-xl text-xs font-bold text-brand-charcoal/60 cursor-pointer hover:bg-brand-sand/40 transition-colors"
               >
-                Cancel
+                {t('Cancel', 'إلغاء')}
               </button>
             </div>
           </div>
@@ -2035,7 +2057,7 @@ export const LiveQueueSection: React.FC = () => {
             <div className="shrink-0 flex justify-between items-center border-b border-brand-clay/60 px-6 py-4">
               <h3 className="font-display text-lg font-bold text-brand-charcoal flex items-center gap-2">
                 <Sparkles className="h-5 w-5 text-brand-terracotta" />
-                <span>Add Walk-In to Queue</span>
+                <span>{t('Add Walk-In to Queue', 'إضافة زيارة مباشرة إلى الطابور')}</span>
               </h3>
               <button
                 onClick={() => setAddModalOpen(false)}
@@ -2063,7 +2085,7 @@ export const LiveQueueSection: React.FC = () => {
                     : 'text-brand-charcoal/60 hover:text-brand-charcoal hover:bg-brand-sand/30'
                 }`}
               >
-                Without Instructor
+                {enumLabel('queueType', 'Without Instructor', lang)}
               </button>
               <button
                 type="button"
@@ -2074,7 +2096,7 @@ export const LiveQueueSection: React.FC = () => {
                     : 'text-brand-charcoal/60 hover:text-brand-charcoal hover:bg-brand-sand/30'
                 }`}
               >
-                With Instructor
+                {enumLabel('queueType', 'With Instructor', lang)}
               </button>
             </div>
 
@@ -2084,11 +2106,11 @@ export const LiveQueueSection: React.FC = () => {
               {/* Name Field */}
               <div className="space-y-1">
                 <label className="text-xs font-bold text-brand-charcoal/80 flex justify-between">
-                  <span>Guest Name <span className="text-red-500">*</span></span>
+                  <span>{t('Guest Name', 'اسم الضيف')} <span className="text-red-500">*</span></span>
                 </label>
                 <input
                   type="text"
-                  placeholder="Sara Al-Fahad"
+                  placeholder={t('Sara Al-Fahad', 'سارة الفهد')}
                   value={newName}
                   onChange={e => {
                     setNewName(e.target.value);
@@ -2104,7 +2126,7 @@ export const LiveQueueSection: React.FC = () => {
               </div>
 
               <PhoneInput
-                label="Phone Number"
+                label={t('Phone Number', 'رقم الجوال')}
                 required
                 value={newPhone}
                 onChange={val => {
@@ -2122,7 +2144,7 @@ export const LiveQueueSection: React.FC = () => {
                 <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">
-                      Existing customer linked
+                      {t('Existing customer linked', 'تم ربط عميل حالي')}
                     </p>
                     <p className="text-xs font-bold text-brand-charcoal truncate">{linkedCustomer.name}</p>
                     <p className="text-[11px] font-mono text-brand-charcoal/60">
@@ -2133,9 +2155,9 @@ export const LiveQueueSection: React.FC = () => {
                       const summary = summarizeCustomerActivity(linkedCustomer, { bookings, queue, piecesCount: customerPieceCounts[linkedCustomer.id] });
                       return (
                         <p className="text-[10px] font-semibold text-brand-charcoal/55 mt-0.5">
-                          {summary.visits} previous visit{summary.visits === 1 ? '' : 's'} ·{' '}
-                          {summary.bookings} booking{summary.bookings === 1 ? '' : 's'} ·{' '}
-                          {hasWebsiteAccount(linkedCustomer) ? 'Registered account' : 'No website account'} ·{' '}
+                          {/* ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker. */}{t(`${summary.visits} previous visit${summary.visits === 1 ? '' : 's'}`, `${summary.visits} زيارات سابقة`)} ·{' '}
+                          {/* ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker. */}{t(`${summary.bookings} booking${summary.bookings === 1 ? '' : 's'}`, `${summary.bookings} حجوزات`)} ·{' '}
+                          {hasWebsiteAccount(linkedCustomer) ? t('Registered account', 'حساب مسجّل') : t('No website account', 'لا يوجد حساب على الموقع')} ·{' '}
                           <span className="font-mono">{linkedCustomer.id}</span>
                         </p>
                       );
@@ -2146,13 +2168,13 @@ export const LiveQueueSection: React.FC = () => {
                     onClick={handleClearLinkedCustomer}
                     className="text-[10px] font-bold text-brand-charcoal/50 hover:text-red-600 shrink-0 cursor-pointer"
                   >
-                    Unlink
+                    {t('Unlink', 'إلغاء الربط')}
                   </button>
                 </div>
               ) : customerMatches.length > 0 && (
                 <div className="bg-brand-sand/25 border border-brand-clay/50 rounded-xl p-2">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-brand-charcoal/50 px-1 pb-1">
-                    Matching customers
+                    {t('Matching customers', 'عملاء مطابقون')}
                   </p>
                   {/* Fixed height with the rest reached by scrolling — the same
                       shape the piece logging console's customer search uses.
@@ -2173,8 +2195,8 @@ export const LiveQueueSection: React.FC = () => {
                           {customer.displayPhone || customer.phone}
                         </p>
                         <p className="text-[10px] font-semibold text-brand-charcoal/50">
-                          {summary.visits} previous visit{summary.visits === 1 ? '' : 's'} ·{' '}
-                          {hasWebsiteAccount(customer) ? 'Registered account' : 'Walk-in / guest'}
+                          {/* ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker. */}{t(`${summary.visits} previous visit${summary.visits === 1 ? '' : 's'}`, `${summary.visits} زيارات سابقة`)} ·{' '}
+                          {hasWebsiteAccount(customer) ? t('Registered account', 'حساب مسجّل') : t('Walk-in / guest', 'زيارة مباشرة / ضيف')}
                         </p>
                       </button>
                     );
@@ -2187,8 +2209,8 @@ export const LiveQueueSection: React.FC = () => {
               <div className="space-y-1">
                 <div className="flex items-center justify-between border border-brand-clay bg-white rounded-xl p-3">
                   <div className="text-left">
-                    <p className="text-xs font-bold text-brand-charcoal/80">Number of Guests</p>
-                    <p className="text-[10px] text-brand-charcoal/40 font-bold">Minimum 1 guest</p>
+                    <p className="text-xs font-bold text-brand-charcoal/80">{t('Number of Guests', 'عدد الضيوف')}</p>
+                    <p className="text-[10px] text-brand-charcoal/40 font-bold">{t('Minimum 1 guest', 'الحد الأدنى ضيف واحد')}</p>
                   </div>
                   <div className="flex items-center gap-3">
                     <button
@@ -2218,8 +2240,8 @@ export const LiveQueueSection: React.FC = () => {
                 <div className="space-y-1 animate-in fade-in duration-200">
                   <div className="flex items-center justify-between border border-brand-clay bg-white rounded-xl p-3">
                     <div className="text-left">
-                      <p className="text-xs font-bold text-brand-charcoal/80">Number of Hours</p>
-                      <p className="text-[10px] text-brand-charcoal/40 font-bold">Time limit for clay play</p>
+                      <p className="text-xs font-bold text-brand-charcoal/80">{t('Number of Hours', 'عدد الساعات')}</p>
+                      <p className="text-[10px] text-brand-charcoal/40 font-bold">{t('Time limit for clay play', 'الحد الزمني للعب بالطين')}</p>
                     </div>
                     <div className="flex items-center gap-3">
                       <button
@@ -2251,19 +2273,19 @@ export const LiveQueueSection: React.FC = () => {
               {walkInType === 'Without Instructor' && (
                 <div className="space-y-1.5 border border-brand-clay bg-white rounded-xl p-3 animate-in fade-in duration-200">
                   <div className="flex items-center justify-between">
-                    <p className="text-xs font-bold text-brand-charcoal/80">Table Assignment (optional)</p>
+                    <p className="text-xs font-bold text-brand-charcoal/80">{t('Table Assignment (optional)', 'تعيين الطاولة (اختياري)')}</p>
                     {newTableIds.length > 0 && (
                       <button
                         type="button"
                         onClick={() => setNewTableIds([])}
                         className="text-[11px] font-bold text-brand-terracotta hover:underline cursor-pointer"
                       >
-                        Leave unassigned
+                        {t('Leave unassigned', 'ترك دون تعيين')}
                       </button>
                     )}
                   </div>
                   <p className="text-[10px] text-brand-charcoal/40 font-bold">
-                    Choose now if you already know where they'll sit, or leave this and pick a table when you seat them.
+                    {t("Choose now if you already know where they'll sit, or leave this and pick a table when you seat them.", 'اختر الآن إن كنت تعرف أين سيجلسون، أو اترك ذلك واختر طاولة عند إجلاسهم.')}
                   </p>
                   <TableMultiPicker
                     tables={tableStates}
@@ -2282,7 +2304,7 @@ export const LiveQueueSection: React.FC = () => {
               {walkInType === 'With Instructor' && (
                 <div className="space-y-1 animate-in fade-in duration-200">
                   <label className="text-xs font-bold text-brand-charcoal/80">
-                    Today's Workshop Session <span className="text-red-500">*</span>
+                    {t("Today's Workshop Session", 'جلسة ورشة اليوم')} <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={newSessionId}
@@ -2297,8 +2319,8 @@ export const LiveQueueSection: React.FC = () => {
                   >
                     <option value="">
                       {availableSessions.length === 0
-                        ? 'No available sessions left today'
-                        : 'Select a session...'}
+                        ? t('No available sessions left today', 'لا توجد جلسات متاحة متبقية اليوم')
+                        : t('Select a session...', 'اختر جلسة...')}
                     </option>
                     {availableSessions.map(s => (
                       <option key={s.sessionId} value={s.sessionId}>{s.label}</option>
@@ -2308,15 +2330,15 @@ export const LiveQueueSection: React.FC = () => {
 
                   {selectedSession && (
                     <div className="mt-2 bg-brand-sand/20 border border-brand-clay/40 rounded-xl p-2.5 text-[11px] font-bold text-brand-charcoal/80 space-y-1">
-                      <div className="flex justify-between"><span>Workshop:</span><span>{selectedSession.workshopTitle}</span></div>
+                      <div className="flex justify-between"><span>{t('Workshop:', 'الورشة:')}</span><span>{selectedSession.workshopTitle}</span></div>
                       <div className="flex justify-between">
-                        <span>Time:</span>
+                        <span>{t('Time:', 'الوقت:')}</span>
                         <span className="font-mono">{selectedSession.startTime} – {selectedSession.endTime}</span>
                       </div>
-                      <div className="flex justify-between"><span>Instructor:</span><span>{selectedSession.instructorName}</span></div>
+                      <div className="flex justify-between"><span>{t('Instructor:', 'المدرّب:')}</span><span>{selectedSession.instructorName}</span></div>
                       <div className="flex justify-between">
-                        <span>Seats Left:</span>
-                        <span>{selectedSession.remainingCapacity} of {selectedSession.capacity}</span>
+                        <span>{t('Seats Left:', 'المقاعد المتبقية:')}</span>
+                        <span>{t(`${selectedSession.remainingCapacity} of ${selectedSession.capacity}`, `${selectedSession.remainingCapacity} من ${selectedSession.capacity}`)}</span>
                       </div>
                     </div>
                   )}
@@ -2340,13 +2362,13 @@ export const LiveQueueSection: React.FC = () => {
                 onClick={() => setAddModalOpen(false)}
                 className="cursor-pointer py-3.5 border border-brand-clay hover:bg-brand-sand text-brand-charcoal text-xs font-bold rounded-xl text-center"
               >
-                Cancel
+                {t('Cancel', 'إلغاء')}
               </button>
               <button
                 type="submit"
                 className="cursor-pointer py-3.5 bg-brand-terracotta hover:bg-brand-terracotta-hover text-brand-cream text-xs font-bold rounded-xl text-center shadow-md"
               >
-                Add to Queue
+                {t('Add to Queue', 'إضافة إلى الطابور')}
               </button>
             </div>
             </form>
@@ -2366,7 +2388,7 @@ export const LiveQueueSection: React.FC = () => {
 
             <div className="shrink-0 flex justify-between items-center border-b border-brand-clay/60 px-6 py-4">
               <h3 className="font-display text-sm font-bold text-brand-charcoal">
-                Edit Queue Entry {editingItem.id}
+                {t(`Edit Queue Entry ${editingItem.id}`, `تعديل إدخال الطابور ${editingItem.id}`)}
               </h3>
               <button onClick={() => setEditModalOpen(false)} className="text-brand-charcoal hover:bg-brand-sand p-1 rounded-lg">
                 <X className="h-4 w-4" />
@@ -2377,7 +2399,7 @@ export const LiveQueueSection: React.FC = () => {
 
               {/* Stepper for Guests */}
               <div className="flex items-center justify-between border border-brand-clay bg-white rounded-xl p-3">
-                <span className="text-xs font-bold text-brand-charcoal/80">Guests Count</span>
+                <span className="text-xs font-bold text-brand-charcoal/80">{t('Guests Count', 'عدد الضيوف')}</span>
                 <div className="flex items-center gap-3">
                   <button
                     onClick={() => setEditGuests(prev => Math.max(1, prev - 1))}
@@ -2409,7 +2431,7 @@ export const LiveQueueSection: React.FC = () => {
               {isSelfGuided(editingItem) && (
                 <>
                   <div className="flex items-center justify-between border border-brand-clay bg-white rounded-xl p-3">
-                    <span className="text-xs font-bold text-brand-charcoal/80">Number of Hours</span>
+                    <span className="text-xs font-bold text-brand-charcoal/80">{t('Number of Hours', 'عدد الساعات')}</span>
                     <div className="flex items-center gap-3">
                       <button
                         onClick={() => setEditHours(prev => Math.max(1, prev - 1))}
@@ -2449,7 +2471,7 @@ export const LiveQueueSection: React.FC = () => {
               {!isSelfGuided(editingItem) && (
                 <>
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-brand-charcoal/80">Assigned Instructor</label>
+                    <label className="text-xs font-bold text-brand-charcoal/80">{t('Assigned Instructor', 'المدرّب المعيّن')}</label>
                     {/* Only staff who are free for this session's date and time. */}
                     <select
                       value={editStaffId}
@@ -2459,17 +2481,17 @@ export const LiveQueueSection: React.FC = () => {
                       }}
                       className="w-full bg-white border border-brand-clay rounded-xl py-2.5 px-3.5 text-xs font-bold text-brand-charcoal cursor-pointer"
                     >
-                      <option value="">Select instructor...</option>
+                      <option value="">{t('Select instructor...', 'اختر المدرّب...')}</option>
                       {availableInstructors.map(({ member, avail }) => (
                         <option key={member.id} value={member.id}>
                           {member.name}
-                          {member.id === editingItem.staffId && !avail.isAvailable ? ' (currently assigned)' : ''}
+                          {member.id === editingItem.staffId && !avail.isAvailable ? t(' (currently assigned)', ' (معيّن حاليًا)') : ''}
                         </option>
                       ))}
                     </select>
                     {availableInstructors.length === 0 && (
                       <p className="text-[11px] font-bold text-amber-700">
-                        No staff are free for this session's time.
+                        {t("No staff are free for this session's time.", 'لا يوجد موظفون متاحون في وقت هذه الجلسة.')}
                       </p>
                     )}
                     {editErrors.instructor && (
@@ -2492,13 +2514,13 @@ export const LiveQueueSection: React.FC = () => {
                 onClick={() => setEditModalOpen(false)}
                 className="cursor-pointer py-3 border border-brand-clay hover:bg-brand-sand text-brand-charcoal text-xs font-bold rounded-xl text-center"
               >
-                Cancel
+                {t('Cancel', 'إلغاء')}
               </button>
               <button
                 onClick={handleSaveEdit}
                 className="cursor-pointer py-3 bg-brand-terracotta hover:bg-brand-terracotta-hover text-brand-cream text-xs font-bold rounded-xl text-center shadow-md"
               >
-                Save Changes
+                {t('Save Changes', 'حفظ التغييرات')}
               </button>
             </div>
 
@@ -2518,9 +2540,9 @@ export const LiveQueueSection: React.FC = () => {
             {/* Header */}
             <div className="shrink-0 flex justify-between items-center border-b border-brand-clay/60 px-6 py-4">
               <div className="min-w-0">
-                <h3 className="font-display text-sm font-bold text-brand-charcoal">Add Time</h3>
+                <h3 className="font-display text-sm font-bold text-brand-charcoal">{t('Add Time', 'إضافة وقت')}</h3>
                 <p className="text-[11px] font-bold text-brand-charcoal/50 truncate">
-                  {returningItem.name} · completed entry No. {formatQueueNumber(returningItem.queueNumber)}
+                  {t(`${returningItem.name} · completed entry No. ${formatQueueNumber(returningItem.queueNumber)}`, `${returningItem.name} · إدخال مكتمل رقم ${formatQueueNumber(returningItem.queueNumber)}`)}
                 </p>
               </div>
               <button
@@ -2535,12 +2557,12 @@ export const LiveQueueSection: React.FC = () => {
             <div className="flex-1 overflow-y-auto always-scrollbar px-6 py-4 space-y-4">
 
               <p className="text-[11px] font-semibold text-brand-charcoal/60 bg-white border border-brand-clay/50 rounded-xl p-2.5">
-                Goes straight back to In Progress with a fresh timer — this guest does not return to the Waiting List.
+                {t('Goes straight back to In Progress with a fresh timer — this guest does not return to the Waiting List.', 'يعود مباشرة إلى «جارية الآن» بمؤقت جديد — لا يعود هذا الضيف إلى قائمة الانتظار.')}
               </p>
 
               <div className="space-y-1">
                 <div className="flex items-center justify-between border border-brand-clay bg-white rounded-xl p-3">
-                  <span className="text-xs font-bold text-brand-charcoal/80">Additional Hours</span>
+                  <span className="text-xs font-bold text-brand-charcoal/80">{t('Additional Hours', 'ساعات إضافية')}</span>
                   <div className="flex items-center gap-3">
                     <button
                       type="button"
@@ -2574,7 +2596,7 @@ export const LiveQueueSection: React.FC = () => {
 
               <div className="space-y-1">
                 <div className="flex items-center justify-between border border-brand-clay bg-white rounded-xl p-3">
-                  <span className="text-xs font-bold text-brand-charcoal/80">Guests</span>
+                  <span className="text-xs font-bold text-brand-charcoal/80">{t('Guests', 'الضيوف')}</span>
                   <div className="flex items-center gap-3">
                     <button
                       type="button"
@@ -2608,17 +2630,17 @@ export const LiveQueueSection: React.FC = () => {
               {/* Table Assignment — the same compact popover picker as Add
                   Walk-In, pre-selected with whatever table(s) this guest had. */}
               <div className="space-y-1.5">
-                <p className="text-xs font-bold text-brand-charcoal/80">Table Assignment</p>
+                <p className="text-xs font-bold text-brand-charcoal/80">{t('Table Assignment', 'تعيين الطاولة')}</p>
                 <p className="text-[10px] text-brand-charcoal/40 font-bold">
                   {returningItem.tableIds && returningItem.tableIds.length > 0
-                    ? 'Kept below by default — remove or change if needed.'
-                    : 'No table was assigned before. Choose one or more.'}
+                    ? t('Kept below by default — remove or change if needed.', 'محفوظة أدناه افتراضيًا — أزلها أو غيّرها عند الحاجة.')
+                    : t('No table was assigned before. Choose one or more.', 'لم تُعيَّن طاولة سابقًا. اختر واحدة أو أكثر.')}
                 </p>
                 <TableMultiPicker
                   tables={returnTableStates}
                   selectedIds={returnTableIds}
                   participants={Number(returnGuests) || 0}
-                  placeholder="Choose table(s)"
+                  placeholder={t('Choose table(s)', 'اختر الطاولة/الطاولات')}
                   onChange={ids => {
                     setReturnTableIds(ids);
                     if (returnErrors.form) setReturnErrors(prev => ({ ...prev, form: '' }));
@@ -2636,11 +2658,11 @@ export const LiveQueueSection: React.FC = () => {
                 });
                 return (
                   <div className="bg-brand-sand/20 border border-brand-clay/40 rounded-xl p-3 text-[11px] font-bold text-brand-charcoal/80 space-y-1">
-                    <div className="flex justify-between"><span>New Session Duration:</span><span>{preview.durationLabel}</span></div>
-                    <div className="flex justify-between"><span>Est. End Time:</span><span className="font-mono">{preview.estimatedEndTime}</span></div>
+                    <div className="flex justify-between"><span>{t('New Session Duration:', 'مدة الجلسة الجديدة:')}</span><span>{preview.durationLabel}</span></div>
+                    <div className="flex justify-between"><span>{t('Est. End Time:', 'وقت الانتهاء المتوقع:')}</span><span className="font-mono">{preview.estimatedEndTime}</span></div>
                     <div className="flex justify-between">
-                      <span>Table(s):</span>
-                      <span>{returnTableIds.length > 0 ? tableNamesFor(returnTableIds, configuredTables) : `${preview.seatsRequired} seats needed`}</span>
+                      <span>{t('Table(s):', 'الطاولة/الطاولات:')}</span>
+                      <span>{returnTableIds.length > 0 ? tableNamesFor(returnTableIds, configuredTables) : t(`${preview.seatsRequired} seats needed`, `مطلوب ${preview.seatsRequired} مقاعد`)}</span>
                     </div>
                   </div>
                 );
@@ -2660,14 +2682,14 @@ export const LiveQueueSection: React.FC = () => {
                 onClick={() => setReturnModalOpen(false)}
                 className="cursor-pointer py-3 border border-brand-clay hover:bg-brand-sand text-brand-charcoal text-xs font-bold rounded-xl text-center"
               >
-                Cancel
+                {t('Cancel', 'إلغاء')}
               </button>
               <button
                 type="button"
                 onClick={handleConfirmReturn}
                 className="cursor-pointer py-3 bg-brand-terracotta hover:bg-brand-terracotta-hover text-brand-cream text-xs font-bold rounded-xl text-center shadow-md"
               >
-                Confirm Add Time
+                {t('Confirm Add Time', 'تأكيد إضافة الوقت')}
               </button>
             </div>
 
@@ -2688,10 +2710,10 @@ export const LiveQueueSection: React.FC = () => {
 
             <div className="space-y-2">
               <h3 className="font-display text-base font-bold text-brand-charcoal">
-                Confirm Cancel Queue Entry?
+                {t('Confirm Cancel Queue Entry?', 'تأكيد إلغاء إدخال الطابور؟')}
               </h3>
               <p className="text-xs text-brand-charcoal/60 leading-relaxed">
-                Are you sure you want to cancel the queue entry for <span className="font-bold text-brand-charcoal">{cancellingItem.name}</span> (No. {formatQueueNumber(cancellingItem.queueNumber)})? This action cannot be undone.
+                {t('Are you sure you want to cancel the queue entry for', 'هل أنت متأكد أنك تريد إلغاء إدخال الطابور الخاص بـ')} <span className="font-bold text-brand-charcoal">{cancellingItem.name}</span> ({t('No.', 'رقم')} {formatQueueNumber(cancellingItem.queueNumber)}){t('? This action cannot be undone.', '؟ لا يمكن التراجع عن هذا الإجراء.')}
               </p>
             </div>
 
@@ -2700,13 +2722,13 @@ export const LiveQueueSection: React.FC = () => {
                 onClick={() => setCancelConfirmOpen(false)}
                 className="cursor-pointer py-3 border border-brand-clay hover:bg-brand-sand text-brand-charcoal text-xs font-bold rounded-xl"
               >
-                Keep Entry
+                {t('Keep Entry', 'إبقاء الإدخال')}
               </button>
               <button
                 onClick={handleConfirmCancel}
                 className="cursor-pointer py-3 bg-red-600 hover:bg-red-700 text-brand-cream text-xs font-bold rounded-xl shadow-md"
               >
-                Yes, Cancel Entry
+                {t('Yes, Cancel Entry', 'نعم، إلغاء الإدخال')}
               </button>
             </div>
 
@@ -2727,10 +2749,10 @@ export const LiveQueueSection: React.FC = () => {
             <div className="shrink-0 flex justify-between items-center border-b border-brand-clay/60 px-6 py-4">
               <div>
                 <h3 className="font-display text-sm font-bold text-brand-charcoal">
-                  {seatModalMode === 'seat' ? 'Seat Guest — Choose Table(s)' : 'Change Table'}
+                  {seatModalMode === 'seat' ? t('Seat Guest — Choose Table(s)', 'إجلاس الضيف — اختر الطاولة/الطاولات') : t('Change Table', 'تغيير الطاولة')}
                 </h3>
                 <p className="text-[11px] font-bold text-brand-charcoal/50">
-                  {seatModalItem.name} · No. {formatQueueNumber(seatModalItem.queueNumber)} · {seatModalItem.participants} guests
+                  {/* ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker. */}{t(`${seatModalItem.name} · No. ${formatQueueNumber(seatModalItem.queueNumber)} · ${seatModalItem.participants} guests`, `${seatModalItem.name} · رقم ${formatQueueNumber(seatModalItem.queueNumber)} · ${seatModalItem.participants} ضيوف`)}
                 </p>
               </div>
               <button
@@ -2745,7 +2767,7 @@ export const LiveQueueSection: React.FC = () => {
 
             {seatModalMode === 'seat' && (
               <p className="text-[11px] font-semibold text-brand-charcoal/60 bg-white border border-brand-clay/50 rounded-xl p-2.5">
-                A table is required before this guest can move to In Progress. A large group may use more than one table.
+                {t('A table is required before this guest can move to In Progress. A large group may use more than one table.', 'يلزم اختيار طاولة قبل انتقال هذا الضيف إلى «جارية الآن». قد تستخدم المجموعة الكبيرة أكثر من طاولة.')}
               </p>
             )}
 
@@ -2774,13 +2796,13 @@ export const LiveQueueSection: React.FC = () => {
                 onClick={() => setSeatModalOpen(false)}
                 className="cursor-pointer py-3 border border-brand-clay hover:bg-brand-sand text-brand-charcoal text-xs font-bold rounded-xl text-center"
               >
-                Cancel
+                {t('Cancel', 'إلغاء')}
               </button>
               <button
                 onClick={handleConfirmSeatModal}
                 className="cursor-pointer py-3 bg-brand-terracotta hover:bg-brand-terracotta-hover text-brand-cream text-xs font-bold rounded-xl text-center shadow-md"
               >
-                {seatModalMode === 'seat' ? 'Seat Guest' : 'Save Table'}
+                {seatModalMode === 'seat' ? t('Seat Guest', 'إجلاس الضيف') : t('Save Table', 'حفظ الطاولة')}
               </button>
             </div>
 

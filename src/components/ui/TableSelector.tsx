@@ -11,6 +11,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, X } from 'lucide-react';
 import { TableSeatState, isTableSelectable } from '../../utils/tableSeatingUtils';
+import { useLanguage } from '../../context/LanguageContext';
+import type { Lang } from '../../context/LanguageContext';
+import { enumLabel } from '../../utils/enumLabels';
 
 export const TableSelector: React.FC<{
   tables: TableSeatState[];
@@ -19,10 +22,11 @@ export const TableSelector: React.FC<{
   /** Guests still needing a seat, shown per-table so staff can eyeball fit. */
   participants?: number;
 }> = ({ tables, selectedIds, onToggle, participants }) => {
+  const { lang, t } = useLanguage();
   if (tables.length === 0) {
     return (
       <p className="text-xs font-semibold text-brand-charcoal/50 bg-brand-sand/30 border border-brand-clay/40 rounded-xl p-3">
-        No café tables are configured yet. Add them in Settings → Capacity → Table Inventory.
+        {t('No café tables are configured yet. Add them in Settings → Capacity → Table Inventory.', 'لم يتم إعداد أي طاولات مقهى بعد. أضفها من الإعدادات ← السعة ← جرد الطاولات.')}
       </p>
     );
   }
@@ -60,10 +64,10 @@ export const TableSelector: React.FC<{
 
             <span className="font-mono text-[11px] font-bold">
               {isInactive
-                ? table.status
+                ? enumLabel('resourceStatus', table.status, lang)
                 : isFull
-                  ? 'Full'
-                  : `${table.occupiedSeats + table.reservedSeats} / ${table.seats} occupied — ${table.freeSeats} free`}
+                  ? t('Full', 'ممتلئة')
+                  : t(`${table.occupiedSeats + table.reservedSeats} / ${table.seats} occupied — ${table.freeSeats} free`, `${table.occupiedSeats + table.reservedSeats} / ${table.seats} مشغولة — ${table.freeSeats} شاغرة`)}
             </span>
           </button>
         );
@@ -71,7 +75,7 @@ export const TableSelector: React.FC<{
 
       {typeof participants === 'number' && (
         <p className="text-[11px] font-semibold text-brand-charcoal/50 pt-1">
-          This group needs {participants} seat{participants === 1 ? '' : 's'}.
+          {/* ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker. */}{t(`This group needs ${participants} seat${participants === 1 ? '' : 's'}.`, `تحتاج هذه المجموعة إلى ${participants} مقاعد.`)}
         </p>
       )}
     </div>
@@ -79,10 +83,15 @@ export const TableSelector: React.FC<{
 };
 
 /** One line of capacity wording, shared by the picker's trigger chips and menu rows. */
-function capacityLine(table: TableSeatState, isSelected: boolean): string {
-  if (table.status !== 'Active') return table.status;
-  if (table.freeSeats === 0 && !isSelected) return 'Full';
-  return `${table.seats} seats · ${table.freeSeats} available`;
+function capacityLine(
+  table: TableSeatState,
+  isSelected: boolean,
+  t: (en: string, ar: string) => string,
+  lang: Lang
+): string {
+  if (table.status !== 'Active') return enumLabel('resourceStatus', table.status, lang);
+  if (table.freeSeats === 0 && !isSelected) return t('Full', 'ممتلئة');
+  return t(`${table.seats} seats · ${table.freeSeats} available`, `${table.seats} مقاعد · ${table.freeSeats} متاحة`);
 }
 
 /**
@@ -98,7 +107,9 @@ export const TableMultiPicker: React.FC<{
   onChange: (ids: string[]) => void;
   participants?: number;
   placeholder?: string;
-}> = ({ tables, selectedIds, onChange, participants, placeholder = 'Choose table(s) — Optional' }) => {
+}> = ({ tables, selectedIds, onChange, participants, placeholder }) => {
+  const { lang, t } = useLanguage();
+  const placeholderText = placeholder ?? t('Choose table(s) — Optional', 'اختر الطاولة/الطاولات — اختياري');
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -128,8 +139,8 @@ export const TableMultiPicker: React.FC<{
       >
         <span className={selectedIds.length === 0 ? 'text-brand-charcoal/50' : ''}>
           {selectedIds.length === 0
-            ? placeholder
-            : `${selectedIds.length} table${selectedIds.length === 1 ? '' : 's'} selected`}
+            ? placeholderText
+            : t(`${selectedIds.length} table${selectedIds.length === 1 ? '' : 's'} selected`, selectedIds.length === 1 ? 'طاولة واحدة محددة' : `${selectedIds.length} طاولات محددة`)}
         </span>
         <ChevronDown className={`h-4 w-4 shrink-0 text-brand-charcoal/50 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
@@ -145,7 +156,7 @@ export const TableMultiPicker: React.FC<{
               <button
                 type="button"
                 onClick={() => toggle(table.id)}
-                aria-label={`Remove ${table.name}`}
+                aria-label={t(`Remove ${table.name}`, `إزالة ${table.name}`)}
                 className="cursor-pointer text-brand-terracotta/70 hover:text-red-600"
               >
                 <X className="h-3 w-3" />
@@ -159,7 +170,7 @@ export const TableMultiPicker: React.FC<{
         <div className="absolute z-30 mt-1.5 w-full rounded-xl border border-brand-clay bg-white p-1.5 shadow-lg max-h-52 overflow-y-auto always-scrollbar space-y-1">
           {tables.length === 0 ? (
             <p className="p-2 text-[11px] font-semibold text-brand-charcoal/50">
-              No café tables are configured yet.
+              {t('No café tables are configured yet.', 'لم يتم إعداد أي طاولات مقهى بعد.')}
             </p>
           ) : (
             tables.map(table => {
@@ -182,7 +193,7 @@ export const TableMultiPicker: React.FC<{
                   <span className="flex flex-col">
                     <span className="text-xs font-bold text-brand-charcoal">{table.name}</span>
                     <span className="text-[11px] font-semibold text-brand-charcoal/50">
-                      {capacityLine(table, isSelected)}
+                      {capacityLine(table, isSelected, t, lang)}
                     </span>
                   </span>
                   {isSelected && <Check className="h-4 w-4 shrink-0 text-brand-terracotta" />}
@@ -195,7 +206,7 @@ export const TableMultiPicker: React.FC<{
 
       {typeof participants === 'number' && (
         <p className="text-[11px] font-semibold text-brand-charcoal/50 pt-1.5">
-          This group needs {participants} seat{participants === 1 ? '' : 's'}.
+          {/* ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker. */}{t(`This group needs ${participants} seat${participants === 1 ? '' : 's'}.`, `تحتاج هذه المجموعة إلى ${participants} مقاعد.`)}
         </p>
       )}
     </div>

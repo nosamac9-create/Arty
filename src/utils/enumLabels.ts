@@ -11,7 +11,11 @@ const LABELS: Record<string, Record<string, string>> = {
   payment:       { 'Paid': 'مدفوع', 'Unpaid': 'غير مدفوع', 'Refunded': 'مُسترد', 'Deposit Paid': 'عربون مدفوع' },
   source:        { 'Website': 'الموقع', 'Walk-in': 'زيارة مباشرة', 'Admin': 'الإدارة' },
   category:      { 'Workshops': 'الورش', 'Events/Birthdays': 'الفعاليات وأعياد الميلاد', 'Self-Guided': 'ذاتي التوجيه' },
-  dateScope:     { 'Today': 'اليوم', 'Yesterday': 'أمس', 'This Week': 'هذا الأسبوع', 'All': 'كل السجل' }
+  dateScope:     { 'Today': 'اليوم', 'Yesterday': 'أمس', 'This Week': 'هذا الأسبوع', 'All': 'كل السجل' },
+  // The two walk-in modes staff choose between; stored as the queue entry's `type`.
+  queueType:     { 'Without Instructor': 'بدون مدرب', 'With Instructor': 'مع مدرب' },
+  // Status of a configured studio room or café table (studio_resources.status).
+  resourceStatus: { 'Active': 'نشط', 'Inactive': 'غير نشط', 'Maintenance': 'قيد الصيانة' }
 };
 
 export function enumLabel(group: keyof typeof LABELS, value: string, lang: Lang): string {
