@@ -11,6 +11,7 @@ import {
 import { BirthdayPackage } from '../types';
 import { LineListTextarea } from './ui/LineListTextarea';
 import { BackButton } from './ui/BackButton';
+import { ContentLanguageTabs, ContentLang } from './ui/ContentLanguageTabs';
 import { DEFAULT_DEPOSIT_AMOUNT } from '../utils/queueUtils';
 
 interface Props {
@@ -58,9 +59,11 @@ const Section: React.FC<{
 export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSave, onNotify }) => {
   const [draft, setDraft] = useState<BirthdayPackage>(pkg);
   const [isSaving, setIsSaving] = useState(false);
+  // Which language the Basic information section is showing. UI-only: never saved.
+  const [contentLang, setContentLang] = useState<ContentLang>('en');
 
   // Re-seed if the record changes underneath — a colleague publishing it, say.
-  useEffect(() => { setDraft(pkg); }, [pkg.id]);
+  useEffect(() => { setDraft(pkg); setContentLang('en'); }, [pkg.id]);
 
   const setField = <K extends keyof BirthdayPackage>(key: K, value: BirthdayPackage[K]) =>
     setDraft(prev => ({ ...prev, [key]: value }));
@@ -96,7 +99,14 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
     setIsSaving(true);
     try {
       const { id: _ignored, ...updates } = draft;
-      await onSave(updates);
+      // Arabic is optional: empty saves as null (not '' and not undefined), so a
+      // previously saved Arabic value can actually be cleared.
+      await onSave({
+        ...updates,
+        nameAr: draft.nameAr?.trim() || null,
+        shortDescriptionAr: draft.shortDescriptionAr?.trim() || null,
+        fullDescriptionAr: draft.fullDescriptionAr?.trim() || null
+      });
     } finally {
       setIsSaving(false);
     }
@@ -165,6 +175,14 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
         icon={<Package className="h-4 w-4 text-brand-terracotta" />}
         description="The name and copy shown on the customer site."
       >
+        <ContentLanguageTabs
+          value={contentLang}
+          onChange={setContentLang}
+          arabicFilled={!!(draft.nameAr?.trim() || draft.shortDescriptionAr?.trim() || draft.fullDescriptionAr?.trim())}
+        />
+
+        {contentLang === 'en' ? (
+          <>
         <div className="space-y-1">
           <label className={labelClass}>Package Name *</label>
           <input
@@ -195,6 +213,46 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
             className={inputClass}
           />
         </div>
+          </>
+        ) : (
+          <>
+            <div className="space-y-1">
+              <label className={labelClass}>Package Name (Arabic)</label>
+              <input
+                type="text"
+                dir="rtl"
+                lang="ar"
+                value={draft.nameAr ?? ''}
+                onChange={e => setField('nameAr', e.target.value)}
+                className={`${inputClass} text-start`}
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className={labelClass}>Short Description (Arabic)</label>
+              <input
+                type="text"
+                dir="rtl"
+                lang="ar"
+                value={draft.shortDescriptionAr ?? ''}
+                onChange={e => setField('shortDescriptionAr', e.target.value)}
+                className={`${inputClass} text-start`}
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className={labelClass}>Full Description (Arabic)</label>
+              <textarea
+                rows={3}
+                dir="rtl"
+                lang="ar"
+                value={draft.fullDescriptionAr ?? ''}
+                onChange={e => setField('fullDescriptionAr', e.target.value)}
+                className={`${inputClass} text-start`}
+              />
+            </div>
+          </>
+        )}
       </Section>
 
       <Section

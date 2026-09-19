@@ -27,6 +27,7 @@ import {
   Search, ArrowUpDown, ChevronUp, ChevronDown, Layers, Calendar, User, Clock, RefreshCw
 } from 'lucide-react';
 import { DateInput } from './DateInput';
+import { ContentLanguageTabs, ContentLang } from './ui/ContentLanguageTabs';
 import { MONTH_NAMES } from '../utils/calendarConfig';
 import { matchesQuery } from '../utils/search';
 import { getRiyadhNow } from '../utils/dateUtils';
@@ -85,6 +86,13 @@ export const AdminWorkshopFormSection: React.FC = () => {
   const [hook, setHook] = useState('');
   const [description, setDescription] = useState('');
   const [fullDetails, setFullDetails] = useState('');
+  // Optional Arabic copy for the four curriculum text fields. Empty saves as NULL.
+  const [titleAr, setTitleAr] = useState('');
+  const [hookAr, setHookAr] = useState('');
+  const [descriptionAr, setDescriptionAr] = useState('');
+  const [fullDetailsAr, setFullDetailsAr] = useState('');
+  // Which language the Curriculum card is showing. UI-only: never saved, never "dirty".
+  const [contentLang, setContentLang] = useState<ContentLang>('en');
   const [price, setPrice] = useState(250);
   const [duration, setDuration] = useState('2 Hours');
   const [capacity, setCapacity] = useState(10);
@@ -215,6 +223,11 @@ export const AdminWorkshopFormSection: React.FC = () => {
     setHook('');
     setDescription('');
     setFullDetails('');
+    setTitleAr('');
+    setHookAr('');
+    setDescriptionAr('');
+    setFullDetailsAr('');
+    setContentLang('en');
     setPrice(250);
     setDuration('2 Hours');
     setCapacity(10);
@@ -245,11 +258,13 @@ export const AdminWorkshopFormSection: React.FC = () => {
    * fields for free.
    */
   const formSnapshot = useMemo(() => JSON.stringify({
-    title, category, categoryInput, hook, description, fullDetails, price, duration,
+    title, category, categoryInput, hook, description, fullDetails,
+    titleAr, hookAr, descriptionAr, fullDetailsAr, price, duration,
     capacity, tutorStaffId, room, roomId, status, skillLevel, images, materials,
     ageRange, sessions, recurringSchedules, customFieldValues, customTagInputs
   }), [
-    title, category, categoryInput, hook, description, fullDetails, price, duration,
+    title, category, categoryInput, hook, description, fullDetails,
+    titleAr, hookAr, descriptionAr, fullDetailsAr, price, duration,
     capacity, tutorStaffId, room, roomId, status, skillLevel, images, materials,
     ageRange, sessions, recurringSchedules, customFieldValues, customTagInputs
   ]);
@@ -380,6 +395,11 @@ export const AdminWorkshopFormSection: React.FC = () => {
         setHook(ws.hook || '');
         setDescription(ws.description || '');
         setFullDetails(ws.fullDetails || '');
+        setTitleAr(ws.titleAr || '');
+        setHookAr(ws.hookAr || '');
+        setDescriptionAr(ws.descriptionAr || '');
+        setFullDetailsAr(ws.fullDetailsAr || '');
+        setContentLang('en');
         setPrice(ws.price || 250);
         setDuration(ws.duration || '2 Hours');
         setCapacity(ws.capacity || 10);
@@ -985,6 +1005,36 @@ export const AdminWorkshopFormSection: React.FC = () => {
     );
   };
 
+  // ---- Arabic counterparts of the four curriculum text fields ----
+  const arabicSlots = {
+    title:       { value: titleAr,       set: setTitleAr,       multiline: false },
+    hook:        { value: hookAr,        set: setHookAr,        multiline: false },
+    description: { value: descriptionAr, set: setDescriptionAr, multiline: true, rows: 3 },
+    fullDetails: { value: fullDetailsAr, set: setFullDetailsAr, multiline: true, rows: 4 }
+  } as const;
+
+  const arabicInputClass =
+    'w-full bg-brand-cream/35 border border-brand-clay rounded-xl py-2.5 px-3 text-xs font-semibold text-brand-charcoal text-start';
+
+  const renderArabicField = (field: WorkshopFieldConfig) => {
+    const slot = arabicSlots[field.boundTo as keyof typeof arabicSlots];
+    if (!slot) return null;               // category, custom fields: English-only
+    return (
+      <div key={field.fieldId} className={`space-y-1 ${slot.multiline ? 'sm:col-span-2' : ''}`}>
+        <label className="text-xs font-bold text-brand-charcoal/80">
+          {field.label} <span className="font-semibold text-brand-charcoal/45">(Arabic)</span>
+        </label>
+        {slot.multiline ? (
+          <textarea dir="rtl" lang="ar" rows={slot.rows} value={slot.value}
+                    onChange={e => slot.set(e.target.value)} className={arabicInputClass} />
+        ) : (
+          <input type="text" dir="rtl" lang="ar" value={slot.value}
+                 onChange={e => slot.set(e.target.value)} className={arabicInputClass} />
+        )}
+      </div>
+    );
+  };
+
   const curriculumFields = useMemo(
     () => fieldsForCard(workshopFields, 'curriculum'),
     [workshopFields]
@@ -1028,6 +1078,8 @@ export const AdminWorkshopFormSection: React.FC = () => {
       });
       setWorkshopErrors(baseErrors);
       if (Object.keys(baseErrors).length > 0) {
+        // The title field lives on the English tab; bring it back into view.
+        if (baseErrors.title) setContentLang('en');
         if (baseErrors.ageRange) setErrorTouched(true);
         alert(Object.values(baseErrors)[0]);
         return;
@@ -1037,6 +1089,10 @@ export const AdminWorkshopFormSection: React.FC = () => {
       // Settings blocks the save too.
       const missing = findMissingRequiredField();
       if (missing) {
+        // These four fields live on the English tab; bring them back into view.
+        if (['title', 'hook', 'description', 'fullDetails'].includes(String(missing.boundTo))) {
+          setContentLang('en');
+        }
         if (missing.boundTo === 'ageRange') setErrorTouched(true);
         alert(`"${missing.label}" is required. Please fill it in before publishing.`);
         return;
@@ -1066,6 +1122,11 @@ export const AdminWorkshopFormSection: React.FC = () => {
         hook: hook || 'A handcraft masterclass',
         description: description || 'No description provided.',
         fullDetails: fullDetails || 'No details provided.',
+        // Arabic is optional: empty saves as NULL, never a placeholder.
+        titleAr: titleAr.trim() || null,
+        hookAr: hookAr.trim() || null,
+        descriptionAr: descriptionAr.trim() || null,
+        fullDetailsAr: fullDetailsAr.trim() || null,
         duration: duration || '2 Hours',
         ageRange: finalAgeRange,
         price: Number(price) || 200,
@@ -1165,6 +1226,11 @@ export const AdminWorkshopFormSection: React.FC = () => {
         hook: hook || 'A handcraft masterclass',
         description: description || 'No description provided.',
         fullDetails: fullDetails || 'No details provided.',
+        // Arabic is optional: empty saves as NULL, never a placeholder.
+        titleAr: titleAr.trim() || null,
+        hookAr: hookAr.trim() || null,
+        descriptionAr: descriptionAr.trim() || null,
+        fullDetailsAr: fullDetailsAr.trim() || null,
         duration: duration || '2 Hours',
         ageRange: finalAgeRange,
         price: Number(price) || 200,
@@ -1354,16 +1420,28 @@ export const AdminWorkshopFormSection: React.FC = () => {
           
           {/* Section: Basics */}
           <div className="bg-white border border-brand-clay/70 rounded-2xl p-5 shadow-2xs space-y-4">
-            <h3 className="font-display font-bold text-lg text-brand-charcoal flex items-center gap-2">
-              <FolderKanban className="h-5 w-5 text-brand-terracotta" />
-              <span>Workshop Curriculum basics</span>
-            </h3>
-
-
-            {/* Rendered from Settings → Workshop Detail Lists. */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {curriculumFields.map(renderWorkshopField)}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h3 className="font-display font-bold text-lg text-brand-charcoal flex items-center gap-2">
+                <FolderKanban className="h-5 w-5 text-brand-terracotta" />
+                <span>Workshop Curriculum basics</span>
+              </h3>
+              <ContentLanguageTabs
+                value={contentLang}
+                onChange={setContentLang}
+                arabicFilled={!!(titleAr.trim() || hookAr.trim() || descriptionAr.trim() || fullDetailsAr.trim())}
+              />
             </div>
+
+            {contentLang === 'en' ? (
+              /* Unchanged: rendered from Settings → Workshop Detail Lists. */
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {curriculumFields.map(renderWorkshopField)}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {curriculumFields.map(renderArabicField)}
+              </div>
+            )}
 
           </div>
 

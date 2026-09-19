@@ -58,7 +58,7 @@ export function modelToRow(model: Record<string, any>, allowed?: string[]): Reco
 /**
  * Columns that exist on each table, so a model carrying extra client-side
  * fields cannot produce an "column does not exist" error. Mirrors
- * 0001_init.sql.
+ * 0001_init.sql, plus 0035 for the *_ar columns.
  */
 export const TABLE_COLUMNS: Record<string, string[]> = {
   customers: [
@@ -77,6 +77,7 @@ export const TABLE_COLUMNS: Record<string, string[]> = {
     'additional_images', 'instructor', 'staff_id', 'room', 'room_id', 'table_id', 'materials',
     'what_we_provide', 'instructions', 'cancellation_policy', 'skill_level', 'status',
     'featured', 'recurring_schedules', 'session_exceptions', 'custom_fields',
+    'title_ar', 'hook_ar', 'description_ar', 'full_details_ar',
     'created_at', 'updated_at'
   ],
   workshop_sessions: [
@@ -128,7 +129,9 @@ export const TABLE_COLUMNS: Record<string, string[]> = {
     'pricing_label', 'duration', 'min_guests', 'max_guests', 'age_information',
     'included_items', 'activity_choices', 'additional_info', 'cake_description', 'cake_sizes',
     'trainer_info', 'delivery_info', 'available_days', 'available_times', 'terms',
-    'customer_notes', 'deposit_amount', 'status', 'display_order', 'created_at', 'updated_at'
+    'customer_notes', 'deposit_amount', 'status', 'display_order',
+    'name_ar', 'short_description_ar', 'full_description_ar',
+    'created_at', 'updated_at'
   ],
   studio_resources: [
     'id', 'name', 'type', 'seats', 'location', 'notes', 'status', 'order', 'created_at', 'updated_at'

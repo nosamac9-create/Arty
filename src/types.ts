@@ -114,6 +114,14 @@ export interface Workshop {
    * the field is later disabled, so no historical data is lost.
    */
   customFields?: Record<string, any>;
+  /**
+   * Optional Arabic versions of the customer-facing copy. Null/absent means
+   * "no Arabic version — show the English". See migration 0035.
+   */
+  titleAr?: string | null;
+  hookAr?: string | null;
+  descriptionAr?: string | null;
+  fullDetailsAr?: string | null;
 }
 
 /**
@@ -910,6 +918,10 @@ export interface BirthdayPackage {
   image: string;
   shortDescription: string;
   fullDescription: string;
+  /** Optional Arabic versions; null/absent means show the English. See migration 0035. */
+  nameAr?: string | null;
+  shortDescriptionAr?: string | null;
+  fullDescriptionAr?: string | null;
 
   price: number;
   pricingType: 'Per child' | 'Per person' | 'Fixed price';
