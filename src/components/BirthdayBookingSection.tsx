@@ -65,6 +65,27 @@ const DEFAULT_LABEL_AR: Record<string, { en: string[]; ar: string }> = {
 };
 const normalizeLabel = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase();
 
+/**
+ * Arabic wording for the option strings the birthday form ships with. Options are
+ * staff-editable (Settings → Events & Birthdays) and stored as plain English strings, so
+ * a translation is used only while an option still IS one of these defaults
+ * (normalized compare); anything staff added or reworded is shown as typed.
+ * DISPLAY ONLY: the option string itself is what is selected, stored, matched for the
+ * "custom" text box and the colour swatch, and restored from a draft. Never the Arabic.
+ */
+const DEFAULT_OPTION_AR: Array<{ en: string; ar: string }> = [
+  { en: 'Pink & White', ar: 'وردي وأبيض' },
+  { en: 'Pastel Blue & White', ar: 'أزرق باستيل وأبيض' },
+  { en: 'Gold & Cream', ar: 'ذهبي وكريمي' },
+  { en: 'Rose Gold & Blush', ar: 'روز جولد وبلاش' },
+  { en: 'Sage Green & Neutral', ar: 'أخضر مريمية ومحايد' },
+  { en: 'Rainbow Multi-Color', ar: 'قوس قزح متعدد الألوان' },
+  { en: 'Custom Mix', ar: 'مزيج مخصص' },
+  { en: 'Fresh Juices (Orange, Lemonade, Watermelon)', ar: 'عصائر طازجة (برتقال، ليموناضة، بطيخ)' },
+  { en: 'Specialty Coffee Bar (Latte, Cappuccino, Spanish Latte)', ar: 'ركن القهوة المختصة (لاتيه، كابتشينو، سبانيش لاتيه)' },
+  { en: 'Mixed Bar (Coffee & Fresh Juices)', ar: 'ركن مشترك (قهوة وعصائر طازجة)' }
+];
+
 /** Swatches for colour-style choices, so a balloon colour reads as a colour. */
 const COLOR_SWATCHES: Record<string, string> = {
   red: '#C2412D', pink: '#E39AB0', blue: '#708D9C', 'light blue': '#A8C4D4',
@@ -127,6 +148,11 @@ export const BirthdayBookingSection: React.FC = () => {
     return (field && displayLabel(field)) || fallback;
   };
   const isRequired = (key: string) => !!fieldByKey(key)?.required;
+  /** Display text for a dropdown option. See DEFAULT_OPTION_AR. Never used as a value. */
+  const optionText = (option: string): string => {
+    if (lang !== 'ar') return option;
+    return DEFAULT_OPTION_AR.find(o => normalizeLabel(o.en) === normalizeLabel(option))?.ar ?? option;
+  };
 
   const detailFields = useMemo(
     () => activeFields.filter(f => DETAIL_KEYS.includes(f.key)),
@@ -611,7 +637,7 @@ export const BirthdayBookingSection: React.FC = () => {
               />
             )}
             <span className="text-start">
-              {option}
+              {optionText(option)}
               {isDisabled ? (
                 <span className="block text-[11px] font-medium text-brand-muted">{t('Full', 'ممتلئ')}</span>
               ) : price !== undefined && (
@@ -864,7 +890,7 @@ export const BirthdayBookingSection: React.FC = () => {
                     className="w-full rounded-2xl border border-brand-clay bg-white p-3.5 text-sm text-brand-charcoal focus:border-brand-terracotta focus:outline-none focus:ring-2 focus:ring-brand-terracotta/20"
                   >
                     {options.map(opt => (
-                      <option key={opt} value={opt}>{opt}</option>
+                      <option key={opt} value={opt}>{optionText(opt)}</option>
                     ))}
                   </select>
                 )}
@@ -912,7 +938,9 @@ export const BirthdayBookingSection: React.FC = () => {
           label: displayLabel(f),
           value: f.key === 'cakePhoto'
             ? (cakePhotoUrl ? t('Design image attached', 'تم إرفاق صورة التصميم') : '')
-            : String(valueOf(f) || '').trim()
+            : f.type === 'dropdown'
+              ? optionText(String(valueOf(f) || '').trim())
+              : String(valueOf(f) || '').trim()
         }))
         .filter(entry => entry.value),
     // valueOf reads fieldValues, so both drive this.
