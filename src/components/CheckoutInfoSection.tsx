@@ -19,6 +19,7 @@ import { BackButton } from './ui/BackButton';
 import { localizedText } from '../utils/localizedText';
 import { enumLabel } from '../utils/enumLabels';
 import { categoryLabel } from '../utils/categoryLabel';
+import { durationLabel } from '../utils/workshopMetaLabel';
 
 export const CheckoutInfoSection: React.FC = () => {
   const {
@@ -203,7 +204,7 @@ export const CheckoutInfoSection: React.FC = () => {
                 <p className="text-xs text-brand-ink mt-1">
                   {birthday
                     ? `${localizedText(birthdayPackage?.duration || '', birthdayPackage?.durationAr, lang)}${birthdayPackage?.ageInformation ? ` • ${localizedText(birthdayPackage.ageInformation, birthdayPackage.ageInformationAr, lang)}` : ''}`
-                    : `${workshop.duration} • ${workshop.room.split('(')[0]}`}
+                    : `${durationLabel(workshop.duration, lang)} • ${workshop.room.split('(')[0]}`}
                 </p>
               </div>
             </div>

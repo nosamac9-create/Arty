@@ -14,6 +14,7 @@ import { STUDIO_PHONE } from '../utils/studioConfig';
 import Reveal from './ui/Reveal';
 import { ScrollReveal } from './ui/ScrollReveal';
 import { AppImage } from './ui/AppImage';
+import { durationLabel } from '../utils/workshopMetaLabel';
 
 /**
  * Hours of notice that make a cancellation refundable.
@@ -57,7 +58,7 @@ const hoursUntilStart = (booking: Booking, now: Date): number =>
 
 export const MyBookingsSection: React.FC = () => {
   const { bookings, cancelOwnBooking, setCustomerTab, workshops, currentUser, setAuthScreen, staff, workshopSessions } = useApp();
-  const { t } = useLanguage();
+  const { lang, t } = useLanguage();
   /** The booking currently being cancelled, so its button can be disabled. */
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'Upcoming' | 'Past' | 'Cancelled'>('Upcoming');
@@ -389,7 +390,7 @@ export const MyBookingsSection: React.FC = () => {
                       {duration && (
                         <span className="flex items-center gap-1">
                           <Clock className="h-3.5 w-3.5 text-brand-sage" />
-                          <span>{duration}</span>
+                          <span>{durationLabel(duration, lang)}</span>
                         </span>
                       )}
                     </div>

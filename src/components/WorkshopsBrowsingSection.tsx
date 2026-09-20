@@ -18,6 +18,7 @@ import { recentBookingsWindow } from '../utils/featuredWorkshops';
 import { localizedText } from '../utils/localizedText';
 import { categoryLabel, categoryChipLabel } from '../utils/categoryLabel';
 import { enumLabel } from '../utils/enumLabels';
+import { durationLabel, ageRangeLabel } from '../utils/workshopMetaLabel';
 
 /** Pseudo-category: not a real DB category, it swaps the whole grid to birthday packages. */
 const BIRTHDAY_CATEGORY = 'Birthday Packages';
@@ -480,13 +481,13 @@ export const WorkshopsBrowsingSection: React.FC = () => {
                         {ws.duration && (
                           <span className="inline-flex min-w-0 items-center gap-1.5">
                             <Clock className="h-4 w-4 shrink-0 text-brand-sage" />
-                            <span className="truncate ltr-numerals">{ws.duration}</span>
+                            <span className="truncate" dir="auto">{durationLabel(ws.duration, lang)}</span>
                           </span>
                         )}
                         {ws.ageRange && (
                           <span className="max-md:hidden inline-flex min-w-0 items-center gap-1.5">
                             <Sparkles className="h-4 w-4 shrink-0 text-brand-sage" />
-                            <span className="truncate ltr-numerals">{ws.ageRange}</span>
+                            <span className="truncate" dir="auto">{ageRangeLabel(ws.ageRange, lang)}</span>
                           </span>
                         )}
                       </div>

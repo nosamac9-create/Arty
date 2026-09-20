@@ -25,6 +25,7 @@ import { formatDate } from '../utils/calendarConfig';
 import { selectFeaturedWorkshops, recentBookingsWindow } from '../utils/featuredWorkshops';
 import { STUDIO_PHONE } from '../utils/studioConfig';
 import { localizedText } from '../utils/localizedText';
+import { durationLabel, ageRangeLabel } from '../utils/workshopMetaLabel';
 import { useSessionSeats, useRecentBookings } from '../lib/sessionSeats';
 import { Calendar, Sparkles, ChevronRight, Paintbrush, MousePointerClick, CalendarRange, Gift, Coffee, ChevronDown, Phone, Mail, UserCheck, Star, ArrowLeft, Clock }  from 'lucide-react';
 
@@ -445,13 +446,13 @@ export const HomeSection: React.FC = () => {
                   {activeFeatured.duration && (
                     <span className="inline-flex items-center gap-1.5">
                       <Clock className="h-4 w-4 shrink-0 text-brand-sage" />
-                      <span className="ltr-numerals">{activeFeatured.duration}</span>
+                      <span dir="auto">{durationLabel(activeFeatured.duration, lang)}</span>
                     </span>
                   )}
                   {activeFeatured.ageRange && (
                     <span className="inline-flex items-center gap-1.5">
                       <Sparkles className="h-4 w-4 shrink-0 text-brand-sage" />
-                      <span className="ltr-numerals">{activeFeatured.ageRange}</span>
+                      <span dir="auto">{ageRangeLabel(activeFeatured.ageRange, lang)}</span>
                     </span>
                   )}
                   {activeFeatured.instructor && (

@@ -34,6 +34,7 @@ import { getRiyadhNow } from '../utils/dateUtils';
 import { useLanguage } from '../context/LanguageContext';
 import { enumLabel } from '../utils/enumLabels';
 import { categoryLabel } from '../utils/categoryLabel';
+import { durationLabel } from '../utils/workshopMetaLabel';
 
 /** Arabic Gregorian month names, in getMonth() order. Local on purpose: MONTH_NAMES stays English. */
 const MONTH_NAMES_AR = [
@@ -2532,7 +2533,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
 
                       {/* Duration */}
                       <td className="py-3.5 px-4 text-brand-charcoal/60 font-medium">
-                        {ws.duration}
+                        {durationLabel(ws.duration, lang)}
                       </td>
 
                       {/* Capacity */}
