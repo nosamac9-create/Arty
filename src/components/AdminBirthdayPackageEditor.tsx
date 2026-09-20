@@ -95,6 +95,7 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!draft.name.trim()) {
+      setContentLang('en');
       onNotify(t('Package name is required.', 'اسم الباقة مطلوب.'));
       return;
     }
@@ -108,7 +109,18 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
         ...updates,
         nameAr: draft.nameAr?.trim() || null,
         shortDescriptionAr: draft.shortDescriptionAr?.trim() || null,
-        fullDescriptionAr: draft.fullDescriptionAr?.trim() || null
+        fullDescriptionAr: draft.fullDescriptionAr?.trim() || null,
+        pricingLabelAr: draft.pricingLabelAr?.trim() || null,
+        durationAr: draft.durationAr?.trim() || null,
+        ageInformationAr: draft.ageInformationAr?.trim() || null,
+        cakeDescriptionAr: draft.cakeDescriptionAr?.trim() || null,
+        trainerInfoAr: draft.trainerInfoAr?.trim() || null,
+        deliveryInfoAr: draft.deliveryInfoAr?.trim() || null,
+        customerNotesAr: draft.customerNotesAr?.trim() || null,
+        termsAr: draft.termsAr?.trim() || null,
+        // A blank Arabic size name is dropped from the object, not stored as ''.
+        cakeSizes: (draft.cakeSizes || []).map(({ labelAr, ...rest }) =>
+          labelAr?.trim() ? { ...rest, labelAr: labelAr.trim() } : rest)
       });
     } finally {
       setIsSaving(false);
@@ -322,94 +334,124 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
         icon={<DollarSign className="h-4 w-4 text-brand-terracotta" />}
         description={t('What the party costs and how many it holds.', 'تكلفة الحفلة وعدد الضيوف المسموح.')}
       >
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <div className="space-y-1">
-            <label className={labelClass}>{t('Price (SAR)', 'السعر (ريال)')}</label>
-            <input
-              type="number"
-              min={0}
-              value={draft.price}
-              onChange={e => setField('price', Number(e.target.value) || 0)}
-              className={inputClass}
-            />
-          </div>
+        <ContentLanguageTabs
+          value={contentLang}
+          onChange={setContentLang}
+          arabicFilled={!!(draft.pricingLabelAr?.trim() || draft.durationAr?.trim() || draft.ageInformationAr?.trim())}
+        />
 
-          <div className="space-y-1">
-            <label className={labelClass}>{t('Pricing Type', 'نوع التسعير')}</label>
-            <select
-              value={draft.pricingType}
-              onChange={e => setField('pricingType', e.target.value as BirthdayPackage['pricingType'])}
-              className={inputClass}
-            >
-              <option value="Per child">{enumLabel('pricingType', 'Per child', lang)}</option>
-              <option value="Per person">{enumLabel('pricingType', 'Per person', lang)}</option>
-              <option value="Fixed price">{enumLabel('pricingType', 'Fixed price', lang)}</option>
-            </select>
-          </div>
+        {contentLang === 'en' ? (
+          <>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="space-y-1">
+                <label className={labelClass}>{t('Price (SAR)', 'السعر (ريال)')}</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={draft.price}
+                  onChange={e => setField('price', Number(e.target.value) || 0)}
+                  className={inputClass}
+                />
+              </div>
 
-          <div className="space-y-1">
-            <label className={labelClass}>{t('Pricing Label (shown to customers)', 'تسمية التسعير (تظهر للعملاء)')}</label>
-            <input
-              type="text"
-              value={draft.pricingLabel || ''}
-              onChange={e => setField('pricingLabel', e.target.value)}
-              className={inputClass}
-            />
-          </div>
+              <div className="space-y-1">
+                <label className={labelClass}>{t('Pricing Type', 'نوع التسعير')}</label>
+                <select
+                  value={draft.pricingType}
+                  onChange={e => setField('pricingType', e.target.value as BirthdayPackage['pricingType'])}
+                  className={inputClass}
+                >
+                  <option value="Per child">{enumLabel('pricingType', 'Per child', lang)}</option>
+                  <option value="Per person">{enumLabel('pricingType', 'Per person', lang)}</option>
+                  <option value="Fixed price">{enumLabel('pricingType', 'Fixed price', lang)}</option>
+                </select>
+              </div>
 
-          <div className="space-y-1">
-            <label className={labelClass}>{t('Duration', 'المدة')}</label>
-            <input
-              type="text"
-              value={draft.duration}
-              onChange={e => setField('duration', e.target.value)}
-              className={inputClass}
-            />
-          </div>
+              <div className="space-y-1">
+                <label className={labelClass}>{t('Pricing Label (shown to customers)', 'تسمية التسعير (تظهر للعملاء)')}</label>
+                <input
+                  type="text"
+                  value={draft.pricingLabel || ''}
+                  onChange={e => setField('pricingLabel', e.target.value)}
+                  className={inputClass}
+                />
+              </div>
 
-          <div className="space-y-1">
-            <label className={labelClass}>{t('Deposit (SAR)', 'العربون (ريال)')}</label>
-            <input
-              type="number"
-              min={0}
-              value={draft.depositAmount ?? DEFAULT_DEPOSIT_AMOUNT}
-              onChange={e => setField('depositAmount', Number(e.target.value) || 0)}
-              className={inputClass}
-            />
-          </div>
+              <div className="space-y-1">
+                <label className={labelClass}>{t('Duration', 'المدة')}</label>
+                <input
+                  type="text"
+                  value={draft.duration}
+                  onChange={e => setField('duration', e.target.value)}
+                  className={inputClass}
+                />
+              </div>
 
-          <div className="space-y-1">
-            <label className={labelClass}>{t('Age Information', 'معلومات العمر')}</label>
-            <input
-              type="text"
-              value={draft.ageInformation}
-              onChange={e => setField('ageInformation', e.target.value)}
-              className={inputClass}
-            />
-          </div>
+              <div className="space-y-1">
+                <label className={labelClass}>{t('Deposit (SAR)', 'العربون (ريال)')}</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={draft.depositAmount ?? DEFAULT_DEPOSIT_AMOUNT}
+                  onChange={e => setField('depositAmount', Number(e.target.value) || 0)}
+                  className={inputClass}
+                />
+              </div>
 
-          <div className="space-y-1">
-            <label className={labelClass}>{t('Minimum Guests', 'الحد الأدنى للضيوف')}</label>
-            <input
-              type="number"
-              min={1}
-              value={draft.minGuests}
-              onChange={e => setField('minGuests', Number(e.target.value) || 1)}
-              className={inputClass}
-            />
-          </div>
+              <div className="space-y-1">
+                <label className={labelClass}>{t('Age Information', 'معلومات العمر')}</label>
+                <input
+                  type="text"
+                  value={draft.ageInformation}
+                  onChange={e => setField('ageInformation', e.target.value)}
+                  className={inputClass}
+                />
+              </div>
 
-          <div className="space-y-1">
-            <label className={labelClass}>{t('Maximum Guests', 'الحد الأقصى للضيوف')}</label>
-            <input
-              type="number"
-              min={1}
-              value={draft.maxGuests}
-              onChange={e => setField('maxGuests', Number(e.target.value) || 1)}
-              className={inputClass}
-            />
-          </div>
-        </div>
+              <div className="space-y-1">
+                <label className={labelClass}>{t('Minimum Guests', 'الحد الأدنى للضيوف')}</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={draft.minGuests}
+                  onChange={e => setField('minGuests', Number(e.target.value) || 1)}
+                  className={inputClass}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className={labelClass}>{t('Maximum Guests', 'الحد الأقصى للضيوف')}</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={draft.maxGuests}
+                  onChange={e => setField('maxGuests', Number(e.target.value) || 1)}
+                  className={inputClass}
+                />
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="space-y-1">
+                <label className={labelClass}>Pricing Label (Arabic)</label>
+                <input type="text" dir="rtl" lang="ar" value={draft.pricingLabelAr ?? ''}
+                  onChange={e => setField('pricingLabelAr', e.target.value)} className={`${inputClass} text-start`} />
+              </div>
+              <div className="space-y-1">
+                <label className={labelClass}>Duration (Arabic)</label>
+                <input type="text" dir="rtl" lang="ar" value={draft.durationAr ?? ''}
+                  onChange={e => setField('durationAr', e.target.value)} className={`${inputClass} text-start`} />
+              </div>
+              <div className="space-y-1">
+                <label className={labelClass}>Age Information (Arabic)</label>
+                <input type="text" dir="rtl" lang="ar" value={draft.ageInformationAr ?? ''}
+                  onChange={e => setField('ageInformationAr', e.target.value)} className={`${inputClass} text-start`} />
+              </div>
+            </div>
+          </>
+        )}
       </Section>
 
       <Section
@@ -466,69 +508,109 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
         icon={<Cake className="h-4 w-4 text-brand-terracotta" />}
         description={t('Sizes and prices offered with this package.', 'المقاسات والأسعار المتاحة مع هذه الباقة.')}
       >
-        <div className="space-y-1">
-          <label className={labelClass}>{t('Cake Description', 'وصف الكعكة')}</label>
-          <input
-            type="text"
-            placeholder={t('Send us your cake design and we will do it.', 'أرسل لنا تصميم الكعكة وسنقوم بتنفيذه.')}
-            value={draft.cakeDescription}
-            onChange={e => setField('cakeDescription', e.target.value)}
-            className={inputClass}
-          />
-        </div>
+        <ContentLanguageTabs
+          value={contentLang}
+          onChange={setContentLang}
+          arabicFilled={!!(draft.cakeDescriptionAr?.trim() || (draft.cakeSizes || []).some(s => s.labelAr?.trim()))}
+        />
 
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <label className={labelClass}>{t('Cake Sizes & Prices', 'مقاسات الكعكة وأسعارها')}</label>
-            <button
-              type="button"
-              onClick={() => setField('cakeSizes', [
-                ...(draft.cakeSizes || []),
-                { id: `cake-${Date.now()}`, label: 'New size', price: 0 }
-              ])}
-              className="flex items-center gap-1 text-[11px] font-bold text-brand-terracotta hover:underline cursor-pointer"
-            >
-              <Plus className="h-3 w-3" />
-              <span>{t('Add Size', 'إضافة مقاس')}</span>
-            </button>
-          </div>
-
-          {(draft.cakeSizes || []).length === 0 ? (
-            <p className="text-[11px] italic text-brand-charcoal/50">{t('No cake sizes listed.', 'لا توجد مقاسات كعك مدرجة.')}</p>
-          ) : (
-            <div className="space-y-1.5">
-              {(draft.cakeSizes || []).map((size, sizeIdx) => (
-                <div key={size.id} className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    placeholder={t('e.g. Small (15 cm)', 'مثال: صغير (15 سم)')}
-                    value={size.label}
-                    onChange={e => setField('cakeSizes',
-                      (draft.cakeSizes || []).map((c, i) => i === sizeIdx ? { ...c, label: e.target.value } : c))}
-                    className="flex-1 rounded-xl border border-brand-clay bg-brand-cream/40 p-2 font-semibold"
-                  />
-                  <input
-                    type="number"
-                    min={0}
-                    value={size.price}
-                    onChange={e => setField('cakeSizes',
-                      (draft.cakeSizes || []).map((c, i) => i === sizeIdx ? { ...c, price: Number(e.target.value) || 0 } : c))}
-                    className="w-24 rounded-xl border border-brand-clay bg-brand-cream/40 p-2 font-semibold"
-                  />
-                  <span className="text-[11px] font-bold text-brand-charcoal/50">{t('SAR', 'ريال')}</span>
-                  <button
-                    type="button"
-                    title={t('Remove size', 'إزالة المقاس')}
-                    onClick={() => setField('cakeSizes', (draft.cakeSizes || []).filter((_, i) => i !== sizeIdx))}
-                    className="rounded-lg border border-red-200 p-1.5 text-red-500 hover:bg-red-50 cursor-pointer"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              ))}
+        {contentLang === 'en' ? (
+          <>
+            <div className="space-y-1">
+              <label className={labelClass}>{t('Cake Description', 'وصف الكعكة')}</label>
+              <input
+                type="text"
+                placeholder={t('Send us your cake design and we will do it.', 'أرسل لنا تصميم الكعكة وسنقوم بتنفيذه.')}
+                value={draft.cakeDescription}
+                onChange={e => setField('cakeDescription', e.target.value)}
+                className={inputClass}
+              />
             </div>
-          )}
-        </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className={labelClass}>{t('Cake Sizes & Prices', 'مقاسات الكعكة وأسعارها')}</label>
+                <button
+                  type="button"
+                  onClick={() => setField('cakeSizes', [
+                    ...(draft.cakeSizes || []),
+                    { id: `cake-${Date.now()}`, label: 'New size', price: 0 }
+                  ])}
+                  className="flex items-center gap-1 text-[11px] font-bold text-brand-terracotta hover:underline cursor-pointer"
+                >
+                  <Plus className="h-3 w-3" />
+                  <span>{t('Add Size', 'إضافة مقاس')}</span>
+                </button>
+              </div>
+
+              {(draft.cakeSizes || []).length === 0 ? (
+                <p className="text-[11px] italic text-brand-charcoal/50">{t('No cake sizes listed.', 'لا توجد مقاسات كعك مدرجة.')}</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {(draft.cakeSizes || []).map((size, sizeIdx) => (
+                    <div key={size.id} className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        placeholder={t('e.g. Small (15 cm)', 'مثال: صغير (15 سم)')}
+                        value={size.label}
+                        onChange={e => setField('cakeSizes',
+                          (draft.cakeSizes || []).map((c, i) => i === sizeIdx ? { ...c, label: e.target.value } : c))}
+                        className="flex-1 rounded-xl border border-brand-clay bg-brand-cream/40 p-2 font-semibold"
+                      />
+                      <input
+                        type="number"
+                        min={0}
+                        value={size.price}
+                        onChange={e => setField('cakeSizes',
+                          (draft.cakeSizes || []).map((c, i) => i === sizeIdx ? { ...c, price: Number(e.target.value) || 0 } : c))}
+                        className="w-24 rounded-xl border border-brand-clay bg-brand-cream/40 p-2 font-semibold"
+                      />
+                      <span className="text-[11px] font-bold text-brand-charcoal/50">{t('SAR', 'ريال')}</span>
+                      <button
+                        type="button"
+                        title={t('Remove size', 'إزالة المقاس')}
+                        onClick={() => setField('cakeSizes', (draft.cakeSizes || []).filter((_, i) => i !== sizeIdx))}
+                        className="rounded-lg border border-red-200 p-1.5 text-red-500 hover:bg-red-50 cursor-pointer"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="space-y-1">
+              <label className={labelClass}>Cake Description (Arabic)</label>
+              <input type="text" dir="rtl" lang="ar" value={draft.cakeDescriptionAr ?? ''}
+                onChange={e => setField('cakeDescriptionAr', e.target.value)} className={`${inputClass} text-start`} />
+            </div>
+
+            {(draft.cakeSizes || []).length > 0 && (
+              <div className="space-y-2">
+                <label className={labelClass}>Cake Size Names (Arabic)</label>
+                <div className="space-y-1.5">
+                  {(draft.cakeSizes || []).map((size, sizeIdx) => (
+                    <div key={size.id} className="flex items-center gap-2">
+                      <span className="w-40 shrink-0 truncate text-[11px] font-bold text-brand-charcoal/60" title={size.label}>{size.label}</span>
+                      <input
+                        type="text"
+                        dir="rtl"
+                        lang="ar"
+                        value={size.labelAr ?? ''}
+                        onChange={e => setField('cakeSizes',
+                          (draft.cakeSizes || []).map((c, i) => i === sizeIdx ? { ...c, labelAr: e.target.value } : c))}
+                        className="flex-1 rounded-xl border border-brand-clay bg-brand-cream/40 p-2 font-semibold text-start"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
       </Section>
 
       <Section
@@ -536,27 +618,52 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
         icon={<Compass className="h-4 w-4 text-brand-terracotta" />}
         description={t('Who runs the party and how finished pieces get home.', 'من يقود الحفلة وكيف تصل القطع المنتهية إلى المنزل.')}
       >
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="space-y-1">
-            <label className={labelClass}>{t('Trainer Information', 'معلومات المدرب')}</label>
-            <input
-              type="text"
-              value={draft.trainerInfo}
-              onChange={e => setField('trainerInfo', e.target.value)}
-              className={inputClass}
-            />
-          </div>
+        <ContentLanguageTabs
+          value={contentLang}
+          onChange={setContentLang}
+          arabicFilled={!!(draft.trainerInfoAr?.trim() || draft.deliveryInfoAr?.trim())}
+        />
 
-          <div className="space-y-1">
-            <label className={labelClass}>{t('Delivery / Pickup Information', 'معلومات التسليم / الاستلام')}</label>
-            <input
-              type="text"
-              value={draft.deliveryInfo}
-              onChange={e => setField('deliveryInfo', e.target.value)}
-              className={inputClass}
-            />
-          </div>
-        </div>
+        {contentLang === 'en' ? (
+          <>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-1">
+                <label className={labelClass}>{t('Trainer Information', 'معلومات المدرب')}</label>
+                <input
+                  type="text"
+                  value={draft.trainerInfo}
+                  onChange={e => setField('trainerInfo', e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className={labelClass}>{t('Delivery / Pickup Information', 'معلومات التسليم / الاستلام')}</label>
+                <input
+                  type="text"
+                  value={draft.deliveryInfo}
+                  onChange={e => setField('deliveryInfo', e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-1">
+                <label className={labelClass}>Trainer Information (Arabic)</label>
+                <input type="text" dir="rtl" lang="ar" value={draft.trainerInfoAr ?? ''}
+                  onChange={e => setField('trainerInfoAr', e.target.value)} className={`${inputClass} text-start`} />
+              </div>
+              <div className="space-y-1">
+                <label className={labelClass}>Delivery / Pickup Information (Arabic)</label>
+                <input type="text" dir="rtl" lang="ar" value={draft.deliveryInfoAr ?? ''}
+                  onChange={e => setField('deliveryInfoAr', e.target.value)} className={`${inputClass} text-start`} />
+              </div>
+            </div>
+          </>
+        )}
       </Section>
 
       <Section
@@ -564,25 +671,48 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
         icon={<ShieldAlert className="h-4 w-4 text-brand-terracotta" />}
         description={t('Shown under the package on the customer site.', 'تظهر أسفل الباقة على موقع العملاء.')}
       >
-        <div className="space-y-1">
-          <label className={labelClass}>{t('Customer-Visible Notes', 'ملاحظات ظاهرة للعميل')}</label>
-          <textarea
-            rows={2}
-            value={draft.customerNotes}
-            onChange={e => setField('customerNotes', e.target.value)}
-            className={inputClass}
-          />
-        </div>
+        <ContentLanguageTabs
+          value={contentLang}
+          onChange={setContentLang}
+          arabicFilled={!!(draft.customerNotesAr?.trim() || draft.termsAr?.trim())}
+        />
 
-        <div className="space-y-1">
-          <label className={labelClass}>{t('Terms', 'الشروط')}</label>
-          <textarea
-            rows={2}
-            value={draft.terms}
-            onChange={e => setField('terms', e.target.value)}
-            className={inputClass}
-          />
-        </div>
+        {contentLang === 'en' ? (
+          <>
+            <div className="space-y-1">
+              <label className={labelClass}>{t('Customer-Visible Notes', 'ملاحظات ظاهرة للعميل')}</label>
+              <textarea
+                rows={2}
+                value={draft.customerNotes}
+                onChange={e => setField('customerNotes', e.target.value)}
+                className={inputClass}
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className={labelClass}>{t('Terms', 'الشروط')}</label>
+              <textarea
+                rows={2}
+                value={draft.terms}
+                onChange={e => setField('terms', e.target.value)}
+                className={inputClass}
+              />
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="space-y-1">
+              <label className={labelClass}>Customer-Visible Notes (Arabic)</label>
+              <textarea rows={2} dir="rtl" lang="ar" value={draft.customerNotesAr ?? ''}
+                onChange={e => setField('customerNotesAr', e.target.value)} className={`${inputClass} text-start`} />
+            </div>
+            <div className="space-y-1">
+              <label className={labelClass}>Terms (Arabic)</label>
+              <textarea rows={2} dir="rtl" lang="ar" value={draft.termsAr ?? ''}
+                onChange={e => setField('termsAr', e.target.value)} className={`${inputClass} text-start`} />
+            </div>
+          </>
+        )}
       </Section>
 
       <Section

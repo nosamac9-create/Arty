@@ -678,7 +678,7 @@ export const HomeSection: React.FC = () => {
                         {[
                           // ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker.
                           pkg.maxGuests ? `${pkg.maxGuests} ${t('guests', 'ضيوف')}` : null,
-                          pkg.duration || null,
+                          localizedText(pkg.duration, pkg.durationAr, lang) || null,
                           localizedText(pkg.shortDescription, pkg.shortDescriptionAr, lang) || null
                         ].filter(Boolean).join(' · ')}
                       </p>

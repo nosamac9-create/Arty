@@ -15,6 +15,7 @@ import { AppImage } from './ui/AppImage';
 import { PackageBalloonBackdrop } from './ui/PackageBalloonBackdrop';
 import { DEFAULT_DEPOSIT_AMOUNT } from '../utils/queueUtils';
 import { localizedText } from '../utils/localizedText';
+import { enumLabel } from '../utils/enumLabels';
 
 interface Props {
   packages: BirthdayPackage[];
@@ -98,6 +99,13 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
   const focusedFullDescription = focused
     ? localizedText(focused.fullDescription, focused.fullDescriptionAr, lang)
     : '';
+  const focusedDuration = focused ? localizedText(focused.duration, focused.durationAr, lang) : '';
+  const focusedAgeInfo = focused ? localizedText(focused.ageInformation, focused.ageInformationAr, lang) : '';
+  const focusedCakeDescription = focused ? localizedText(focused.cakeDescription, focused.cakeDescriptionAr, lang) : '';
+  const focusedTrainerInfo = focused ? localizedText(focused.trainerInfo, focused.trainerInfoAr, lang) : '';
+  const focusedDeliveryInfo = focused ? localizedText(focused.deliveryInfo, focused.deliveryInfoAr, lang) : '';
+  const focusedCustomerNotes = focused ? localizedText(focused.customerNotes, focused.customerNotesAr, lang) : '';
+  const focusedTerms = focused ? localizedText(focused.terms, focused.termsAr, lang) : '';
 
   const focus = (id: string) => {
     setFocusedId(id);
@@ -121,7 +129,7 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
         visible: { opacity: 1, y: 0, transition: { duration: 0.45, ease } }
       };
 
-  const priceLine = (pkg: BirthdayPackage) => `${pkg.pricingLabel || pkg.pricingType}`;
+  const priceLine = (pkg: BirthdayPackage) => localizedText(enumLabel('pricingType', pkg.pricingLabel || pkg.pricingType, lang), pkg.pricingLabelAr, lang);
 
   const chooseCta = focused && (
     <>
@@ -253,12 +261,15 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
 
               // Built by filtering, so a package missing one of these loses that
               // pair rather than leaving an empty column or a ragged pill.
+              const duration = localizedText(pkg.duration, pkg.durationAr, lang);
+              const ageInfo = localizedText(pkg.ageInformation, pkg.ageInformationAr, lang);
+
               const specs = [
-                pkg.duration ? { label: t('Duration', 'المدة'), value: pkg.duration } : null,
+                duration ? { label: t('Duration', 'المدة'), value: duration } : null,
                 pkg.minGuests || pkg.maxGuests
                   ? { label: t('Guests', 'الضيوف'), value: `${pkg.minGuests}–${pkg.maxGuests}` }
                   : null,
-                pkg.ageInformation ? { label: t('Ages', 'الأعمار'), value: pkg.ageInformation } : null
+                ageInfo ? { label: t('Ages', 'الأعمار'), value: ageInfo } : null
               ].filter((spec): spec is { label: string; value: string } => spec !== null);
 
               const shortDesc = localizedText(pkg.shortDescription, pkg.shortDescriptionAr, lang);
@@ -488,10 +499,10 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                 </div>
 
                 <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-4 border-t border-brand-clay pt-5 text-sm">
-                  {focused.duration && (
+                  {focusedDuration && (
                     <div>
                       <dt className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-muted">{t('Duration', 'المدة')}</dt>
-                      <dd className="mt-1 font-medium text-brand-charcoal">{focused.duration}</dd>
+                      <dd className="mt-1 font-medium text-brand-charcoal">{focusedDuration}</dd>
                     </div>
                   )}
                   <div>
@@ -500,10 +511,10 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                       {focused.minGuests}–{focused.maxGuests}
                     </dd>
                   </div>
-                  {focused.ageInformation && (
+                  {focusedAgeInfo && (
                     <div>
                       <dt className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-muted">{t('Ages', 'الأعمار')}</dt>
-                      <dd className="mt-1 font-medium text-brand-charcoal">{focused.ageInformation}</dd>
+                      <dd className="mt-1 font-medium text-brand-charcoal">{focusedAgeInfo}</dd>
                     </div>
                   )}
                   {focused.availableDays?.length > 0 && (
@@ -570,14 +581,14 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                 </motion.section>
               )}
 
-              {(focused.cakeDescription || focused.cakeSizes.length > 0) && (
+              {(focusedCakeDescription || focused.cakeSizes.length > 0) && (
                 <motion.section variants={revealItem}>
                   <h3 className="flex items-center gap-2 font-display text-lg font-semibold text-brand-charcoal">
                     <Cake className="h-5 w-5 text-brand-terracotta" />
                     {t('Customized birthday cake', 'كعكة عيد ميلاد مخصصة')}
                   </h3>
-                  {focused.cakeDescription && (
-                    <p className="mt-2 text-sm text-brand-ink">{focused.cakeDescription}</p>
+                  {focusedCakeDescription && (
+                    <p className="mt-2 text-sm text-brand-ink">{focusedCakeDescription}</p>
                   )}
                   {focused.cakeSizes.length > 0 && (
                     <div className="mt-4 flex flex-wrap gap-3">
@@ -587,7 +598,7 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                           className="rounded-2xl bg-white px-5 py-3 ring-1 ring-brand-clay/70"
                         >
                           <span className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-muted">
-                            {size.label}
+                            {localizedText(size.label, size.labelAr, lang)}
                           </span>
                           <span className="font-display text-lg font-semibold text-brand-charcoal ltr-numerals">
                             {size.price} <span className="text-xs font-medium text-brand-muted">{t('SAR', 'ريال')}</span>
@@ -599,18 +610,18 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                 </motion.section>
               )}
 
-              {(focused.trainerInfo || focused.deliveryInfo || focused.availableTimes?.length > 0) && (
+              {(focusedTrainerInfo || focusedDeliveryInfo || focused.availableTimes?.length > 0) && (
                 <motion.section variants={revealItem} className="space-y-2.5 border-t border-brand-clay pt-6">
-                  {focused.trainerInfo && (
+                  {focusedTrainerInfo && (
                     <p className="flex items-start gap-2.5 text-sm text-brand-ink">
                       <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-brand-sage" />
-                      <span>{focused.trainerInfo}</span>
+                      <span>{focusedTrainerInfo}</span>
                     </p>
                   )}
-                  {focused.deliveryInfo && (
+                  {focusedDeliveryInfo && (
                     <p className="flex items-start gap-2.5 text-sm text-brand-ink">
                       <Compass className="mt-0.5 h-4 w-4 shrink-0 text-brand-sage" />
-                      <span>{focused.deliveryInfo}</span>
+                      <span>{focusedDeliveryInfo}</span>
                     </p>
                   )}
                   {focused.availableTimes?.length > 0 && (
@@ -622,17 +633,17 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                 </motion.section>
               )}
 
-              {(focused.customerNotes || focused.terms) && (
+              {(focusedCustomerNotes || focusedTerms) && (
                 <motion.section variants={revealItem} className="border-t border-brand-clay pt-6">
                   <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-brand-muted">
                     <ScrollText className="h-4 w-4" />
                     {t('Good to know', 'من المهم معرفته')}
                   </h3>
-                  {focused.customerNotes && (
-                    <p className="mt-3 text-sm leading-relaxed text-brand-ink">{focused.customerNotes}</p>
+                  {focusedCustomerNotes && (
+                    <p className="mt-3 text-sm leading-relaxed text-brand-ink">{focusedCustomerNotes}</p>
                   )}
-                  {focused.terms && (
-                    <p className="mt-3 text-sm leading-relaxed text-brand-ink">{focused.terms}</p>
+                  {focusedTerms && (
+                    <p className="mt-3 text-sm leading-relaxed text-brand-ink">{focusedTerms}</p>
                   )}
                 </motion.section>
               )}

@@ -131,6 +131,8 @@ export const TABLE_COLUMNS: Record<string, string[]> = {
     'trainer_info', 'delivery_info', 'available_days', 'available_times', 'terms',
     'customer_notes', 'deposit_amount', 'status', 'display_order',
     'name_ar', 'short_description_ar', 'full_description_ar',
+    'pricing_label_ar', 'duration_ar', 'age_information_ar', 'cake_description_ar',
+    'trainer_info_ar', 'delivery_info_ar', 'customer_notes_ar', 'terms_ar',
     'created_at', 'updated_at'
   ],
   studio_resources: [

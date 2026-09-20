@@ -911,6 +911,8 @@ export interface BirthdayCakeSize {
   id: string;
   /** e.g. "Small (15 cm)" */
   label: string;
+  /** Optional Arabic display name. `label` stays the matched/stored value. */
+  labelAr?: string;
   price: number;
 }
 
@@ -924,6 +926,15 @@ export interface BirthdayPackage {
   nameAr?: string | null;
   shortDescriptionAr?: string | null;
   fullDescriptionAr?: string | null;
+  /** Optional Arabic versions (migration 0037); null/absent means show the English. */
+  pricingLabelAr?: string | null;
+  durationAr?: string | null;
+  ageInformationAr?: string | null;
+  cakeDescriptionAr?: string | null;
+  trainerInfoAr?: string | null;
+  deliveryInfoAr?: string | null;
+  customerNotesAr?: string | null;
+  termsAr?: string | null;
 
   price: number;
   pricingType: 'Per child' | 'Per person' | 'Fixed price';

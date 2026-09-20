@@ -17,6 +17,7 @@ import { CheckoutStepper } from './ui/CheckoutStepper';
 import { AppImage } from './ui/AppImage';
 import { BackButton } from './ui/BackButton';
 import { localizedText } from '../utils/localizedText';
+import { enumLabel } from '../utils/enumLabels';
 import { categoryLabel } from '../utils/categoryLabel';
 
 export const CheckoutInfoSection: React.FC = () => {
@@ -201,7 +202,7 @@ export const CheckoutInfoSection: React.FC = () => {
                 <h4 className="font-semibold text-brand-charcoal text-sm leading-tight">{pendingBooking.workshopTitle}</h4>
                 <p className="text-xs text-brand-ink mt-1">
                   {birthday
-                    ? `${birthdayPackage?.duration || ''}${birthdayPackage?.ageInformation ? ` • ${birthdayPackage.ageInformation}` : ''}`
+                    ? `${localizedText(birthdayPackage?.duration || '', birthdayPackage?.durationAr, lang)}${birthdayPackage?.ageInformation ? ` • ${localizedText(birthdayPackage.ageInformation, birthdayPackage.ageInformationAr, lang)}` : ''}`
                     : `${workshop.duration} • ${workshop.room.split('(')[0]}`}
                 </p>
               </div>
@@ -225,7 +226,7 @@ export const CheckoutInfoSection: React.FC = () => {
                 {/* Fallback only — a package with a pricingLabel shows its own.
                     "Per child" here disagreed with the "Price per person" beside
                     it for a workshop, on the same line of the same panel. */}
-                <span>{birthday ? (birthdayPackage?.pricingLabel || t('Per person', 'للشخص')) : t('Price per person', 'السعر للشخص')}:</span>
+                <span>{birthday ? localizedText(birthdayPackage?.pricingLabel ? enumLabel('pricingType', birthdayPackage.pricingLabel, lang) : t('Per person', 'للشخص'), birthdayPackage?.pricingLabelAr, lang) : t('Price per person', 'السعر للشخص')}:</span>
                 <span className="font-semibold text-brand-charcoal">
                   {birthday ? (birthdayPackage?.price ?? 0) : workshop.price} {t('SAR', 'ريال')}
                 </span>

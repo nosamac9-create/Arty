@@ -22,6 +22,7 @@ import { minBirthdayNoticeDays, BIRTHDAY_DAILY_MAX, BIRTHDAY_SAME_SLOT_MAX, DEFA
 import { useBirthdayCounts } from '../lib/sessionSeats';
 import { BackButton } from './ui/BackButton';
 import { localizedText } from '../utils/localizedText';
+import { enumLabel } from '../utils/enumLabels';
 
 const FALLBACK_TIMES = ['10:00 AM', '01:00 PM', '04:00 PM', '07:00 PM'];
 
@@ -1201,13 +1202,13 @@ export const BirthdayBookingSection: React.FC = () => {
                               </div>
                               <p className="mt-1.5 text-xs text-brand-ink">
                                 {/* ⚠ ARABIC PLURALIZATION — placeholder only, needs a native speaker. */}
-                                {[pkg.duration, `${pkg.minGuests}–${pkg.maxGuests} ${t('guests', 'ضيوف')}`, pkg.ageInformation]
+                                {[localizedText(pkg.duration, pkg.durationAr, lang), `${pkg.minGuests}–${pkg.maxGuests} ${t('guests', 'ضيوف')}`, localizedText(pkg.ageInformation, pkg.ageInformationAr, lang)]
                                   .filter(Boolean).join(' · ')}
                               </p>
                               <p className="mt-3 font-display text-xl font-semibold text-brand-charcoal ltr-numerals">
                                 {pkg.price}
                                 <span className="ms-1.5 text-xs font-medium text-brand-muted">
-                                  {t('SAR', 'ريال')} {pkg.pricingLabel || pkg.pricingType}
+                                  {t('SAR', 'ريال')} {localizedText(enumLabel('pricingType', pkg.pricingLabel || pkg.pricingType, lang), pkg.pricingLabelAr, lang)}
                                 </span>
                               </p>
                             </div>
