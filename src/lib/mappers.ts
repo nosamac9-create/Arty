@@ -107,7 +107,7 @@ export const TABLE_COLUMNS: Record<string, string[]> = {
     'created_at', 'updated_at'
   ],
   piece_history: ['id', 'piece_id', 'status', 'timestamp', 'riyadh_time', 'user', 'reason', 'created_at'],
-  categories: ['id', 'name', 'created_at'],
+  categories: ['id', 'name', 'name_ar', 'created_at'],
   notifications: [
     'id', 'type', 'customer_id', 'customer_phone', 'title', 'message', 'piece_id',
     'piece_name', 'new_status', 'performed_by', 'timestamp', 'is_read', 'highlighted'

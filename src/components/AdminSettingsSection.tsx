@@ -33,6 +33,7 @@ import { usePagination, TablePager } from './ui/TablePager';
 import { useLanguage } from '../context/LanguageContext';
 import { enumLabel } from '../utils/enumLabels';
 import { displayPosition } from '../utils/staffPosition';
+import { CategoryArabicNames } from './CategoryArabicNames';
 
 /** Arabic labels for the workshop field types. The English labels live in WORKSHOP_FIELD_TYPES (types.ts). */
 const FIELD_TYPE_AR: Record<string, string> = {
@@ -1060,6 +1061,8 @@ export const AdminSettingsSection: React.FC = () => {
                 );
               })}
             </div>
+
+            <CategoryArabicNames />
           </div>
         )}
 

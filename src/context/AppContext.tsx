@@ -375,6 +375,8 @@ interface AppContextType {
     Promise<{ success: boolean; error?: string }>;
   /** Adds a category unless one with that name already exists. */
   addCategoryIfMissing: (name: string) => Promise<{ created: boolean; id?: string }>;
+  /** Sets or clears (null) a category's optional Arabic display name. Writes name_ar only. */
+  updateCategoryNameAr: (id: string, nameAr: string | null) => Promise<void>;
   /** Updates a single workshop session record. */
   updateWorkshopSession: (id: string, updates: Partial<WorkshopSessionRecord>) => Promise<void>;
   /** Appends one entry to a booking's timeline. */
@@ -2376,6 +2378,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const id = `cat-${Date.now()}`;
     await db.categories.add({ id, name: clean });
     return { created: true, id };
+  };
+
+  /**
+   * Sets (or clears, with null) the optional Arabic display name of one category.
+   * Writes name_ar and nothing else: the English `name` is what workshops are
+   * matched on, so this deliberately cannot touch name or id.
+   */
+  const updateCategoryNameAr = async (id: string, nameAr: string | null) => {
+    const clean = typeof nameAr === 'string' ? nameAr.trim() : '';
+    await db.categories.update(id, { nameAr: clean || null });
   };
 
   /**
@@ -4398,7 +4410,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       sessionExpired, clearSessionExpired: () => setSessionExpired(false),
       addBooking, bookingError, clearBookingError: () => setBookingError(null),
       cancelBooking, cancelOwnBooking, updateBookingStatus,
-      addCategoryIfMissing, assignBookingStaff, updateWorkshopSession, appendBookingTimeline,
+      addCategoryIfMissing, updateCategoryNameAr, assignBookingStaff, updateWorkshopSession, appendBookingTimeline,
       getFreshAssignmentSources, getFreshStaff, getCustomerPieceCount,
       addQueueItem, addStaffNotification, updateQueueStatus, updateQueueItem, reorderQueue, returnQueueItemToWaiting,
       assignQueueTables, seatQueueItem, changeQueueItemTables,

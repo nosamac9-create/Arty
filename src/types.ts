@@ -44,6 +44,8 @@ export interface WorkshopSession {
 export interface Category {
   id: string;
   name: string;
+  /** Optional Arabic display name. Never a key or a matched value: `name` is. NULL means show the English. */
+  nameAr?: string | null;
 }
 
 export interface RecurringScheduleRule {
