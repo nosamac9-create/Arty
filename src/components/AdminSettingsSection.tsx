@@ -20,7 +20,7 @@ import {
 } from '../types';
 import {
   ADMIN_PAGES, defaultPermissionsForRole, sanitizePermissions, isSuperAdmin, canAccessPage,
-  isSuperAdminOnlyPage
+  isSuperAdminOnlyPage, getPageLabel
 } from '../utils/adminAccess';
 import { normalizeCustomerPhone } from '../utils/customerIdentity';
 import { validateStaffForm, staffStorageFields } from '../utils/validation';
@@ -30,6 +30,16 @@ import { AdminCapacitySettings } from './AdminCapacitySettings';
 import { AdminEventsSettings } from './AdminEventsSettings';
 import { LineListTextarea } from './ui/LineListTextarea';
 import { usePagination, TablePager } from './ui/TablePager';
+import { useLanguage } from '../context/LanguageContext';
+import { enumLabel } from '../utils/enumLabels';
+import { displayPosition } from '../utils/staffPosition';
+
+/** Arabic labels for the workshop field types. The English labels live in WORKSHOP_FIELD_TYPES (types.ts). */
+const FIELD_TYPE_AR: Record<string, string> = {
+  short_text: 'نص قصير', long_text: 'نص طويل / منطقة نص', rich_text: 'نص منسق', number: 'رقم',
+  dropdown: 'قائمة منسدلة', multi_select: 'اختيار متعدد', tags: 'وسوم', checkbox: 'مربع اختيار',
+  date: 'تاريخ', time: 'وقت'
+};
 
 export const AdminSettingsSection: React.FC = () => {
   const {
@@ -40,6 +50,9 @@ export const AdminSettingsSection: React.FC = () => {
     updateSetting, pieces, workshops, removeAllData, reseedSampleData,
     currentStaff, settingsSection, workshopFields, updateWorkshopFields
   } = useApp();
+  const { lang, t } = useLanguage();
+
+  const fieldTypeLabel = (value: string, fallback?: string) => (lang === 'ar' ? FIELD_TYPE_AR[value] : undefined) ?? fallback;
 
   // The open section comes from the sidebar submenu, so it survives a refresh
   // and direct navigation lands on the right section.
@@ -121,10 +134,10 @@ export const AdminSettingsSection: React.FC = () => {
 
     const inUse = workshops.filter(w => w.customFields?.[field.fieldKey] !== undefined).length;
     const warning = inUse > 0
-      ? `\n\n${inUse} workshop(s) already have a value for this field. Those values are kept in the database and are not deleted.`
+      ? t(`\n\n${inUse} workshop(s) already have a value for this field. Those values are kept in the database and are not deleted.`, `\n\n${inUse} ورشة لديها بالفعل قيمة لهذا الحقل. تبقى هذه القيم في قاعدة البيانات ولا تُحذف.`)
       : '';
 
-    if (!window.confirm(`Delete the "${field.label}" field?${warning}\n\nDisabling it instead keeps it on the form configuration.`)) return;
+    if (!window.confirm(t(`Delete the "${field.label}" field?${warning}\n\nDisabling it instead keeps it on the form configuration.`, `حذف الحقل "${field.label}"؟${warning}\n\nيؤدي تعطيله بدلًا من ذلك إلى إبقائه في إعدادات النموذج.`))) return;
 
     updateWorkshopFields(workshopFields.filter(f => f.fieldId !== fieldId));
     setEditingFieldId(null);
@@ -220,7 +233,7 @@ export const AdminSettingsSection: React.FC = () => {
       visibleToCustomer: true
     });
     setNewStageName('');
-    triggerToast('Pipeline stage added successfully!');
+    triggerToast(t('Pipeline stage added successfully!', 'تمت إضافة مرحلة المسار بنجاح!'));
   };
 
   const handleSaveStageEdit = async (id: string) => {
@@ -230,18 +243,18 @@ export const AdminSettingsSection: React.FC = () => {
       color: editingStageColor
     });
     setEditingStageId(null);
-    triggerToast('Stage updated successfully!');
+    triggerToast(t('Stage updated successfully!', 'تم تحديث المرحلة بنجاح!'));
   };
 
   const handleDeleteStageClick = async (id: string) => {
     const res = await deletePipelineStage(id);
     if (!res.success) {
       setAlertModal({
-        title: 'Action Blocked',
-        message: res.message || 'Cannot delete stage.'
+        title: t('Action Blocked', 'الإجراء محظور'),
+        message: res.message || t('Cannot delete stage.', 'تعذّر حذف المرحلة.')
       });
     } else {
-      triggerToast('Stage deleted successfully.');
+      triggerToast(t('Stage deleted successfully.', 'تم حذف المرحلة بنجاح.'));
     }
   };
 
@@ -310,7 +323,7 @@ export const AdminSettingsSection: React.FC = () => {
     await updateSetting('prePaymentInstructions', newVal);
     setPopupDraft(null);
     setPopupSaved(true);
-    triggerToast('Booking pop-up saved!');
+    triggerToast(t('Booking pop-up saved!', 'تم حفظ النافذة المنبثقة للحجز!'));
   };
 
   // ==========================================
@@ -341,7 +354,7 @@ export const AdminSettingsSection: React.FC = () => {
     e.preventDefault();
 
     // Shared rules: required fields plus duplicate phone/email across staff.
-    const fieldErrors = await validateStaffForm(staffForm);
+    const fieldErrors = await validateStaffForm(staffForm, undefined, undefined, lang);
     setStaffErrors(fieldErrors);
     if (Object.keys(fieldErrors).length > 0) return;
 
@@ -356,7 +369,7 @@ export const AdminSettingsSection: React.FC = () => {
       canAssignWorkshops: true,
       canAssignPieces: true
     });
-    triggerToast('Staff member added successfully!');
+    triggerToast(t('Staff member added successfully!', 'تمت إضافة الموظف بنجاح!'));
   };
 
   const handleStartEditStaff = (member: StaffMember) => {
@@ -374,7 +387,7 @@ export const AdminSettingsSection: React.FC = () => {
   };
 
   const handleSaveStaffEdit = async (id: string) => {
-    const fieldErrors = await validateStaffForm(staffForm, id);
+    const fieldErrors = await validateStaffForm(staffForm, id, undefined, lang);
     setStaffErrors(fieldErrors);
     if (Object.keys(fieldErrors).length > 0) return;
 
@@ -389,18 +402,18 @@ export const AdminSettingsSection: React.FC = () => {
       canAssignWorkshops: true,
       canAssignPieces: true
     });
-    triggerToast('Staff profile saved successfully!');
+    triggerToast(t('Staff profile saved successfully!', 'تم حفظ ملف الموظف بنجاح!'));
   };
 
   const handleDeleteStaffClick = async (id: string) => {
     const res = await deleteStaffMember(id);
     if (!res.success) {
       setAlertModal({
-        title: 'Staff Active Assignments',
-        message: res.message || 'Cannot delete staff.'
+        title: t('Staff Active Assignments', 'تكليفات نشطة للموظف'),
+        message: res.message || t('Cannot delete staff.', 'تعذّر حذف الموظف.')
       });
     } else {
-      triggerToast('Staff deleted successfully.');
+      triggerToast(t('Staff deleted successfully.', 'تم حذف الموظف بنجاح.'));
     }
   };
 
@@ -412,9 +425,9 @@ export const AdminSettingsSection: React.FC = () => {
       {/* HEADER SECTION */}
       <div className="flex flex-col md:flex-row md:items-end justify-between pb-6 border-b border-brand-clay/30 mb-8 gap-4">
         <div>
-          <h1 className="font-display text-3xl font-extrabold text-brand-charcoal">System Settings</h1>
+          <h1 className="font-display text-3xl font-extrabold text-brand-charcoal">{t('System Settings', 'إعدادات النظام')}</h1>
           <p className="text-sm text-brand-charcoal/70 mt-1">
-            Configure system lists, staff registry, pre-payment workflows, and pottery pipeline stages.
+            {t('Configure system lists, staff registry, pre-payment workflows, and pottery pipeline stages.', 'اضبط قوائم النظام وسجل الموظفين ومسارات ما قبل الدفع ومراحل مسار الفخار.')}
           </p>
         </div>
       </div>
@@ -447,9 +460,9 @@ export const AdminSettingsSection: React.FC = () => {
         {activeTab === 'settings-data-reset' && (
           <div className="space-y-6 text-left animate-in fade-in duration-200">
             <div className="border-b border-brand-clay/40 pb-4">
-              <h2 className="font-display text-xl font-extrabold text-brand-charcoal">Database Operations & Data Purge</h2>
+              <h2 className="font-display text-xl font-extrabold text-brand-charcoal">{t('Database Operations & Data Purge', 'عمليات قاعدة البيانات ومسح البيانات')}</h2>
               <p className="text-xs text-brand-charcoal/70 mt-1">
-                Manage IndexedDB persistent storage, perform full data wipes, or restore initial sample data.
+                {t('Manage IndexedDB persistent storage, perform full data wipes, or restore initial sample data.', 'إدارة التخزين الدائم IndexedDB، وإجراء مسح كامل للبيانات، أو استعادة البيانات النموذجية الأولية.')}
               </p>
             </div>
 
@@ -457,43 +470,43 @@ export const AdminSettingsSection: React.FC = () => {
               <div className="p-5 bg-red-50/50 border border-red-200 rounded-2xl space-y-3">
                 <div className="flex items-center gap-2 text-red-700 font-bold text-sm">
                   <Trash2 className="h-5 w-5" />
-                  <span>Wipe All Website Data</span>
+                  <span>{t('Wipe All Website Data', 'مسح جميع بيانات الموقع')}</span>
                 </div>
                 <p className="text-xs text-brand-charcoal/70 leading-relaxed">
-                  Permanently deletes all customer accounts, bookings, queue entries, pottery pieces, workshops, and events. Staff profiles and studio configuration (pipeline stages, birthday packages, option lists) are preserved.
+                  {t('Permanently deletes all customer accounts, bookings, queue entries, pottery pieces, workshops, and events. Staff profiles and studio configuration (pipeline stages, birthday packages, option lists) are preserved.', 'يحذف نهائيًا جميع حسابات العملاء والحجوزات وإدخالات الطابور وقطع الفخار والورش والفعاليات. تُحفظ ملفات الموظفين وإعدادات الاستوديو (مراحل المسار وباقات أعياد الميلاد وقوائم الخيارات).')}
                 </p>
                 <button
                   onClick={async () => {
-                    if (window.confirm("Are you sure you want to completely remove ALL data from the website? This cannot be undone.")) {
+                    if (window.confirm(t('Are you sure you want to completely remove ALL data from the website? This cannot be undone.', 'هل أنت متأكد من إزالة جميع بيانات الموقع بالكامل؟ لا يمكن التراجع عن هذا الإجراء.'))) {
                       await removeAllData();
-                      alert("All website data has been wiped clean.");
+                      alert(t('All website data has been wiped clean.', 'تم مسح جميع بيانات الموقع بالكامل.'));
                     }
                   }}
                   className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-2 cursor-pointer"
                 >
                   <Trash2 className="h-4 w-4" />
-                  <span>Purge All Data Now</span>
+                  <span>{t('Purge All Data Now', 'مسح جميع البيانات الآن')}</span>
                 </button>
               </div>
 
               <div className="p-5 bg-brand-cream/35 border border-brand-clay rounded-2xl space-y-3">
                 <div className="flex items-center gap-2 text-brand-terracotta font-bold text-sm">
                   <RotateCcw className="h-5 w-5" />
-                  <span>Restore Sample Data</span>
+                  <span>{t('Restore Sample Data', 'استعادة البيانات النموذجية')}</span>
                 </div>
                 <p className="text-xs text-brand-charcoal/70 leading-relaxed">
-                  Re-populates the website database with initial default sample workshops, sessions, queue items, and staff records.
+                  {t('Re-populates the website database with initial default sample workshops, sessions, queue items, and staff records.', 'يعيد ملء قاعدة بيانات الموقع بورش وجلسات وعناصر طابور وسجلات موظفين نموذجية افتراضية.')}
                 </p>
                 <button
                   onClick={async () => {
-                    if (window.confirm("Do you want to restore initial sample data to the website?")) {
+                    if (window.confirm(t('Do you want to restore initial sample data to the website?', 'هل تريد استعادة البيانات النموذجية الأولية للموقع؟'))) {
                       await reseedSampleData();
                     }
                   }}
                   className="px-4 py-2 bg-brand-terracotta hover:bg-brand-terracotta/90 text-brand-cream rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-2 cursor-pointer"
                 >
                   <RotateCcw className="h-4 w-4" />
-                  <span>Re-seed Sample Data</span>
+                  <span>{t('Re-seed Sample Data', 'إعادة زرع البيانات النموذجية')}</span>
                 </button>
               </div>
             </div>
@@ -529,22 +542,21 @@ export const AdminSettingsSection: React.FC = () => {
             <div>
               <h2 className="font-display text-xl font-bold text-brand-charcoal flex items-center gap-2">
                 <Sliders className="h-5 w-5 text-brand-terracotta" />
-                <span>Piece Pipeline Stages Management</span>
+                <span>{t('Piece Pipeline Stages Management', 'إدارة مراحل مسار القطعة')}</span>
               </h2>
               <p className="text-xs text-brand-charcoal/60 mt-1">
-                Customize the sequence of ceramic lifecycle stages. Drag and drop stage items or use the up/down arrows to reorder them. 
-                Visible stages appear on the customer progress timeline.
+                {t('Customize the sequence of ceramic lifecycle stages. Drag and drop stage items or use the up/down arrows to reorder them. Visible stages appear on the customer progress timeline.', 'خصّص تسلسل مراحل دورة حياة السيراميك. اسحب عناصر المراحل وأفلتها أو استخدم أسهم الأعلى/الأسفل لإعادة ترتيبها. تظهر المراحل المرئية على الجدول الزمني لتقدم العميل.')}
               </p>
             </div>
 
             {/* Quick Add Stage Form */}
             <form onSubmit={handleAddStage} className="p-4 bg-brand-sand/30 border border-brand-clay/40 rounded-2xl flex flex-wrap gap-4 items-end">
               <div className="space-y-1.5 flex-1 min-w-[200px]">
-                <label className="text-xs font-bold text-brand-charcoal/80">Stage Name</label>
+                <label className="text-xs font-bold text-brand-charcoal/80">{t('Stage Name', 'اسم المرحلة')}</label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Clay Drying"
+                  placeholder={t('e.g. Clay Drying', 'مثال: تجفيف الطين')}
                   value={newStageName}
                   onChange={e => setNewStageName(e.target.value)}
                   className="w-full bg-white border border-brand-clay/60 rounded-xl py-2 px-3 text-xs font-semibold text-brand-charcoal"
@@ -552,7 +564,7 @@ export const AdminSettingsSection: React.FC = () => {
               </div>
 
               <div className="space-y-1.5 shrink-0">
-                <label className="text-xs font-bold text-brand-charcoal/80 block">Label Color Accent</label>
+                <label className="text-xs font-bold text-brand-charcoal/80 block">{t('Label Color Accent', 'لون تمييز التسمية')}</label>
                 <div className="flex items-center gap-2">
                   <input
                     type="color"
@@ -569,7 +581,7 @@ export const AdminSettingsSection: React.FC = () => {
                 className="bg-brand-charcoal hover:bg-brand-charcoal/90 text-brand-cream text-xs font-bold py-2.5 px-4 rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-2 h-9"
               >
                 <Plus className="h-4 w-4" />
-                <span>Add Stage</span>
+                <span>{t('Add Stage', 'إضافة مرحلة')}</span>
               </button>
             </form>
 
@@ -579,11 +591,11 @@ export const AdminSettingsSection: React.FC = () => {
                 <thead>
                   <tr className="bg-brand-sand/30 border-b border-brand-clay/30 text-brand-charcoal/60 font-bold">
                     <th className="p-3 w-12"></th>
-                    <th className="p-3">Stage Name</th>
-                    <th className="p-3 w-28 text-center">Status Color</th>
-                    <th className="p-3 w-56">Customer-facing</th>
-                    <th className="p-3 w-32 text-center">Reorder</th>
-                    <th className="p-3 w-24 text-right">Actions</th>
+                    <th className="p-3">{t('Stage Name', 'اسم المرحلة')}</th>
+                    <th className="p-3 w-28 text-center">{t('Status Color', 'لون الحالة')}</th>
+                    <th className="p-3 w-56">{t('Customer-facing', 'الظاهر للعميل')}</th>
+                    <th className="p-3 w-32 text-center">{t('Reorder', 'إعادة الترتيب')}</th>
+                    <th className="p-3 w-24 text-right">{t('Actions', 'الإجراءات')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-brand-clay/20">
@@ -620,7 +632,7 @@ export const AdminSettingsSection: React.FC = () => {
                             <div className="flex items-center gap-2">
                               <span>{stage.name}</span>
                               <span className="text-[10px] font-bold font-mono px-2 py-0.5 rounded-full bg-brand-sand text-brand-charcoal/60 border border-brand-clay/40">
-                                {stageCount} piece(s)
+                                {lang === 'ar' ? `${stageCount} قطعة` : `${stageCount} piece(s)`}
                               </span>
                             </div>
                           )}
@@ -650,26 +662,29 @@ export const AdminSettingsSection: React.FC = () => {
                           <div className="space-y-1.5 text-left">
                             {([
                               {
-                                label: 'Enabled',
-                                hint: 'Selectable for new updates',
+                                id: 'enabled',
+                                label: t('Enabled', 'مفعّلة'),
+                                hint: t('Selectable for new updates', 'قابلة للاختيار في التحديثات الجديدة'),
                                 on: stage.enabled !== false,
                                 toggle: () => updatePipelineStage(stage.id, { enabled: stage.enabled === false })
                               },
                               {
-                                label: 'On customer timeline',
-                                hint: 'Shown on My Pieces',
+                                id: 'timeline',
+                                label: t('On customer timeline', 'على الجدول الزمني للعميل'),
+                                hint: t('Shown on My Pieces', 'تظهر في «أعمالي»'),
                                 on: stage.visibleToCustomer,
                                 toggle: () => updatePipelineStage(stage.id, { visibleToCustomer: !stage.visibleToCustomer })
                               },
                               {
-                                label: 'Notifies customer',
-                                hint: 'Message sent on entering',
+                                id: 'notify',
+                                label: t('Notifies customer', 'إشعار العميل'),
+                                hint: t('Message sent on entering', 'تُرسل رسالة عند الدخول'),
                                 on: stage.notifyCustomer !== false,
                                 toggle: () => updatePipelineStage(stage.id, { notifyCustomer: stage.notifyCustomer === false })
                               }
                             ]).map(row => (
                               <button
-                                key={row.label}
+                                key={row.id}
                                 type="button"
                                 onClick={row.toggle}
                                 role="switch"
@@ -696,7 +711,7 @@ export const AdminSettingsSection: React.FC = () => {
 
                             <div className="space-y-0.5 border-t border-brand-clay/40 pt-1.5">
                               <label className="block px-1.5 text-[9px] font-bold uppercase tracking-wider text-brand-charcoal/45">
-                                Customer label
+                                {t('Customer label', 'تسمية العميل')}
                               </label>
                               <input
                                 type="text"
@@ -740,7 +755,7 @@ export const AdminSettingsSection: React.FC = () => {
                                   type="button"
                                   onClick={() => handleSaveStageEdit(stage.id)}
                                   className="p-1 bg-brand-sage text-brand-cream rounded-lg border border-brand-sage hover:bg-brand-sage/95 cursor-pointer"
-                                  title="Save Changes"
+                                  title={t('Save Changes', 'حفظ التغييرات')}
                                 >
                                   <Check className="h-3.5 w-3.5" />
                                 </button>
@@ -748,7 +763,7 @@ export const AdminSettingsSection: React.FC = () => {
                                   type="button"
                                   onClick={() => setEditingStageId(null)}
                                   className="p-1 bg-brand-terracotta text-brand-cream rounded-lg border border-brand-terracotta hover:bg-brand-terracotta/95 cursor-pointer"
-                                  title="Cancel"
+                                  title={t('Cancel', 'إلغاء')}
                                 >
                                   <X className="h-3.5 w-3.5" />
                                 </button>
@@ -763,7 +778,7 @@ export const AdminSettingsSection: React.FC = () => {
                                     setEditingStageColor(stage.color);
                                   }}
                                   className="p-1.5 rounded-lg border border-brand-clay/40 hover:bg-brand-sand/50 text-brand-charcoal/75 cursor-pointer"
-                                  title="Edit Stage"
+                                  title={t('Edit Stage', 'تعديل المرحلة')}
                                 >
                                   <Edit2 className="h-3.5 w-3.5" />
                                 </button>
@@ -771,7 +786,7 @@ export const AdminSettingsSection: React.FC = () => {
                                   type="button"
                                   onClick={() => handleDeleteStageClick(stage.id)}
                                   className="p-1.5 rounded-lg border border-brand-clay/40 hover:bg-red-50 text-red-600 hover:border-red-300 cursor-pointer"
-                                  title="Delete Stage"
+                                  title={t('Delete Stage', 'حذف المرحلة')}
                                 >
                                   <Trash2 className="h-3.5 w-3.5" />
                                 </button>
@@ -793,7 +808,7 @@ export const AdminSettingsSection: React.FC = () => {
                   to={staffPager.to}
                   total={staffPager.total}
                   onPage={staffPager.setPage}
-                  noun="staff"
+                  noun={t('staff', 'موظفين')}
                 />
               </div>
             </div>
@@ -807,18 +822,17 @@ export const AdminSettingsSection: React.FC = () => {
           <div className="space-y-6 text-left animate-in fade-in duration-200">
 
             <div>
-              <h3 className="font-display text-xl font-extrabold text-brand-charcoal">Workshop Detail Lists</h3>
+              <h3 className="font-display text-xl font-extrabold text-brand-charcoal">{t('Workshop Detail Lists', 'قوائم تفاصيل الورشة')}</h3>
               <p className="text-xs text-brand-charcoal/70 mt-1">
-                Controls the complete field structure of the two Workshop cards. Add, rename, reorder,
-                disable and configure fields — the Workshop form renders exactly what is configured here.
+                {t('Controls the complete field structure of the two Workshop cards. Add, rename, reorder, disable and configure fields — the Workshop form renders exactly what is configured here.', 'يتحكم في البنية الكاملة لبطاقتي الورشة. أضف الحقول وأعد تسميتها ورتّبها وعطّلها واضبطها — يعرض نموذج الورشة بالضبط ما يُعدّ هنا.')}
               </p>
             </div>
 
             {/* Nested sub-tabs: the two Workshop page cards. */}
             <div className="flex gap-2 border-b border-brand-clay/30 pb-3">
               {([
-                { key: 'curriculum', label: 'Curriculum Basics' },
-                { key: 'logistics', label: 'Logistics & Metadata' }
+                { key: 'curriculum', label: t('Curriculum Basics', 'أساسيات المنهج') },
+                { key: 'logistics', label: t('Logistics & Metadata', 'اللوجستيات والبيانات الوصفية') }
               ] as const).map(tab => (
                 <button
                   key={tab.key}
@@ -840,7 +854,7 @@ export const AdminSettingsSection: React.FC = () => {
                 className="ml-auto px-4 py-2 bg-brand-charcoal hover:bg-black text-brand-cream rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer"
               >
                 <Plus className="h-3.5 w-3.5" />
-                <span>Add Field</span>
+                <span>{t('Add Field', 'إضافة حقل')}</span>
               </button>
             </div>
 
@@ -848,7 +862,7 @@ export const AdminSettingsSection: React.FC = () => {
             <div className="space-y-3">
               {cardFields.length === 0 && (
                 <p className="text-xs text-brand-charcoal/50 italic py-4">
-                  No fields configured for this card yet.
+                  {t('No fields configured for this card yet.', 'لا توجد حقول مضبوطة لهذه البطاقة بعد.')}
                 </p>
               )}
 
@@ -874,9 +888,9 @@ export const AdminSettingsSection: React.FC = () => {
                             {field.required && <span className="text-red-500 ml-1">*</span>}
                           </p>
                           <p className="text-[10px] font-mono text-brand-charcoal/40">
-                            {field.fieldKey} · {WORKSHOP_FIELD_TYPES.find(t => t.value === field.fieldType)?.label}
-                            {field.dataSource === 'staff' && ' · live: Staff Management'}
-                            {field.dataSource === 'studio-resources' && ' · live: Capacity'}
+                            {field.fieldKey} · {fieldTypeLabel(field.fieldType, WORKSHOP_FIELD_TYPES.find(ft => ft.value === field.fieldType)?.label)}
+                            {field.dataSource === 'staff' && t(' · live: Staff Management', ' · مباشر: إدارة الموظفين')}
+                            {field.dataSource === 'studio-resources' && t(' · live: Capacity', ' · مباشر: السعة')}
                           </p>
                         </div>
                       </div>
@@ -884,7 +898,7 @@ export const AdminSettingsSection: React.FC = () => {
                       <div className="flex items-center gap-1.5 shrink-0">
                         {field.customerVisible && (
                           <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
-                            Customer
+                            {t('Customer', 'العميل')}
                           </span>
                         )}
 
@@ -897,10 +911,10 @@ export const AdminSettingsSection: React.FC = () => {
                               : 'bg-gray-100 border-gray-300 text-gray-600'
                           }`}
                           title={field.enabled
-                            ? 'Disable — hidden from the Workshop form, saved values kept'
-                            : 'Re-enable this field'}
+                            ? t('Disable — hidden from the Workshop form, saved values kept', 'تعطيل — يُخفى من نموذج الورشة وتبقى القيم المحفوظة')
+                            : t('Re-enable this field', 'إعادة تفعيل هذا الحقل')}
                         >
-                          {field.enabled ? 'Enabled' : 'Disabled'}
+                          {field.enabled ? t('Enabled', 'مفعّل') : t('Disabled', 'معطّل')}
                         </button>
 
                         <button
@@ -933,8 +947,8 @@ export const AdminSettingsSection: React.FC = () => {
                           disabled={field.system}
                           onClick={() => handleDeleteWorkshopField(field.fieldId)}
                           title={field.system
-                            ? 'Core field — disable it instead of deleting'
-                            : 'Delete this field'}
+                            ? t('Core field — disable it instead of deleting', 'حقل أساسي — عطّله بدلًا من حذفه')
+                            : t('Delete this field', 'حذف هذا الحقل')}
                           className="p-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 disabled:opacity-25 disabled:cursor-not-allowed cursor-pointer"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -947,7 +961,7 @@ export const AdminSettingsSection: React.FC = () => {
                       <div className="border-t border-brand-clay/50 p-4 bg-brand-cream/30 space-y-3 text-xs">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <div className="space-y-1">
-                            <label className="font-bold text-brand-charcoal/75 block">Label</label>
+                            <label className="font-bold text-brand-charcoal/75 block">{t('Label', 'التسمية')}</label>
                             <input
                               type="text"
                               value={field.label}
@@ -955,12 +969,12 @@ export const AdminSettingsSection: React.FC = () => {
                               className="w-full bg-white border border-brand-clay rounded-xl p-2.5 font-semibold"
                             />
                             <p className="text-[10px] text-brand-charcoal/45">
-                              Renaming is safe — values are stored against <span className="font-mono">{field.fieldKey}</span>.
+                              {lang === 'ar' ? <>إعادة التسمية آمنة — تُحفظ القيم مقابل <span className="font-mono">{field.fieldKey}</span>.</> : <>Renaming is safe — values are stored against <span className="font-mono">{field.fieldKey}</span>.</>}
                             </p>
                           </div>
 
                           <div className="space-y-1">
-                            <label className="font-bold text-brand-charcoal/75 block">Field Type</label>
+                            <label className="font-bold text-brand-charcoal/75 block">{t('Field Type', 'نوع الحقل')}</label>
                             <select
                               value={field.fieldType}
                               onChange={e => handleUpdateWorkshopField(field.fieldId, {
@@ -968,17 +982,17 @@ export const AdminSettingsSection: React.FC = () => {
                               })}
                               className="w-full bg-white border border-brand-clay rounded-xl p-2.5 font-semibold cursor-pointer"
                             >
-                              {WORKSHOP_FIELD_TYPES.map(t => (
-                                <option key={t.value} value={t.value}>{t.label}</option>
+                              {WORKSHOP_FIELD_TYPES.map(ft => (
+                                <option key={ft.value} value={ft.value}>{fieldTypeLabel(ft.value, ft.label)}</option>
                               ))}
                             </select>
                             <p className="text-[10px] text-brand-charcoal/45">
-                              Any field can change type — saved values are kept and reshaped to suit.
+                              {t('Any field can change type — saved values are kept and reshaped to suit.', 'يمكن تغيير نوع أي حقل — تُحفظ القيم المخزنة وتُعاد صياغتها لتناسب النوع.')}
                             </p>
                           </div>
 
                           <div className="space-y-1">
-                            <label className="font-bold text-brand-charcoal/75 block">Placeholder</label>
+                            <label className="font-bold text-brand-charcoal/75 block">{t('Placeholder', 'النص التوضيحي')}</label>
                             <input
                               type="text"
                               value={field.placeholder || ''}
@@ -1000,7 +1014,7 @@ export const AdminSettingsSection: React.FC = () => {
                                 : 'bg-white border-brand-clay text-brand-charcoal/60'
                             }`}
                           >
-                            {field.required ? 'Required' : 'Optional'}
+                            {field.required ? t('Required', 'إلزامي') : t('Optional', 'اختياري')}
                           </button>
 
                           <button
@@ -1011,25 +1025,22 @@ export const AdminSettingsSection: React.FC = () => {
                                 ? 'bg-blue-50 border-blue-200 text-blue-800'
                                 : 'bg-white border-brand-clay text-brand-charcoal/60'
                             }`}
-                            title="Show this field's saved value on the Customer Site workshop page"
+                            title={t("Show this field's saved value on the Customer Site workshop page", 'عرض القيمة المحفوظة لهذا الحقل في صفحة الورشة على موقع العملاء')}
                           >
-                            {field.customerVisible ? 'Visible to Customers' : 'Staff Console only'}
+                            {field.customerVisible ? t('Visible to Customers', 'ظاهر للعملاء') : t('Staff Console only', 'للوحة الموظفين فقط')}
                           </button>
                         </div>
 
                         {/* Live source notice, or an editable option list */}
                         {field.dataSource ? (
                           <p className="text-[11px] font-semibold text-brand-charcoal/65 bg-white border border-brand-clay/60 rounded-xl p-2.5">
-                            Options come from{' '}
-                            <span className="font-bold">
-                              {field.dataSource === 'staff' ? 'Staff Management' : 'Settings → Capacity'}
-                            </span>{' '}
-                            and stay synchronized with those records. Only the label, required status,
-                            position and visibility are configured here.
+                            {lang === 'ar'
+                            ? <>تأتي الخيارات من <span className="font-bold">{field.dataSource === 'staff' ? 'إدارة الموظفين' : 'الإعدادات ← السعة'}</span> وتبقى متزامنة مع تلك السجلات. تُضبط هنا التسمية وحالة الإلزام والموضع والظهور فقط.</>
+                            : <>Options come from{' '}<span className="font-bold">{field.dataSource === 'staff' ? 'Staff Management' : 'Settings → Capacity'}</span>{' '}and stay synchronized with those records. Only the label, required status, position and visibility are configured here.</>}
                           </p>
                         ) : fieldTypeUsesOptions(field.fieldType) ? (
                           <div className="space-y-1">
-                            <label className="font-bold text-brand-charcoal/75 block">Options (one per line)</label>
+                            <label className="font-bold text-brand-charcoal/75 block">{t('Options (one per line)', 'الخيارات (واحد في كل سطر)')}</label>
                             <LineListTextarea
                               rows={4}
                               value={field.options || []}
@@ -1038,7 +1049,7 @@ export const AdminSettingsSection: React.FC = () => {
                             />
                             {field.fieldKey === 'category' && (
                               <p className="text-[10px] text-brand-charcoal/45">
-                                Leave empty to use the shared Categories list.
+                                {t('Leave empty to use the shared Categories list.', 'اتركه فارغًا لاستخدام قائمة الفئات المشتركة.')}
                               </p>
                             )}
                           </div>
@@ -1060,11 +1071,10 @@ export const AdminSettingsSection: React.FC = () => {
             <div>
               <h2 className="font-display text-xl font-bold text-brand-charcoal flex items-center gap-2">
                 <Clock className="h-5 w-5 text-brand-terracotta" />
-                <span>Pre-payment Instructions Pop-up Config</span>
+                <span>{t('Pre-payment Instructions Pop-up Config', 'إعدادات نافذة تعليمات ما قبل الدفع')}</span>
               </h2>
               <p className="text-xs text-brand-charcoal/60 mt-1">
-                Customize the overlay dialog modal displayed to customers right before they confirm their payment booking. 
-                This ensures they agree to safety standards, workshop timelines, and studio guidelines beforehand.
+                {t('Customize the overlay dialog modal displayed to customers right before they confirm their payment booking. This ensures they agree to safety standards, workshop timelines, and studio guidelines beforehand.', 'خصّص النافذة المنبثقة التي تُعرض للعملاء قبل تأكيد الدفع مباشرة. يضمن هذا موافقتهم مسبقًا على معايير السلامة والجداول الزمنية للورش وإرشادات الاستوديو.')}
               </p>
             </div>
 
@@ -1075,8 +1085,8 @@ export const AdminSettingsSection: React.FC = () => {
                 {/* Active switch slider */}
                 <div className="flex items-center justify-between p-4 bg-brand-sand/20 border border-brand-clay/40 rounded-2xl">
                   <div>
-                    <h4 className="text-xs font-bold text-brand-charcoal">Enable Guidelines Pop-up Overlay</h4>
-                    <p className="text-[10px] text-brand-charcoal/60">Toggle whether this popup appears prior to checkouts.</p>
+                    <h4 className="text-xs font-bold text-brand-charcoal">{t('Enable Guidelines Pop-up Overlay', 'تفعيل نافذة الإرشادات المنبثقة')}</h4>
+                    <p className="text-[10px] text-brand-charcoal/60">{t('Toggle whether this popup appears prior to checkouts.', 'حدّد ما إذا كانت هذه النافذة تظهر قبل إتمام الدفع.')}</p>
                   </div>
                   <button
                     type="button"
@@ -1095,7 +1105,7 @@ export const AdminSettingsSection: React.FC = () => {
 
                 {/* Pop-up Title */}
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-brand-charcoal/80">Pop-up Title</label>
+                  <label className="text-xs font-bold text-brand-charcoal/80">{t('Pop-up Title', 'عنوان النافذة')}</label>
                   <input
                     type="text"
                     required
@@ -1107,23 +1117,23 @@ export const AdminSettingsSection: React.FC = () => {
 
                 {/* Main message — plain text only */}
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-brand-charcoal/80">Message</label>
+                  <label className="text-xs font-bold text-brand-charcoal/80">{t('Message', 'الرسالة')}</label>
                   <textarea
                     rows={4}
                     value={popupForm.message}
                     onChange={e => editPrePaymentSettings({ message: e.target.value })}
                     className="w-full bg-brand-cream/20 border border-brand-clay/60 rounded-xl p-3 text-xs font-semibold text-brand-charcoal leading-relaxed"
-                    placeholder="Please note the following studio rules before proceeding to payment."
+                    placeholder={t('Please note the following studio rules before proceeding to payment.', 'يرجى الاطلاع على قواعد الاستوديو التالية قبل المتابعة إلى الدفع.')}
                   />
                   <p className="text-[10px] text-brand-charcoal/45">
-                    Plain text. Leave a blank line to start a new paragraph.
+                    {t('Plain text. Leave a blank line to start a new paragraph.', 'نص عادي. اترك سطرًا فارغًا لبدء فقرة جديدة.')}
                   </p>
                 </div>
 
                 {/* Optional short instructions, one per line */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-brand-charcoal/80">
-                    Short Instructions <span className="font-semibold text-brand-charcoal/45">(optional)</span>
+                    {t('Short Instructions', 'تعليمات قصيرة')} <span className="font-semibold text-brand-charcoal/45">{t('(optional)', '(اختياري)')}</span>
                   </label>
                   <textarea
                     rows={5}
@@ -1132,16 +1142,16 @@ export const AdminSettingsSection: React.FC = () => {
                       instructions: e.target.value.split('\n')
                     })}
                     className="w-full bg-brand-cream/20 border border-brand-clay/60 rounded-xl p-3 text-xs font-semibold text-brand-charcoal leading-relaxed"
-                    placeholder={'One instruction per line, for example:\nPieces take 10 to 14 days to be ready.\nAprons are provided.'}
+                    placeholder={t('One instruction per line, for example:\nPieces take 10 to 14 days to be ready.\nAprons are provided.', 'تعليمة واحدة في كل سطر، على سبيل المثال:\nتستغرق القطع من 10 إلى 14 يومًا لتصبح جاهزة.\nتتوفر المرايل.')}
                   />
                   <p className="text-[10px] text-brand-charcoal/45">
-                    One per line. Each line appears as a bullet point.
+                    {t('One per line. Each line appears as a bullet point.', 'واحدة في كل سطر. يظهر كل سطر كنقطة.')}
                   </p>
                 </div>
 
                 {/* Confirm button label */}
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-brand-charcoal/80">Confirm Button Label</label>
+                  <label className="text-xs font-bold text-brand-charcoal/80">{t('Confirm Button Label', 'تسمية زر التأكيد')}</label>
                   <input
                     type="text"
                     value={popupForm.buttonLabel}
@@ -1160,15 +1170,15 @@ export const AdminSettingsSection: React.FC = () => {
                     className="h-4 w-4 text-brand-terracotta border-brand-clay rounded focus:ring-brand-terracotta mt-0.5 cursor-pointer"
                   />
                   <div className="space-y-1">
-                    <label htmlFor="reqCheck" className="text-xs font-bold text-brand-charcoal cursor-pointer">Require Checkout Checkbox Confirmation</label>
-                    <p className="text-[10px] text-brand-charcoal/60">If enabled, the customer MUST check a box affirming they understand before purchasing.</p>
+                    <label htmlFor="reqCheck" className="text-xs font-bold text-brand-charcoal cursor-pointer">{t('Require Checkout Checkbox Confirmation', 'اشتراط تأكيد مربع الاختيار عند الدفع')}</label>
+                    <p className="text-[10px] text-brand-charcoal/60">{t('If enabled, the customer MUST check a box affirming they understand before purchasing.', 'عند التفعيل، يجب على العميل تحديد مربع يؤكد فهمه قبل الشراء.')}</p>
                   </div>
                 </div>
 
                 {/* Custom checkbox Label Input */}
                 {popupForm.requiredCheckbox && (
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-brand-charcoal/80">Custom Checkbox Agreement Label</label>
+                    <label className="text-xs font-bold text-brand-charcoal/80">{t('Custom Checkbox Agreement Label', 'تسمية مربع الموافقة المخصصة')}</label>
                     <input
                       type="text"
                       value={popupForm.checkboxLabel}
@@ -1183,11 +1193,11 @@ export const AdminSettingsSection: React.FC = () => {
                   {popupSaved && !popupDirty && (
                     <span className="text-[11px] font-bold text-brand-sage flex items-center gap-1.5">
                       <Check className="h-4 w-4" />
-                      <span>Saved</span>
+                      <span>{t('Saved', 'تم الحفظ')}</span>
                     </span>
                   )}
                   {popupDirty && (
-                    <span className="text-[11px] font-bold text-brand-charcoal/45">Unsaved changes</span>
+                    <span className="text-[11px] font-bold text-brand-charcoal/45">{t('Unsaved changes', 'تغييرات غير محفوظة')}</span>
                   )}
                   <button
                     type="button"
@@ -1195,7 +1205,7 @@ export const AdminSettingsSection: React.FC = () => {
                     onClick={handleSavePrePaymentSettings}
                     className="px-5 py-2.5 rounded-xl bg-brand-terracotta text-brand-cream text-xs font-bold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    Save Changes
+                    {t('Save Changes', 'حفظ التغييرات')}
                   </button>
                 </div>
               </div>
@@ -1204,7 +1214,7 @@ export const AdminSettingsSection: React.FC = () => {
               <div className="space-y-3">
                 <h4 className="text-xs font-extrabold text-brand-charcoal uppercase tracking-wider flex items-center gap-1.5">
                   <Info className="h-4 w-4 text-brand-terracotta animate-pulse" />
-                  <span>Real-time Live Preview</span>
+                  <span>{t('Real-time Live Preview', 'معاينة مباشرة لحظية')}</span>
                 </h4>
 
                 <div className="bg-brand-sand/30 border border-brand-clay/75 rounded-2xl p-5 space-y-4 shadow-sm text-left relative overflow-hidden">
@@ -1215,8 +1225,8 @@ export const AdminSettingsSection: React.FC = () => {
                       <Shield className="h-5 w-5" />
                     </div>
                     <div>
-                      <h3 className="text-sm font-bold text-brand-charcoal">{popupForm.title || 'Untitled guidelines'}</h3>
-                      <p className="text-[10px] text-brand-charcoal/50 font-bold uppercase tracking-wider mt-0.5">Pre-Payment studio briefing</p>
+                      <h3 className="text-sm font-bold text-brand-charcoal">{popupForm.title || t('Untitled guidelines', 'إرشادات بلا عنوان')}</h3>
+                      <p className="text-[10px] text-brand-charcoal/50 font-bold uppercase tracking-wider mt-0.5">{t('Pre-Payment studio briefing', 'إحاطة الاستوديو قبل الدفع')}</p>
                     </div>
                   </div>
 
@@ -1232,7 +1242,7 @@ export const AdminSettingsSection: React.FC = () => {
                       </div>
                     ))}
                     {!popupForm.message.trim() && !popupForm.instructions.some(l => l.trim()) && (
-                      <p className="text-brand-charcoal/40">No message written yet.</p>
+                      <p className="text-brand-charcoal/40">{t('No message written yet.', 'لم تُكتب رسالة بعد.')}</p>
                     )}
                   </div>
 
@@ -1245,12 +1255,12 @@ export const AdminSettingsSection: React.FC = () => {
                   ) : (
                     <div className="text-[10px] font-bold text-brand-sage flex items-center gap-1 bg-brand-sage/5 p-2 rounded-lg border border-brand-sage/10">
                       <Check className="h-3.5 w-3.5 shrink-0" />
-                      <span>Unconditional Booking: Customers can immediately click purchase.</span>
+                      <span>{t('Unconditional Booking: Customers can immediately click purchase.', 'حجز غير مشروط: يمكن للعملاء الضغط على «شراء» مباشرة.')}</span>
                     </div>
                   )}
 
                   <div className="pt-2 flex justify-end gap-2 text-[10px] font-bold">
-                    <button type="button" className="px-3.5 py-2 rounded-lg border border-brand-clay bg-white text-brand-charcoal/60">Cancel</button>
+                    <button type="button" className="px-3.5 py-2 rounded-lg border border-brand-clay bg-white text-brand-charcoal/60">{t('Cancel', 'إلغاء')}</button>
                     <button type="button" className="px-4 py-2 rounded-lg bg-brand-terracotta text-brand-cream">{popupForm.buttonLabel}</button>
                   </div>
                 </div>
@@ -1268,11 +1278,10 @@ export const AdminSettingsSection: React.FC = () => {
             <div>
               <h2 className="font-display text-xl font-bold text-brand-charcoal flex items-center gap-2">
                 <Users className="h-5 w-5 text-brand-terracotta" />
-                <span>Staff Member Registry & Permissions</span>
+                <span>{t('Staff Member Registry & Permissions', 'سجل الموظفين والصلاحيات')}</span>
               </h2>
               <p className="text-xs text-brand-charcoal/60 mt-1">
-                Registry list for instructors, coaches, and studio managers. 
-                Configure granular roles for tutoring class assignments or tracking handcrafted pieces.
+                {t('Registry list for instructors, coaches, and studio managers. Configure granular roles for tutoring class assignments or tracking handcrafted pieces.', 'قائمة سجل للمدربين والمدربين المساعدين ومديري الاستوديو. اضبط أدوارًا تفصيلية لتكليفات تدريس الدروس أو تتبع القطع المصنوعة يدويًا.')}
               </p>
             </div>
 
@@ -1287,16 +1296,16 @@ export const AdminSettingsSection: React.FC = () => {
             }} className="p-5 bg-brand-sand/30 border border-brand-clay/50 rounded-2xl space-y-4">
               <h3 className="flex items-center gap-1.5 text-xs font-bold text-brand-charcoal uppercase tracking-wider">
                 {editingStaffId ? <Pencil className="h-3.5 w-3.5" /> : <UserPlus className="h-3.5 w-3.5" />}
-                <span>{editingStaffId ? 'Edit Staff Profile' : 'Register New Staff Member'}</span>
+                <span>{editingStaffId ? t('Edit Staff Profile', 'تعديل ملف الموظف') : t('Register New Staff Member', 'تسجيل موظف جديد')}</span>
               </h3>
               
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-brand-charcoal/80">Staff Full Name</label>
+                  <label className="text-[11px] font-bold text-brand-charcoal/80">{t('Staff Full Name', 'الاسم الكامل للموظف')}</label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Lina Al-Sudais"
+                    placeholder={t('e.g. Lina Al-Sudais', 'مثال: لينا السديس')}
                     value={staffForm.name}
                     onChange={e => { setStaffForm(prev => ({ ...prev, name: e.target.value })); clearStaffError('name'); }}
                     className="w-full bg-white border border-brand-clay/60 rounded-xl py-2 px-3 text-xs font-semibold text-brand-charcoal"
@@ -1305,11 +1314,11 @@ export const AdminSettingsSection: React.FC = () => {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-brand-charcoal/80">Position / Title</label>
+                  <label className="text-[11px] font-bold text-brand-charcoal/80">{t('Position / Title', 'المسمى الوظيفي')}</label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Lead Instructor"
+                    placeholder={t('e.g. Lead Instructor', 'مثال: مدرب أول')}
                     value={staffForm.position}
                     onChange={e => { setStaffForm(prev => ({ ...prev, position: e.target.value })); clearStaffError('position'); }}
                     className="w-full bg-white border border-brand-clay/60 rounded-xl py-2 px-3 text-xs font-semibold text-brand-charcoal"
@@ -1318,14 +1327,14 @@ export const AdminSettingsSection: React.FC = () => {
                 </div>
 
                 <PhoneInput
-                  label="Phone Number"
+                  label={t('Phone Number', 'رقم الهاتف')}
                   value={staffForm.phone}
                   error={staffErrors.phone}
                   onChange={val => { setStaffForm(prev => ({ ...prev, phone: val })); clearStaffError('phone'); }}
                 />
 
                 <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-brand-charcoal/80">Email Address</label>
+                  <label className="text-[11px] font-bold text-brand-charcoal/80">{t('Email Address', 'البريد الإلكتروني')}</label>
                   <input
                     type="email"
                     placeholder="e.g. lina@artycafe.com"
@@ -1341,15 +1350,15 @@ export const AdminSettingsSection: React.FC = () => {
               <div className="flex flex-wrap items-center justify-between gap-4 pt-2 border-t border-brand-clay/20">
                 <div className="flex items-center gap-4">
                   <div className="space-y-1">
-                    <label className="text-[11px] font-bold text-brand-charcoal/80 block">Activity Status</label>
+                    <label className="text-[11px] font-bold text-brand-charcoal/80 block">{t('Activity Status', 'حالة النشاط')}</label>
                     <select
                       value={staffForm.status}
                       onChange={e => setStaffForm(prev => ({ ...prev, status: e.target.value as any }))}
                       className="bg-white border border-brand-clay/60 rounded-lg p-1 text-xs font-bold text-brand-charcoal cursor-pointer"
                     >
-                      <option value="Active">Active</option>
-                      <option value="On Leave">On Leave</option>
-                      <option value="Inactive">Inactive</option>
+                      <option value="Active">{enumLabel('staffStatus', 'Active', lang)}</option>
+                      <option value="On Leave">{enumLabel('staffStatus', 'On Leave', lang)}</option>
+                      <option value="Inactive">{enumLabel('staffStatus', 'Inactive', lang)}</option>
                     </select>
                   </div>
                 </div>
@@ -1363,7 +1372,7 @@ export const AdminSettingsSection: React.FC = () => {
                       onChange={e => setStaffForm(prev => ({ ...prev, canAssignWorkshops: e.target.checked }))}
                       className="h-4 w-4 border-brand-clay text-brand-terracotta rounded"
                     />
-                    <span>Can tutor classes</span>
+                    <span>{t('Can tutor classes', 'يمكنه تدريس الدروس')}</span>
                   </label>
 
                   <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-brand-charcoal">
@@ -1373,7 +1382,7 @@ export const AdminSettingsSection: React.FC = () => {
                       onChange={e => setStaffForm(prev => ({ ...prev, canAssignPieces: e.target.checked }))}
                       className="h-4 w-4 border-brand-clay text-brand-terracotta rounded"
                     />
-                    <span>Can process pottery</span>
+                    <span>{t('Can process pottery', 'يمكنه معالجة الفخار')}</span>
                   </label>
                 </div>
 
@@ -1395,7 +1404,7 @@ export const AdminSettingsSection: React.FC = () => {
                       }}
                       className="px-4 py-2 border border-brand-clay rounded-xl text-xs font-bold text-brand-charcoal hover:bg-white transition-colors cursor-pointer"
                     >
-                      Cancel Edit
+                      {t('Cancel Edit', 'إلغاء التعديل')}
                     </button>
                   )}
                   <button
@@ -1403,7 +1412,7 @@ export const AdminSettingsSection: React.FC = () => {
                     className="bg-brand-charcoal hover:bg-brand-charcoal/90 text-brand-cream text-xs font-bold py-2 px-4 rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-2 h-9 shrink-0"
                   >
                     {editingStaffId ? <Save className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
-                    <span>{editingStaffId ? 'Save Profile' : 'Register Staff'}</span>
+                    <span>{editingStaffId ? t('Save Profile', 'حفظ الملف') : t('Register Staff', 'تسجيل الموظف')}</span>
                   </button>
                 </div>
               </div>
@@ -1414,11 +1423,11 @@ export const AdminSettingsSection: React.FC = () => {
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-brand-sand/30 border-b border-brand-clay/30 text-brand-charcoal/60 font-bold">
-                    <th className="p-3">Staff Profile</th>
-                    <th className="p-3">Contact info</th>
-                    <th className="p-3 text-center">Status</th>
-                    <th className="p-3 text-center">Permissions</th>
-                    <th className="p-3 w-28 text-right">Actions</th>
+                    <th className="p-3">{t('Staff Profile', 'ملف الموظف')}</th>
+                    <th className="p-3">{t('Contact info', 'بيانات التواصل')}</th>
+                    <th className="p-3 text-center">{t('Status', 'الحالة')}</th>
+                    <th className="p-3 text-center">{t('Permissions', 'الصلاحيات')}</th>
+                    <th className="p-3 w-28 text-right">{t('Actions', 'الإجراءات')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-brand-clay/20">
@@ -1432,7 +1441,7 @@ export const AdminSettingsSection: React.FC = () => {
                           </div>
                           <div>
                             <h4 className="font-bold text-brand-charcoal">{member.name}</h4>
-                            <p className="text-[10px] text-brand-charcoal/60 font-semibold">{member.position}</p>
+                            <p className="text-[10px] text-brand-charcoal/60 font-semibold">{displayPosition(member.position, lang)}</p>
                           </div>
                         </div>
                       </td>
@@ -1454,7 +1463,7 @@ export const AdminSettingsSection: React.FC = () => {
                               ? 'bg-amber-50 text-amber-700 border-amber-200'
                               : 'bg-brand-charcoal/5 text-brand-charcoal/40 border-brand-clay/60'
                         }`}>
-                          {member.status}
+                          {enumLabel('staffStatus', member.status, lang)}
                         </span>
                       </td>
 
@@ -1463,15 +1472,14 @@ export const AdminSettingsSection: React.FC = () => {
                         <div className="flex flex-col items-center gap-1">
                           {member.role === 'Super Admin' ? (
                             <span className="bg-brand-terracotta/10 text-brand-terracotta px-2 py-0.5 rounded text-[9px] font-bold border border-brand-terracotta/30">
-                              Super Admin — full access
+                              {t('Super Admin — full access', 'مدير عام — وصول كامل')}
                             </span>
                           ) : member.hasConsoleAccess ? (
                             <span className="bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded text-[9px] font-bold border border-emerald-200">
-                              {sanitizePermissions(member.permissions).length} page
-                              {sanitizePermissions(member.permissions).length === 1 ? '' : 's'}
+                              {lang === 'ar' ? `الصفحات: ${sanitizePermissions(member.permissions).length}` : `${sanitizePermissions(member.permissions).length} page${sanitizePermissions(member.permissions).length === 1 ? '' : 's'}`}
                             </span>
                           ) : (
-                            <span className="text-brand-charcoal/40 italic text-[10px]">No console access</span>
+                            <span className="text-brand-charcoal/40 italic text-[10px]">{t('No console access', 'لا يوجد وصول إلى لوحة التحكم')}</span>
                           )}
 
                           <button
@@ -1479,11 +1487,11 @@ export const AdminSettingsSection: React.FC = () => {
                             disabled={!canManagePermissions}
                             onClick={() => handleOpenPermissions(member)}
                             title={canManagePermissions
-                              ? 'Manage console access and page permissions'
-                              : 'Only a Super Admin can change permissions'}
+                              ? t('Manage console access and page permissions', 'إدارة الوصول إلى لوحة التحكم وصلاحيات الصفحات')
+                              : t('Only a Super Admin can change permissions', 'يمكن للمدير العام وحده تغيير الصلاحيات')}
                             className="text-[10px] font-bold text-brand-terracotta hover:underline disabled:text-brand-charcoal/30 disabled:no-underline disabled:cursor-not-allowed cursor-pointer"
                           >
-                            Manage
+                            {t('Manage', 'إدارة')}
                           </button>
                         </div>
                       </td>
@@ -1495,7 +1503,7 @@ export const AdminSettingsSection: React.FC = () => {
                             type="button"
                             onClick={() => handleStartEditStaff(member)}
                             className="p-1.5 rounded-lg border border-brand-clay/40 hover:bg-brand-sand/50 text-brand-charcoal/75 cursor-pointer"
-                            title="Edit Profile"
+                            title={t('Edit Profile', 'تعديل الملف')}
                           >
                             <Edit2 className="h-3.5 w-3.5" />
                           </button>
@@ -1503,7 +1511,7 @@ export const AdminSettingsSection: React.FC = () => {
                             type="button"
                             onClick={() => handleDeleteStaffClick(member.id)}
                             className="p-1.5 rounded-lg border border-brand-clay/40 hover:bg-red-50 text-red-600 hover:border-red-300 cursor-pointer"
-                            title="Delete Profile"
+                            title={t('Delete Profile', 'حذف الملف')}
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
@@ -1522,7 +1530,7 @@ export const AdminSettingsSection: React.FC = () => {
                   to={staffPager.to}
                   total={staffPager.total}
                   onPage={staffPager.setPage}
-                  noun="staff"
+                  noun={t('staff', 'موظفين')}
                 />
               </div>
             </div>
@@ -1555,7 +1563,7 @@ export const AdminSettingsSection: React.FC = () => {
                 onClick={() => setAlertModal(null)}
                 className="px-5 py-2.5 bg-brand-charcoal hover:bg-brand-charcoal/90 text-brand-cream text-xs font-bold rounded-xl cursor-pointer"
               >
-                Understood
+                {t('Understood', 'حسنًا')}
               </button>
             </div>
           </div>
@@ -1571,7 +1579,7 @@ export const AdminSettingsSection: React.FC = () => {
             <div className="flex items-start justify-between gap-4 p-6 border-b border-brand-clay/60">
               <div>
                 <span className="text-[10px] font-bold uppercase tracking-widest text-brand-terracotta block">
-                  Admin Console Access
+                  {t('Admin Console Access', 'الوصول إلى لوحة تحكم الإدارة')}
                 </span>
                 <h3 className="font-display text-xl font-bold text-brand-charcoal">{permissionsStaff.name}</h3>
                 <p className="text-[11px] font-mono font-bold text-brand-charcoal/50 mt-0.5">
@@ -1597,9 +1605,9 @@ export const AdminSettingsSection: React.FC = () => {
                   className="mt-0.5 h-4 w-4 accent-brand-terracotta cursor-pointer"
                 />
                 <span>
-                  <span className="font-bold text-brand-charcoal block">Allow Admin Console sign-in</span>
+                  <span className="font-bold text-brand-charcoal block">{t('Allow Admin Console sign-in', 'السماح بتسجيل الدخول إلى لوحة تحكم الإدارة')}</span>
                   <span className="text-[11px] text-brand-charcoal/60">
-                    A staff profile can exist without a login account. Turn this on to give them one.
+                    {t('A staff profile can exist without a login account. Turn this on to give them one.', 'يمكن أن يوجد ملف موظف بدون حساب دخول. فعّل هذا الخيار لمنحه حسابًا.')}
                   </span>
                 </span>
               </label>
@@ -1607,7 +1615,7 @@ export const AdminSettingsSection: React.FC = () => {
               {permDraft.hasConsoleAccess && (
                 <>
                   <div className="space-y-1">
-                    <label className="font-bold text-brand-charcoal/80 block">Role</label>
+                    <label className="font-bold text-brand-charcoal/80 block">{t('Role', 'الدور')}</label>
                     <select
                       value={permDraft.role}
                       onChange={e => {
@@ -1620,29 +1628,30 @@ export const AdminSettingsSection: React.FC = () => {
                       }}
                       className="w-full bg-white border border-brand-clay rounded-xl p-2.5 font-bold text-brand-charcoal cursor-pointer"
                     >
-                      <option value="Staff">Staff</option>
-                      <option value="Admin">Admin</option>
-                      <option value="Super Admin">Super Admin</option>
+                      <option value="Staff">{enumLabel('staffRole', 'Staff', lang)}</option>
+                      <option value="Admin">{enumLabel('staffRole', 'Admin', lang)}</option>
+                      <option value="Super Admin">{enumLabel('staffRole', 'Super Admin', lang)}</option>
                     </select>
                     {permDraft.role === 'Super Admin' && (
                       <p className="text-[11px] font-bold text-brand-terracotta">
-                        Super Admin has unrestricted access to every page. No pages need selecting.
+                        {t('Super Admin has unrestricted access to every page. No pages need selecting.', 'يتمتع المدير العام بوصول غير مقيّد إلى كل الصفحات. لا حاجة لتحديد صفحات.')}
                       </p>
                     )}
                   </div>
 
                   <div className="space-y-1">
-                    <label className="font-bold text-brand-charcoal/80 block">Password</label>
+                    <label className="font-bold text-brand-charcoal/80 block">{t('Password', 'كلمة المرور')}</label>
                     <input
                       type="text"
                       value={permDraft.password}
                       onChange={e => setPermDraft(prev => ({ ...prev, password: e.target.value }))}
-                      placeholder="Set a sign-in password"
+                      placeholder={t('Set a sign-in password', 'عيّن كلمة مرور لتسجيل الدخول')}
                       className="w-full bg-white border border-brand-clay rounded-xl p-2.5 font-semibold text-brand-charcoal"
                     />
                     <p className="text-[10px] text-brand-charcoal/50">
-                      They can sign in with this password and either their email
-                      ({permissionsStaff.email || 'no email on file'}) or phone ({permissionsStaff.phone}).
+                      {lang === 'ar'
+                      ? <>يمكنه تسجيل الدخول بكلمة المرور هذه مع بريده الإلكتروني ({permissionsStaff.email || 'لا يوجد بريد إلكتروني مسجَّل'}) أو هاتفه ({permissionsStaff.phone}).</>
+                      : <>They can sign in with this password and either their email ({permissionsStaff.email || 'no email on file'}) or phone ({permissionsStaff.phone}).</>}
                     </p>
                   </div>
 
@@ -1650,7 +1659,7 @@ export const AdminSettingsSection: React.FC = () => {
                   {permDraft.role !== 'Super Admin' && (
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <label className="font-bold text-brand-charcoal/80 block">Permissions</label>
+                        <label className="font-bold text-brand-charcoal/80 block">{t('Permissions', 'الصلاحيات')}</label>
                         <div className="flex items-center gap-2">
                           <button
                             type="button"
@@ -1660,14 +1669,14 @@ export const AdminSettingsSection: React.FC = () => {
                             }))}
                             className="text-[10px] font-bold text-brand-terracotta hover:underline cursor-pointer"
                           >
-                            Select all
+                            {t('Select all', 'تحديد الكل')}
                           </button>
                           <button
                             type="button"
                             onClick={() => setPermDraft(prev => ({ ...prev, permissions: [] }))}
                             className="text-[10px] font-bold text-brand-charcoal/50 hover:underline cursor-pointer"
                           >
-                            Clear
+                            {t('Clear', 'مسح')}
                           </button>
                         </div>
                       </div>
@@ -1686,7 +1695,7 @@ export const AdminSettingsSection: React.FC = () => {
                               onChange={() => handleTogglePermission(page.id)}
                               className="h-4 w-4 accent-brand-terracotta cursor-pointer"
                             />
-                            <span className="font-semibold text-brand-charcoal">{page.label}</span>
+                            <span className="font-semibold text-brand-charcoal">{getPageLabel(page.id, lang)}</span>
                             <span className="text-[9px] font-mono text-brand-charcoal/30 ml-auto">{page.id}</span>
                           </label>
                         ))}
@@ -1699,7 +1708,7 @@ export const AdminSettingsSection: React.FC = () => {
               {permSaved && (
                 <div className="p-3 bg-emerald-50 border border-emerald-300 text-emerald-800 text-[11px] font-bold rounded-xl flex items-center gap-2">
                   <Check className="h-4 w-4 text-emerald-600" />
-                  <span>Permissions saved. They apply the next time this account loads a page.</span>
+                  <span>{t('Permissions saved. They apply the next time this account loads a page.', 'تم حفظ الصلاحيات. تسري في المرة القادمة التي يحمّل فيها هذا الحساب صفحة.')}</span>
                 </div>
               )}
 
@@ -1709,14 +1718,14 @@ export const AdminSettingsSection: React.FC = () => {
                   onClick={() => setPermissionsStaffId(null)}
                   className="py-3 border border-brand-clay hover:bg-brand-sand text-brand-charcoal text-xs font-bold rounded-xl cursor-pointer"
                 >
-                  Close
+                  {t('Close', 'إغلاق')}
                 </button>
                 <button
                   type="button"
                   onClick={handleSavePermissions}
                   className="py-3 bg-brand-terracotta hover:bg-brand-terracotta/90 text-brand-cream text-xs font-bold rounded-xl shadow-sm cursor-pointer"
                 >
-                  Save Permissions
+                  {t('Save Permissions', 'حفظ الصلاحيات')}
                 </button>
               </div>
             </div>

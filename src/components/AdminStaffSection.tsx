@@ -23,10 +23,18 @@ import { TimePicker } from './ui/TimePicker';
 import { normalizeDateString } from '../utils/timeUtils';
 import { ConsoleModal } from './ui/ConsoleModal';
 import { timeToMinutes } from '../utils/timeUtils';
+import { useLanguage } from '../context/LanguageContext';
+import { enumLabel } from '../utils/enumLabels';
+import { displayPosition } from '../utils/staffPosition';
 
 /** One width for every time control, so the columns line up down the day list. */
 const timeInputClass =
   'w-full min-w-0 rounded-lg border border-brand-clay bg-white px-2 py-1.5 text-xs font-semibold text-brand-charcoal';
+
+/** Arabic wording for the calendar's day / week / month controls (the view keys themselves stay English). */
+const CALENDAR_PREV_AR: Record<'day' | 'week' | 'month', string> = { day: 'اليوم السابق', week: 'الأسبوع السابق', month: 'الشهر السابق' };
+const CALENDAR_NEXT_AR: Record<'day' | 'week' | 'month', string> = { day: 'اليوم التالي', week: 'الأسبوع التالي', month: 'الشهر التالي' };
+const CALENDAR_VIEW_AR: Record<'day' | 'week' | 'month', string> = { day: 'عرض اليوم', week: 'عرض الأسبوع', month: 'عرض الشهر' };
 
 export const AdminStaffSection: React.FC = () => {
   const {
@@ -45,6 +53,9 @@ export const AdminStaffSection: React.FC = () => {
     currentStaff,
     provisionStaff,
 } = useApp();
+  const { lang, t } = useLanguage();
+  // English keeps the browser's own locale (undefined); Arabic is Gregorian with Latin digits, like the rest of the console.
+  const dateLocale = lang === 'ar' ? 'ar-SA-u-ca-gregory-nu-latn' : undefined;
 
   /** Only a Super Admin may provision a staff account (audit finding C-3) — mirrors the same check AdminSettingsSection.tsx already uses for its own Super-Admin-only actions. The Edge Function re-verifies this server-side regardless. */
   const isCurrentUserSuperAdmin = isSuperAdmin(currentStaff);
@@ -69,13 +80,13 @@ export const AdminStaffSection: React.FC = () => {
     // reliably narrow a boolean-discriminated union; verified directly
     // against this exact tsconfig before writing it this way.
     if (outcome.kind === 'network_error') {
-      return { tone: 'error' as const, text: `Could not reach the server — ${outcome.message}` };
+      return { tone: 'error' as const, text: t(`Could not reach the server — ${outcome.message}`, `تعذّر الوصول إلى الخادم — ${outcome.message}`) };
     } else {
       const response = outcome.response;
       if (response.success === true) {
         return response.status === 'already-provisioned'
-          ? { tone: 'info' as const, text: 'Already provisioned — this staff member is already linked to a sign-in account. Nothing was changed.' }
-          : { tone: 'success' as const, text: 'Invite sent — this staff member can set their own password from the link emailed to their Work Email.' };
+          ? { tone: 'info' as const, text: t('Already provisioned — this staff member is already linked to a sign-in account. Nothing was changed.', 'تمت التهيئة مسبقًا — هذا الموظف مرتبط بالفعل بحساب لتسجيل الدخول. لم يتم تغيير أي شيء.') }
+          : { tone: 'success' as const, text: t('Invite sent — this staff member can set their own password from the link emailed to their Work Email.', 'تم إرسال الدعوة — يمكن لهذا الموظف تعيين كلمة مروره من الرابط المرسل إلى بريده الإلكتروني للعمل.') };
       } else {
         // Non-sensitive hint only for the collision case — per audit finding
         // C-3, never any PII beyond what contract.ts already includes.
@@ -83,7 +94,7 @@ export const AdminStaffSection: React.FC = () => {
           return {
             tone: 'error' as const,
             text: response.message + (response.hasExistingCustomerRecord
-              ? ' (That account also has an existing ARTY customer record.)'
+              ? t(' (That account also has an existing ARTY customer record.)', ' (لهذا الحساب أيضًا سجل عميل موجود في ARTY.)')
               : '')
           };
         } else {
@@ -198,7 +209,7 @@ export const AdminStaffSection: React.FC = () => {
       return {
         start: day,
         end: day,
-        label: cur.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+        label: cur.toLocaleDateString(dateLocale, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
       };
     }
 
@@ -213,8 +224,8 @@ export const AdminStaffSection: React.FC = () => {
       // "28 Sep – 4 Oct 2026" only when it actually straddles two.
       const sameMonth = sun.getMonth() === sat.getMonth() && sun.getFullYear() === sat.getFullYear();
       const label = sameMonth
-        ? `${sun.getDate()}–${sat.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`
-        : `${sun.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} – ${sat.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`;
+        ? `${sun.getDate()}–${sat.toLocaleDateString(dateLocale, { day: 'numeric', month: 'short', year: 'numeric' })}`
+        : `${sun.toLocaleDateString(dateLocale, { day: 'numeric', month: 'short' })} – ${sat.toLocaleDateString(dateLocale, { day: 'numeric', month: 'short', year: 'numeric' })}`;
 
       return { start: toStr(sun), end: toStr(sat), label };
     }
@@ -225,9 +236,9 @@ export const AdminStaffSection: React.FC = () => {
     return {
       start: toStr(first),
       end: toStr(last),
-      label: cur.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+      label: cur.toLocaleDateString(dateLocale, { month: 'long', year: 'numeric' })
     };
-  }, [calendarDate, calendarView, effectiveCalendarView, todayDateStr]);
+  }, [calendarDate, calendarView, effectiveCalendarView, todayDateStr, lang]);
 
   /**
    * Whether anything is narrowing what the calendar shows.
@@ -350,7 +361,7 @@ export const AdminStaffSection: React.FC = () => {
         // every assignment that day. Overnight shifts are not a case the studio
         // has, so no wrap-around is allowed for either.
         if (start !== null && end !== null && end <= start) {
-          problems[key] = 'Shift end must be after its start.';
+          problems[key] = t('Shift end must be after its start.', 'يجب أن يكون انتهاء الوردية بعد بدايتها.');
           return;
         }
 
@@ -359,17 +370,17 @@ export const AdminStaffSection: React.FC = () => {
 
         // Both halves of a break, or neither — one alone has no meaning.
         if ((breakStart === null) !== (breakEnd === null)) {
-          problems[key] = 'A break needs both a start and an end, or neither.';
+          problems[key] = t('A break needs both a start and an end, or neither.', 'تحتاج الاستراحة إلى بداية ونهاية معًا، أو لا شيء منهما.');
           return;
         }
 
         if (breakStart !== null && breakEnd !== null) {
           if (breakEnd <= breakStart) {
-            problems[key] = 'Break end must be after its start.';
+            problems[key] = t('Break end must be after its start.', 'يجب أن تكون نهاية الاستراحة بعد بدايتها.');
             return;
           }
           if (start !== null && end !== null && (breakStart < start || breakEnd > end)) {
-            problems[key] = 'The break must fall inside the shift.';
+            problems[key] = t('The break must fall inside the shift.', 'يجب أن تقع الاستراحة داخل الوردية.');
             return;
           }
         }
@@ -392,12 +403,12 @@ export const AdminStaffSection: React.FC = () => {
           return start < otherEnd && otherStart < end;
         });
 
-        if (clashes) problems[`${day}-${idx}`] = 'This shift overlaps another shift on the same day.';
+        if (clashes) problems[`${day}-${idx}`] = t('This shift overlaps another shift on the same day.', 'تتداخل هذه الوردية مع وردية أخرى في اليوم نفسه.');
       });
     });
 
     return problems;
-  }, [formData.weeklySchedule]);
+  }, [formData.weeklySchedule, lang, t]);
 
   // Save Staff Record
   const handleSaveStaff = async (e: React.FormEvent) => {
@@ -406,7 +417,9 @@ export const AdminStaffSection: React.FC = () => {
     // The same shared rules the Staff Registry uses, so both surfaces agree.
     const fieldErrors = await validateStaffForm(
       { name: formData.name, position: formData.position, phone: formData.phone, email: formData.email },
-      editStaffId || undefined
+      editStaffId || undefined,
+      undefined,
+      lang
     );
     setStaffErrors(fieldErrors);
     if (Object.keys(fieldErrors).length > 0) return;
@@ -414,7 +427,7 @@ export const AdminStaffSection: React.FC = () => {
     // The schedule is saved with the record, so an impossible shift has to stop
     // the save rather than being written and found later by availability code.
     if (Object.keys(shiftTimeProblems).length > 0) {
-      window.alert('Please fix the highlighted working hours before saving:\n\n' +
+      window.alert(t('Please fix the highlighted working hours before saving:\n\n', 'يرجى تصحيح ساعات العمل المظلَّلة قبل الحفظ:\n\n') +
         [...new Set(Object.values(shiftTimeProblems))].join('\n'));
       return;
     }
@@ -429,7 +442,7 @@ export const AdminStaffSection: React.FC = () => {
       const nextStatus = formData.status || previous?.status || 'Active';
       const held = getUpcomingAssignments(editStaffId, assignmentSources, todayDateStr);
       const warning = describeInactiveWarning(previous?.status, nextStatus, held);
-      if (warning && !window.confirm(`${warning}\n\nSave anyway?`)) return;
+      if (warning && !window.confirm(`${warning}\n\n${t('Save anyway?', 'هل تريد الحفظ على أي حال؟')}`)) return;
 
       // Persist the edited record (including the schedule) to the shared data layer.
       await updateStaffMember(editStaffId, {
@@ -523,13 +536,13 @@ export const AdminStaffSection: React.FC = () => {
         <div>
           <div className="flex items-center gap-2 text-brand-terracotta text-xs font-bold uppercase tracking-wider mb-1">
             <Users className="h-4 w-4" />
-            <span>Staff Management & Rosters</span>
+            <span>{t('Staff Management & Rosters', 'إدارة الموظفين والجداول')}</span>
           </div>
           <h1 className="text-2xl font-display font-bold text-brand-charcoal">
-            Staff Console & Work Schedules
+            {t('Staff Console & Work Schedules', 'لوحة تحكم الموظفين وجداول العمل')}
           </h1>
           <p className="text-xs font-semibold text-brand-charcoal/60 mt-1">
-            Manage instructors, working hours, leave requests, and assignment availability in Riyadh local time.
+            {t('Manage instructors, working hours, leave requests, and assignment availability in Riyadh local time.', 'إدارة المدربين وساعات العمل وطلبات الإجازة وتوفر التكليفات بتوقيت الرياض المحلي.')}
           </p>
         </div>
 
@@ -539,7 +552,7 @@ export const AdminStaffSection: React.FC = () => {
             className="px-4 py-2.5 bg-brand-terracotta hover:bg-brand-terracotta-dark text-brand-cream rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-2 cursor-pointer"
           >
             <UserPlus className="h-4 w-4" />
-            <span>Add New Staff Member</span>
+            <span>{t('Add New Staff Member', 'إضافة موظف جديد')}</span>
           </button>
         </div>
       </div>
@@ -556,7 +569,7 @@ export const AdminStaffSection: React.FC = () => {
             }`}
           >
             <Users className="h-3.5 w-3.5" />
-            <span>Staff Roster ({staff.length})</span>
+            <span>{t('Staff Roster', 'قائمة الموظفين')} ({staff.length})</span>
           </button>
 
           <button
@@ -568,7 +581,7 @@ export const AdminStaffSection: React.FC = () => {
             }`}
           >
             <CalendarDays className="h-3.5 w-3.5" />
-            <span>Schedule & Calendar View</span>
+            <span>{t('Schedule & Calendar View', 'عرض الجدول والتقويم')}</span>
           </button>
         </div>
 
@@ -578,7 +591,7 @@ export const AdminStaffSection: React.FC = () => {
               <Search className="h-3.5 w-3.5 text-brand-charcoal/40 absolute left-3 top-2.5" />
               <input
                 type="text"
-                placeholder="Search staff name, role, email..."
+                placeholder={t('Search staff name, role, email...', 'ابحث باسم الموظف أو دوره أو بريده الإلكتروني...')}
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 className="pl-8 pr-3 py-1.5 bg-white border border-brand-clay rounded-xl text-xs font-semibold text-brand-charcoal placeholder-brand-charcoal/40 w-56"
@@ -590,11 +603,11 @@ export const AdminStaffSection: React.FC = () => {
               onChange={e => setStatusFilter(e.target.value)}
               className="bg-white border border-brand-clay rounded-xl py-1.5 px-3 text-xs font-semibold text-brand-charcoal"
             >
-              <option value="all">All Statuses</option>
-              <option value="Active">Active</option>
-              <option value="On Leave">On Leave</option>
-              <option value="Inactive">Inactive</option>
-              <option value="Former Staff">Former Staff</option>
+              <option value="all">{t('All Statuses', 'كل الحالات')}</option>
+              <option value="Active">{enumLabel('staffStatus', 'Active', lang)}</option>
+              <option value="On Leave">{enumLabel('staffStatus', 'On Leave', lang)}</option>
+              <option value="Inactive">{enumLabel('staffStatus', 'Inactive', lang)}</option>
+              <option value="Former Staff">{enumLabel('staffStatus', 'Former Staff', lang)}</option>
             </select>
           </div>
         )}
@@ -634,7 +647,7 @@ export const AdminStaffSection: React.FC = () => {
                       </div>
                       <div>
                         <h3 className="font-bold text-sm text-brand-charcoal leading-tight">{member.name}</h3>
-                        <p className="text-xs text-brand-terracotta font-semibold">{member.position}</p>
+                        <p className="text-xs text-brand-terracotta font-semibold">{displayPosition(member.position, lang)}</p>
                       </div>
                     </div>
 
@@ -643,7 +656,7 @@ export const AdminStaffSection: React.FC = () => {
                       member.status === 'On Leave' ? 'bg-amber-100 text-amber-800' :
                       'bg-gray-100 text-gray-700'
                     }`}>
-                      {member.status}
+                      {enumLabel('staffStatus', member.status, lang)}
                     </span>
                   </div>
 
@@ -670,12 +683,12 @@ export const AdminStaffSection: React.FC = () => {
                     </div>
                     <div className="flex items-center gap-2">
                       <Briefcase className="h-3.5 w-3.5 text-brand-terracotta shrink-0" />
-                      <span>{upcomingCount} Upcoming Assignments</span>
+                      <span>{lang === 'ar' ? `تكليفات قادمة: ${upcomingCount}` : `${upcomingCount} Upcoming Assignments`}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <Clock className="h-3.5 w-3.5 text-brand-terracotta shrink-0" />
                       <span className={avail.isAvailable ? 'text-emerald-700 font-semibold' : 'text-amber-700 font-semibold'}>
-                        {avail.isAvailable ? 'Available this afternoon' : avail.status}
+                        {avail.isAvailable ? t('Available this afternoon', 'متاح بعد الظهر') : enumLabel('staffAvailability', avail.status, lang)}
                       </span>
                     </div>
                   </div>
@@ -688,7 +701,7 @@ export const AdminStaffSection: React.FC = () => {
                     <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3">
                       <div className="flex items-center gap-2 text-[11px] font-bold text-amber-800">
                         <Shield className="h-3.5 w-3.5 shrink-0" />
-                        <span>Not yet provisioned — no linked sign-in account</span>
+                        <span>{t('Not yet provisioned — no linked sign-in account', 'لم تتم التهيئة بعد — لا يوجد حساب تسجيل دخول مرتبط')}</span>
                       </div>
 
                       {provisionOutcomes[member.id] && (
@@ -705,7 +718,7 @@ export const AdminStaffSection: React.FC = () => {
                         type="button"
                         onClick={() => handleProvisionStaff(member)}
                         disabled={!isCurrentUserSuperAdmin || !!provisioningStaffId[member.id]}
-                        title={isCurrentUserSuperAdmin ? undefined : 'Only a Super Admin can provision staff accounts.'}
+                        title={isCurrentUserSuperAdmin ? undefined : t('Only a Super Admin can provision staff accounts.', 'يمكن للمدير العام وحده تهيئة حسابات الموظفين.')}
                         className={`mt-2 w-full rounded-lg px-3 py-1.5 text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 ${
                           !isCurrentUserSuperAdmin
                             ? 'bg-brand-cream text-brand-charcoal/40 cursor-not-allowed'
@@ -715,12 +728,12 @@ export const AdminStaffSection: React.FC = () => {
                         {provisioningStaffId[member.id] ? (
                           <>
                             <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                            <span>Provisioning…</span>
+                            <span>{t('Provisioning…', 'جارٍ التهيئة…')}</span>
                           </>
                         ) : (
                           <>
                             <Shield className="h-3.5 w-3.5" />
-                            <span>Provision Account</span>
+                            <span>{t('Provision Account', 'تهيئة الحساب')}</span>
                           </>
                         )}
                       </button>
@@ -738,13 +751,13 @@ export const AdminStaffSection: React.FC = () => {
                     className="px-3 py-1.5 bg-brand-sand/50 hover:bg-brand-sand text-brand-charcoal rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
                   >
                     <UserCheck className="h-3.5 w-3.5" />
-                    <span>View Profile</span>
+                    <span>{t('View Profile', 'عرض الملف')}</span>
                   </button>
 
                   <button
                     onClick={() => handleOpenEdit(member)}
                     className="p-1.5 hover:bg-brand-cream rounded-lg text-brand-charcoal/60 hover:text-brand-terracotta transition-all cursor-pointer"
-                    title="Edit Staff Member"
+                    title={t('Edit Staff Member', 'تعديل الموظف')}
                   >
                     <Edit3 className="h-4 w-4" />
                   </button>
@@ -762,15 +775,15 @@ export const AdminStaffSection: React.FC = () => {
             <div>
               <h2 className="font-bold text-sm text-brand-charcoal uppercase tracking-wider flex items-center gap-2">
                 <CalendarDays className="h-4 w-4 text-brand-terracotta" />
-                <span>Staff Assignments Schedule</span>
+                <span>{t('Staff Assignments Schedule', 'جدول تكليفات الموظفين')}</span>
               </h2>
               <p className="text-xs text-brand-charcoal/60 font-semibold mt-0.5">
-                Viewing assigned workshops and studio events in Riyadh time
+                {t('Viewing assigned workshops and studio events in Riyadh time', 'عرض الورش وفعاليات الاستوديو المكلَّف بها بتوقيت الرياض')}
               </p>
               {/* Says exactly what is on screen, so the view and the range can
                   never be read as disagreeing. */}
               <p className="mt-1 text-xs font-bold text-brand-terracotta">
-                {calendarRange ? calendarRange.label : 'All scheduled assignments'}
+                {calendarRange ? calendarRange.label : t('All scheduled assignments', 'كل التكليفات المجدولة')}
               </p>
             </div>
 
@@ -781,7 +794,7 @@ export const AdminStaffSection: React.FC = () => {
               <div className="flex items-center gap-1">
                 <button
                   type="button"
-                  aria-label={`Previous ${effectiveCalendarView}`}
+                  aria-label={lang === 'ar' ? CALENDAR_PREV_AR[effectiveCalendarView] : `Previous ${effectiveCalendarView}`}
                   onClick={() => shiftCalendar(-1)}
                   className="rounded-xl border border-brand-clay bg-white p-1.5 text-brand-charcoal transition-colors hover:bg-brand-sand/60 cursor-pointer"
                 >
@@ -789,7 +802,7 @@ export const AdminStaffSection: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  aria-label={`Next ${effectiveCalendarView}`}
+                  aria-label={lang === 'ar' ? CALENDAR_NEXT_AR[effectiveCalendarView] : `Next ${effectiveCalendarView}`}
                   onClick={() => shiftCalendar(1)}
                   className="rounded-xl border border-brand-clay bg-white p-1.5 text-brand-charcoal transition-colors hover:bg-brand-sand/60 cursor-pointer"
                 >
@@ -817,7 +830,7 @@ export const AdminStaffSection: React.FC = () => {
                       calendarView === v ? 'bg-brand-terracotta text-brand-cream' : 'text-brand-charcoal/60 hover:text-brand-charcoal'
                     }`}
                   >
-                    {v} View
+                    {lang === 'ar' ? CALENDAR_VIEW_AR[v] : `${v} View`}
                   </button>
                 ))}
               </div>
@@ -833,7 +846,7 @@ export const AdminStaffSection: React.FC = () => {
                   className="text-xs font-bold text-brand-terracotta hover:underline ml-1 cursor-pointer flex items-center gap-1"
                 >
                   <RefreshCw className="h-3 w-3" />
-                  <span>Clear Filters</span>
+                  <span>{t('Clear Filters', 'مسح عوامل التصفية')}</span>
                 </button>
               )}
             </div>
@@ -861,13 +874,13 @@ export const AdminStaffSection: React.FC = () => {
                     </div>
                     <div>
                       <p className="font-bold text-xs text-brand-charcoal">{member.name}</p>
-                      <p className="text-[10px] font-semibold text-brand-terracotta">{member.position}</p>
+                      <p className="text-[10px] font-semibold text-brand-terracotta">{displayPosition(member.position, lang)}</p>
                     </div>
                   </div>
 
                   <div className="flex-1">
                     {filteredAssignments.length === 0 ? (
-                      <span className="text-xs text-brand-charcoal/40 italic">No assignments scheduled for this period</span>
+                      <span className="text-xs text-brand-charcoal/40 italic">{t('No assignments scheduled for this period', 'لا توجد تكليفات مجدولة لهذه الفترة')}</span>
                     ) : (
                       <div className="flex flex-wrap gap-2">
                         {filteredAssignments.map(a => (
@@ -902,7 +915,7 @@ export const AdminStaffSection: React.FC = () => {
               </span>
               <span className="min-w-0">
                 <span className="block truncate text-lg font-bold text-brand-charcoal">{selectedStaff.name}</span>
-                <span className="block truncate text-xs font-semibold text-brand-terracotta">{selectedStaff.position}</span>
+                <span className="block truncate text-xs font-semibold text-brand-terracotta">{displayPosition(selectedStaff.position, lang)}</span>
               </span>
             </span>
           }
@@ -913,14 +926,14 @@ export const AdminStaffSection: React.FC = () => {
                 className="px-3.5 py-2 bg-brand-sand hover:bg-brand-sand/80 text-brand-charcoal rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
               >
                 <Plus className="h-3.5 w-3.5" />
-                <span>Record Time Off / Leave</span>
+                <span>{t('Record Time Off / Leave', 'تسجيل إجازة / وقت راحة')}</span>
               </button>
 
               <button
                 onClick={() => setShowDetailModal(false)}
                 className="px-4 py-2 bg-brand-charcoal text-brand-cream rounded-xl text-xs font-bold cursor-pointer"
               >
-                Close
+                {t('Close', 'إغلاق')}
               </button>
             </div>
           }
@@ -929,13 +942,13 @@ export const AdminStaffSection: React.FC = () => {
             {/* Availability status */}
             <div className="bg-brand-cream border border-brand-clay rounded-xl p-4 flex items-center justify-between">
               <div>
-                <span className="text-xs font-bold text-brand-charcoal uppercase block">Today's Availability</span>
-                <span className="text-xs text-brand-charcoal/70">Riyadh Local Time</span>
+                <span className="text-xs font-bold text-brand-charcoal uppercase block">{t("Today's Availability", 'توفر اليوم')}</span>
+                <span className="text-xs text-brand-charcoal/70">{t('Riyadh Local Time', 'بتوقيت الرياض المحلي')}</span>
               </div>
               <span className={`px-3 py-1 rounded-full text-xs font-bold ${
                 selectedStaff.status === 'Active' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
               }`}>
-                {selectedStaff.status}
+                {enumLabel('staffStatus', selectedStaff.status, lang)}
               </span>
             </div>
 
@@ -947,9 +960,9 @@ export const AdminStaffSection: React.FC = () => {
               return (
                 <div>
                   <h3 className="text-xs font-bold text-brand-charcoal uppercase tracking-wider mb-2 flex items-center justify-between">
-                    <span>Upcoming Assignments</span>
+                    <span>{t('Upcoming Assignments', 'التكليفات القادمة')}</span>
                     <span className="text-[10px] text-brand-terracotta font-semibold">
-                      {upcoming.length} upcoming · {allAssignments.length} total
+                      {lang === 'ar' ? `${upcoming.length} قادمة · ${allAssignments.length} إجمالي` : `${upcoming.length} upcoming · ${allAssignments.length} total`}
                     </span>
                   </h3>
                   {/* Fixed height with the rest reached by scrolling — the
@@ -958,14 +971,14 @@ export const AdminStaffSection: React.FC = () => {
                       modal. */}
                   <div className="max-h-56 space-y-2 overflow-y-auto always-scrollbar rounded-xl border border-brand-clay/60 bg-brand-cream/20 p-3">
                     {upcoming.length === 0 ? (
-                      <p className="text-xs text-brand-charcoal/50 italic py-2 text-center">No upcoming workshops or events assigned to this staff member.</p>
+                      <p className="text-xs text-brand-charcoal/50 italic py-2 text-center">{t('No upcoming workshops or events assigned to this staff member.', 'لا توجد ورش أو فعاليات قادمة مكلَّف بها هذا الموظف.')}</p>
                     ) : (
                       upcoming.map(a => (
                         <div key={a.id} className="p-2.5 bg-white rounded-lg border border-brand-clay/40 flex items-center justify-between text-xs">
                           <div>
                             <div className="flex items-center gap-2">
                               <span className="font-bold text-brand-charcoal">{a.title}</span>
-                              <span className="px-1.5 py-0.5 text-[9px] font-bold bg-brand-sand text-brand-charcoal rounded">{a.type}</span>
+                              <span className="px-1.5 py-0.5 text-[9px] font-bold bg-brand-sand text-brand-charcoal rounded">{enumLabel('assignmentType', a.type, lang)}</span>
                             </div>
                             <p className="text-[11px] text-brand-charcoal/70 mt-0.5">
                               {a.date} • {a.startTime} – {a.endTime} ({a.location})
@@ -982,7 +995,7 @@ export const AdminStaffSection: React.FC = () => {
             {/* Weekly Schedule Matrix */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <h3 className="text-xs font-bold text-brand-charcoal uppercase tracking-wider">Weekly Availability Schedule</h3>
+                <h3 className="text-xs font-bold text-brand-charcoal uppercase tracking-wider">{t('Weekly Availability Schedule', 'جدول التوفر الأسبوعي')}</h3>
                 <button
                   onClick={() => {
                     setShowDetailModal(false);
@@ -991,7 +1004,7 @@ export const AdminStaffSection: React.FC = () => {
                   className="text-xs font-bold text-brand-terracotta hover:underline flex items-center gap-1 cursor-pointer"
                 >
                   <Edit3 className="h-3 w-3" />
-                  <span>Edit Schedule</span>
+                  <span>{t('Edit Schedule', 'تعديل الجدول')}</span>
                 </button>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 border border-brand-clay/60 rounded-xl p-3 bg-brand-sand/10">
@@ -999,7 +1012,7 @@ export const AdminStaffSection: React.FC = () => {
                   const shifts = toDaySchedule(selectedStaff.weeklySchedule?.[day]).shifts;
                   return (
                     <div key={day} className="flex items-start justify-between text-xs p-1.5 border-b border-brand-clay/30 last:border-b-0 gap-2">
-                      <span className="font-bold text-brand-charcoal w-24 shrink-0">{day}</span>
+                      <span className="font-bold text-brand-charcoal w-24 shrink-0">{enumLabel('weekday', day, lang)}</span>
                       {shifts.length > 0 ? (
                         <span className="font-semibold text-emerald-800 text-right">
                           {shifts.map((s, i) => (
@@ -1007,7 +1020,7 @@ export const AdminStaffSection: React.FC = () => {
                           ))}
                         </span>
                       ) : (
-                        <span className="font-semibold text-gray-400 italic">Off</span>
+                        <span className="font-semibold text-gray-400 italic">{t('Off', 'عطلة')}</span>
                       )}
                     </div>
                   );
@@ -1027,7 +1040,7 @@ export const AdminStaffSection: React.FC = () => {
           title={
             <>
               <UserCheck className="h-5 w-5 text-brand-terracotta" />
-              <span>{editStaffId ? 'Edit Staff Member' : 'Add New Staff Member'}</span>
+              <span>{editStaffId ? t('Edit Staff Member', 'تعديل الموظف') : t('Add New Staff Member', 'إضافة موظف جديد')}</span>
             </>
           }
           footer={
@@ -1037,14 +1050,14 @@ export const AdminStaffSection: React.FC = () => {
                 onClick={() => setShowAddEditModal(false)}
                 className="px-4 py-2 bg-brand-sand text-brand-charcoal rounded-xl text-xs font-bold cursor-pointer"
               >
-                Cancel
+                {t('Cancel', 'إلغاء')}
               </button>
 
               <button
                 type="submit"
                 className="px-5 py-2 bg-brand-terracotta hover:bg-brand-terracotta-dark text-brand-cream rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
               >
-                Save Staff Record
+                {t('Save Staff Record', 'حفظ سجل الموظف')}
               </button>
             </>
           }
@@ -1052,7 +1065,7 @@ export const AdminStaffSection: React.FC = () => {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-semibold text-brand-charcoal">
               <div>
-                <label className="block mb-1 font-bold">Full Name *</label>
+                <label className="block mb-1 font-bold">{t('Full Name *', 'الاسم الكامل *')}</label>
                 <input
                   type="text"
                   required
@@ -1061,14 +1074,14 @@ export const AdminStaffSection: React.FC = () => {
                     setFormData({ ...formData, name: e.target.value });
                     setStaffErrors(prev => (prev.name ? { ...prev, name: '' } : prev));
                   }}
-                  placeholder="e.g. Sara Al-Malki"
+                  placeholder={t('e.g. Sara Al-Malki', 'مثال: سارة المالكي')}
                   className="w-full bg-brand-cream/50 border border-brand-clay rounded-xl p-2.5"
                 />
                 {staffErrors.name && <p className="text-[11px] text-red-500 font-bold mt-1">{staffErrors.name}</p>}
               </div>
 
               <div>
-                <label className="block mb-1 font-bold">Position / Title *</label>
+                <label className="block mb-1 font-bold">{t('Position / Title *', 'المسمى الوظيفي *')}</label>
                 <input
                   type="text"
                   required
@@ -1077,14 +1090,14 @@ export const AdminStaffSection: React.FC = () => {
                     setFormData({ ...formData, position: e.target.value });
                     setStaffErrors(prev => (prev.position ? { ...prev, position: '' } : prev));
                   }}
-                  placeholder="e.g. Master Instructor"
+                  placeholder={t('e.g. Master Instructor', 'مثال: مدرب رئيسي')}
                   className="w-full bg-brand-cream/50 border border-brand-clay rounded-xl p-2.5"
                 />
                 {staffErrors.position && <p className="text-[11px] text-red-500 font-bold mt-1">{staffErrors.position}</p>}
               </div>
 
               <div>
-                <label className="block mb-1 font-bold">Phone Number *</label>
+                <label className="block mb-1 font-bold">{t('Phone Number *', 'رقم الهاتف *')}</label>
                 <input
                   type="text"
                   required
@@ -1100,7 +1113,7 @@ export const AdminStaffSection: React.FC = () => {
               </div>
 
               <div>
-                <label className="block mb-1 font-bold">Email Address *</label>
+                <label className="block mb-1 font-bold">{t('Email Address *', 'البريد الإلكتروني *')}</label>
                 <input
                   type="email"
                   required
@@ -1116,26 +1129,26 @@ export const AdminStaffSection: React.FC = () => {
               </div>
 
               <div>
-                <label className="block mb-1 font-bold">Employment Status</label>
+                <label className="block mb-1 font-bold">{t('Employment Status', 'حالة التوظيف')}</label>
                 <select
                   value={formData.status}
                   onChange={e => setFormData({ ...formData, status: e.target.value as any })}
                   className="w-full bg-brand-cream/50 border border-brand-clay rounded-xl p-2.5 font-semibold"
                 >
-                  <option value="Active">Active</option>
-                  <option value="On Leave">On Leave</option>
-                  <option value="Inactive">Inactive</option>
-                  <option value="Former Staff">Former Staff</option>
+                  <option value="Active">{enumLabel('staffStatus', 'Active', lang)}</option>
+                  <option value="On Leave">{enumLabel('staffStatus', 'On Leave', lang)}</option>
+                  <option value="Inactive">{enumLabel('staffStatus', 'Inactive', lang)}</option>
+                  <option value="Former Staff">{enumLabel('staffStatus', 'Former Staff', lang)}</option>
                 </select>
               </div>
 
               <div>
-                <label className="block mb-1 font-bold">Skills (comma separated)</label>
+                <label className="block mb-1 font-bold">{t('Skills (comma separated)', 'المهارات (مفصولة بفواصل)')}</label>
                 <input
                   type="text"
                   value={formData.skills?.join(', ')}
-                  onChange={e => setFormData({ ...formData, skills: e.target.value.split(',').map(s => s.trim()) })}
-                  placeholder="Wheel, Handbuilding, Acrylic"
+                  onChange={e => setFormData({ ...formData, skills: e.target.value.split(/[,،]/).map(s => s.trim()) })}
+                  placeholder={t('Wheel, Handbuilding, Acrylic', 'مثال: العجلة, البناء اليدوي, الأكريليك')}
                   className="w-full bg-brand-cream/50 border border-brand-clay rounded-xl p-2.5"
                 />
               </div>
@@ -1145,18 +1158,17 @@ export const AdminStaffSection: React.FC = () => {
             <div className="pt-2 border-t border-brand-clay/60 space-y-3">
               <div className="flex items-center justify-between">
                 <label className="block font-bold text-xs text-brand-charcoal uppercase tracking-wider">
-                  Weekly Schedule & Working Hours
+                  {t('Weekly Schedule & Working Hours', 'الجدول الأسبوعي وساعات العمل')}
                 </label>
                 <span className="text-[10px] text-brand-charcoal/60">
                   {countScheduledDays(formData.weeklySchedule) > 0
-                    ? `${countScheduledDays(formData.weeklySchedule)} days configured`
-                    : 'No working hours set (Empty schedule)'}
+                    ? t(`${countScheduledDays(formData.weeklySchedule)} days configured`, `الأيام المضبوطة: ${countScheduledDays(formData.weeklySchedule)}`)
+                    : t('No working hours set (Empty schedule)', 'لم تُحدَّد ساعات عمل (جدول فارغ)')}
                 </span>
               </div>
 
               <p className="text-[10px] text-brand-charcoal/50">
-                Add a shift for each working day. A day can hold more than one shift (e.g. a morning and an evening shift).
-                Days with no shift count as non-working and block assignments.
+                {t('Add a shift for each working day. A day can hold more than one shift (e.g. a morning and an evening shift). Days with no shift count as non-working and block assignments.', 'أضف وردية لكل يوم عمل. يمكن أن يتضمن اليوم أكثر من وردية (مثل وردية صباحية وأخرى مسائية). الأيام التي بلا وردية تُعدّ غير عاملة وتمنع التكليفات.')}
               </p>
 
               <div className="max-h-80 space-y-2 overflow-y-auto always-scrollbar rounded-xl border border-brand-clay/60 bg-brand-cream/30 p-3">
@@ -1166,7 +1178,7 @@ export const AdminStaffSection: React.FC = () => {
                   return (
                     <div key={day} className="p-2 bg-white rounded-lg border border-brand-clay/40 text-xs space-y-2">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="font-bold text-brand-charcoal">{day}</span>
+                        <span className="font-bold text-brand-charcoal">{enumLabel('weekday', day, lang)}</span>
                         <div className="flex items-center gap-2">
                           <button
                             type="button"
@@ -1174,7 +1186,7 @@ export const AdminStaffSection: React.FC = () => {
                             className="text-[10px] font-bold text-brand-terracotta hover:underline flex items-center gap-1 cursor-pointer"
                           >
                             <Plus className="h-3 w-3" />
-                            <span>Add Shift</span>
+                            <span>{t('Add Shift', 'إضافة وردية')}</span>
                           </button>
                           {shifts.length > 0 && (
                             <button
@@ -1182,14 +1194,14 @@ export const AdminStaffSection: React.FC = () => {
                               onClick={() => handleClearDay(day)}
                               className="text-[10px] text-red-600 hover:underline font-bold cursor-pointer"
                             >
-                              Clear Day
+                              {t('Clear Day', 'مسح اليوم')}
                             </button>
                           )}
                         </div>
                       </div>
 
                       {shifts.length === 0 ? (
-                        <span className="text-[11px] text-gray-400 italic font-semibold">Off (No shift scheduled)</span>
+                        <span className="text-[11px] text-gray-400 italic font-semibold">{t('Off (No shift scheduled)', 'عطلة (لا توجد وردية مجدولة)')}</span>
                       ) : (
                         <div className="space-y-1.5">
                           {shifts.map((shift, idx) => (
@@ -1211,17 +1223,17 @@ export const AdminStaffSection: React.FC = () => {
                                   row laying itself out independently. */}
                               <div className="grid grid-cols-[3.25rem_minmax(0,1fr)_auto_minmax(0,1fr)_5rem] items-center gap-x-2 gap-y-2">
                                 <span className="text-[10px] font-bold uppercase tracking-wide text-brand-charcoal/50">
-                                  Shift
+                                  {t('Shift', 'وردية')}
                                 </span>
                                 <TimePicker
-                                  ariaLabel={`${day} shift ${idx + 1} start time`}
+                                  ariaLabel={t(`${day} shift ${idx + 1} start time`, `${enumLabel('weekday', day, lang)} — الوردية ${idx + 1} — وقت البدء`)}
                                   value={shift.startTime}
                                   onChange={val => handleUpdateShift(day, idx, { startTime: val })}
                                   invalid={!!shiftTimeProblems[`${day}-${idx}`]}
                                 />
                                 <span className="text-center font-bold text-brand-charcoal/40">–</span>
                                 <TimePicker
-                                  ariaLabel={`${day} shift ${idx + 1} end time`}
+                                  ariaLabel={t(`${day} shift ${idx + 1} end time`, `${enumLabel('weekday', day, lang)} — الوردية ${idx + 1} — وقت الانتهاء`)}
                                   value={shift.endTime}
                                   onChange={val => handleUpdateShift(day, idx, { endTime: val })}
                                   invalid={!!shiftTimeProblems[`${day}-${idx}`]}
@@ -1231,14 +1243,14 @@ export const AdminStaffSection: React.FC = () => {
                                   onClick={() => handleRemoveShift(day, idx)}
                                   className="justify-self-end text-[10px] font-bold text-red-600 hover:underline cursor-pointer"
                                 >
-                                  Remove
+                                  {t('Remove', 'إزالة')}
                                 </button>
 
                                 <span className="text-[10px] font-bold uppercase tracking-wide text-brand-charcoal/50">
-                                  Break
+                                  {t('Break', 'استراحة')}
                                 </span>
                                 <TimePicker
-                                  ariaLabel={`${day} shift ${idx + 1} break start`}
+                                  ariaLabel={t(`${day} shift ${idx + 1} break start`, `${enumLabel('weekday', day, lang)} — الوردية ${idx + 1} — بداية الاستراحة`)}
                                   value={shift.breakStart}
                                   onChange={val => handleUpdateShift(day, idx, { breakStart: val })}
                                   invalid={!!shiftTimeProblems[`${day}-${idx}`]}
@@ -1246,14 +1258,14 @@ export const AdminStaffSection: React.FC = () => {
                                 />
                                 <span className="text-center font-bold text-brand-charcoal/40">–</span>
                                 <TimePicker
-                                  ariaLabel={`${day} shift ${idx + 1} break end`}
+                                  ariaLabel={t(`${day} shift ${idx + 1} break end`, `${enumLabel('weekday', day, lang)} — الوردية ${idx + 1} — نهاية الاستراحة`)}
                                   value={shift.breakEnd}
                                   onChange={val => handleUpdateShift(day, idx, { breakEnd: val })}
                                   invalid={!!shiftTimeProblems[`${day}-${idx}`]}
                                   optional
                                 />
                                 <span className="justify-self-end text-[10px] font-semibold text-brand-charcoal/35">
-                                  optional
+                                  {t('optional', 'اختياري')}
                                 </span>
                               </div>
 
@@ -1282,7 +1294,7 @@ export const AdminStaffSection: React.FC = () => {
         <ConsoleModal
           onClose={() => setShowTimeOffModal(false)}
           onSubmit={handleSaveTimeOff}
-          title={<span className="truncate">Record Leave for {selectedStaff.name}</span>}
+          title={<span className="truncate">{t('Record Leave for', 'تسجيل إجازة لـ')} {selectedStaff.name}</span>}
           footer={
             <>
               <button
@@ -1290,14 +1302,14 @@ export const AdminStaffSection: React.FC = () => {
                 onClick={() => setShowTimeOffModal(false)}
                 className="px-4 py-2 bg-brand-sand text-brand-charcoal rounded-xl text-xs font-bold cursor-pointer"
               >
-                Cancel
+                {t('Cancel', 'إلغاء')}
               </button>
 
               <button
                 type="submit"
                 className="px-4 py-2 bg-brand-terracotta text-brand-cream rounded-xl text-xs font-bold shadow-xs cursor-pointer"
               >
-                Save Leave Record
+                {t('Save Leave Record', 'حفظ سجل الإجازة')}
               </button>
             </>
           }
@@ -1305,7 +1317,7 @@ export const AdminStaffSection: React.FC = () => {
 
             <div className="space-y-3 text-xs font-semibold text-brand-charcoal">
               <div>
-                <label className="block mb-1 font-bold">Start Date</label>
+                <label className="block mb-1 font-bold">{t('Start Date', 'تاريخ البدء')}</label>
                 <DateInput
                   required
                   value={timeOffData.startDate}
@@ -1315,7 +1327,7 @@ export const AdminStaffSection: React.FC = () => {
               </div>
 
               <div>
-                <label className="block mb-1 font-bold">End Date</label>
+                <label className="block mb-1 font-bold">{t('End Date', 'تاريخ الانتهاء')}</label>
                 <DateInput
                   required
                   value={timeOffData.endDate}
@@ -1325,13 +1337,13 @@ export const AdminStaffSection: React.FC = () => {
               </div>
 
               <div>
-                <label className="block mb-1 font-bold">Reason</label>
+                <label className="block mb-1 font-bold">{t('Reason', 'السبب')}</label>
                 <input
                   type="text"
                   required
                   value={timeOffData.reason}
                   onChange={e => setTimeOffData({ ...timeOffData, reason: e.target.value })}
-                  placeholder="e.g. Annual Leave, Medical Leave"
+                  placeholder={t('e.g. Annual Leave, Medical Leave', 'مثال: إجازة سنوية، إجازة مرضية')}
                   className="w-full bg-brand-cream/50 border border-brand-clay rounded-xl p-2.5"
                 />
               </div>

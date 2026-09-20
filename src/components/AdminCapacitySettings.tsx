@@ -7,6 +7,8 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { StudioTableConfig, CapacitySettingsConfig } from '../types';
 import { Save, AlertTriangle, Plus, Trash2, Check, Shield, LayoutGrid } from 'lucide-react';
+import { useLanguage } from '../context/LanguageContext';
+import { enumLabel } from '../utils/enumLabels';
 
 export const AdminCapacitySettings: React.FC = () => {
   const {
@@ -19,6 +21,7 @@ export const AdminCapacitySettings: React.FC = () => {
     appSettings: rawAppSettings,
     queue: rawQueue
   } = useApp();
+  const { lang, t } = useLanguage();
 
   const [resourceToast, setResourceToast] = useState<string | null>(null);
   const showResourceToast = (msg: string) => {
@@ -37,18 +40,18 @@ export const AdminCapacitySettings: React.FC = () => {
       status: 'Active',
       order: studioResources.length
     });
-    showResourceToast('Resource added. It is now selectable on the Workshop pages.');
+    showResourceToast(t('Resource added. It is now selectable on the Workshop pages.', 'تمت إضافة المورد. يمكن اختياره الآن في صفحات الورش.'));
   };
 
   const handleSetResourceStatus = async (id: string, status: 'Active' | 'Inactive' | 'Maintenance', name: string) => {
     await updateStudioResource(id, { status });
-    showResourceToast(`"${name}" set to ${status}.`);
+    showResourceToast(t(`"${name}" set to ${status}.`, `تم ضبط "${name}" على ${enumLabel('resourceStatus', status, lang)}.`));
   };
 
   const handleRemoveResource = async (id: string, name: string) => {
-    if (!window.confirm(`Remove "${name}"? If it is used by existing sessions it will be set to Inactive instead.`)) return;
+    if (!window.confirm(t(`Remove "${name}"? If it is used by existing sessions it will be set to Inactive instead.`, `إزالة "${name}"؟ إذا كان مستخدمًا في جلسات قائمة فسيتم ضبطه على «غير نشط» بدلًا من ذلك.`))) return;
     const result = await removeStudioResource(id);
-    showResourceToast(result.message || `"${name}" removed.`);
+    showResourceToast(result.message || t(`"${name}" removed.`, `تمت إزالة "${name}".`));
   };
   const rawConfig = rawAppSettings.find(s => s.id === 'capacitySettings')?.value as CapacitySettingsConfig | undefined;
 
@@ -104,9 +107,10 @@ export const AdminCapacitySettings: React.FC = () => {
     await updateSetting('capacitySettings', updatedConfig);
 
     if (activeOccupancy > newSeats) {
-      setWarningBanner(
-        `Current occupancy (${activeOccupancy} seats) exceeds newly configured capacity (${newSeats} seats). Active sessions are preserved, but available capacity is set to 0.`
-      );
+      setWarningBanner(t(
+        `Current occupancy (${activeOccupancy} seats) exceeds newly configured capacity (${newSeats} seats). Active sessions are preserved, but available capacity is set to 0.`,
+        `يتجاوز الإشغال الحالي (${activeOccupancy} مقعد) السعة المضبوطة حديثًا (${newSeats} مقعد). تُحفظ الجلسات النشطة، لكن السعة المتاحة تُضبط على 0.`
+      ));
     } else {
       setWarningBanner(null);
     }
@@ -132,9 +136,9 @@ export const AdminCapacitySettings: React.FC = () => {
   };
 
   const handleRemoveTable = (id: string) => {
-    const tableToRemove = tablesList.find(t => t.id === id);
+    const tableToRemove = tablesList.find(tbl => tbl.id === id);
     if (!tableToRemove) return;
-    const updated = tablesList.filter(t => t.id !== id);
+    const updated = tablesList.filter(tbl => tbl.id !== id);
     setTablesList(updated);
     setTotalTables(updated.length);
     setTotalSeats(Math.max(0, totalSeats - tableToRemove.seats));
@@ -143,9 +147,9 @@ export const AdminCapacitySettings: React.FC = () => {
   return (
     <div className="space-y-6 text-left animate-in fade-in duration-200">
       <div className="border-b border-brand-clay/40 pb-4">
-        <h2 className="font-display text-xl font-extrabold text-brand-charcoal">Studio & Queue Capacity Configuration</h2>
+        <h2 className="font-display text-xl font-extrabold text-brand-charcoal">{t('Studio & Queue Capacity Configuration', 'إعدادات سعة الاستوديو والطابور')}</h2>
         <p className="text-xs text-brand-charcoal/70 mt-1">
-          Manage live queue seat allocation, maximum group thresholds, table inventory, and seat counts across the studio.
+          {t('Manage live queue seat allocation, maximum group thresholds, table inventory, and seat counts across the studio.', 'إدارة تخصيص مقاعد الطابور المباشر وحدود المجموعات القصوى وجرد الطاولات وأعداد المقاعد في الاستوديو.')}
         </p>
       </div>
 
@@ -154,7 +158,7 @@ export const AdminCapacitySettings: React.FC = () => {
         <div className="p-4 bg-amber-50 border-2 border-amber-300 rounded-2xl flex items-start gap-3 text-amber-900 shadow-sm animate-in slide-in-from-top-2">
           <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
           <div className="text-xs leading-relaxed font-semibold">
-            <p className="font-bold uppercase tracking-wider text-[11px] text-amber-800">Capacity Warning</p>
+            <p className="font-bold uppercase tracking-wider text-[11px] text-amber-800">{t('Capacity Warning', 'تحذير السعة')}</p>
             <p className="mt-0.5">{warningBanner}</p>
           </div>
         </div>
@@ -163,7 +167,7 @@ export const AdminCapacitySettings: React.FC = () => {
       {savedSuccess && (
         <div className="p-3 bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs font-bold rounded-xl flex items-center gap-2">
           <Check className="h-4 w-4 text-emerald-600" />
-          <span>Capacity settings updated and applied across Live Queue & Admin modules!</span>
+          <span>{t('Capacity settings updated and applied across Live Queue & Admin modules!', 'تم تحديث إعدادات السعة وتطبيقها على الطابور المباشر ووحدات الإدارة!')}</span>
         </div>
       )}
 
@@ -171,7 +175,7 @@ export const AdminCapacitySettings: React.FC = () => {
         {/* Global capacity metrics */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="p-4 bg-brand-cream/35 border border-brand-clay rounded-2xl space-y-1">
-            <label className="text-xs font-bold text-brand-charcoal/80 block">Total Tables</label>
+            <label className="text-xs font-bold text-brand-charcoal/80 block">{t('Total Tables', 'إجمالي الطاولات')}</label>
             <input
               type="number"
               min={1}
@@ -182,7 +186,7 @@ export const AdminCapacitySettings: React.FC = () => {
           </div>
 
           <div className="p-4 bg-brand-cream/35 border border-brand-clay rounded-2xl space-y-1">
-            <label className="text-xs font-bold text-brand-charcoal/80 block">Total Studio Seats</label>
+            <label className="text-xs font-bold text-brand-charcoal/80 block">{t('Total Studio Seats', 'إجمالي مقاعد الاستوديو')}</label>
             <input
               type="number"
               min={1}
@@ -193,7 +197,7 @@ export const AdminCapacitySettings: React.FC = () => {
           </div>
 
           <div className="p-4 bg-brand-cream/35 border border-brand-clay rounded-2xl space-y-1">
-            <label className="text-xs font-bold text-brand-charcoal/80 block">Default Seats per Table</label>
+            <label className="text-xs font-bold text-brand-charcoal/80 block">{t('Default Seats per Table', 'المقاعد الافتراضية لكل طاولة')}</label>
             <input
               type="number"
               min={1}
@@ -204,7 +208,7 @@ export const AdminCapacitySettings: React.FC = () => {
           </div>
 
           <div className="p-4 bg-brand-cream/35 border border-brand-clay rounded-2xl space-y-1">
-            <label className="text-xs font-bold text-brand-charcoal/80 block">Max Walk-in Group Size</label>
+            <label className="text-xs font-bold text-brand-charcoal/80 block">{t('Max Walk-in Group Size', 'الحد الأقصى لحجم مجموعة الزيارة المباشرة')}</label>
             <input
               type="number"
               min={1}
@@ -218,9 +222,9 @@ export const AdminCapacitySettings: React.FC = () => {
         {/* Group per table policy */}
         <div className="p-4 bg-brand-cream/20 border border-brand-clay rounded-2xl flex items-center justify-between">
           <div>
-            <span className="text-xs font-bold text-brand-charcoal block">Strict Table Isolation (One Group per Table)</span>
+            <span className="text-xs font-bold text-brand-charcoal block">{t('Strict Table Isolation (One Group per Table)', 'عزل صارم للطاولات (مجموعة واحدة لكل طاولة)')}</span>
             <span className="text-[11px] text-brand-charcoal/60">
-              When enabled, a table is locked to a single group regardless of leftover unseated chairs.
+              {t('When enabled, a table is locked to a single group regardless of leftover unseated chairs.', 'عند التفعيل، تُقفل الطاولة لمجموعة واحدة بغض النظر عن الكراسي المتبقية غير المشغولة.')}
             </span>
           </div>
           <input
@@ -235,7 +239,7 @@ export const AdminCapacitySettings: React.FC = () => {
         <div className="space-y-3">
           <div className="flex justify-between items-center">
             <h3 className="font-display font-bold text-sm text-brand-charcoal uppercase tracking-wider">
-              Table Inventory & Seating Map ({tablesList.length} Tables)
+              {t('Table Inventory & Seating Map', 'جرد الطاولات وخريطة الجلوس')} ({tablesList.length} {t('Tables', 'طاولة')})
             </h3>
             <button
               type="button"
@@ -243,7 +247,7 @@ export const AdminCapacitySettings: React.FC = () => {
               className="px-3 py-1.5 bg-brand-sand hover:bg-brand-sand/80 text-brand-charcoal rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
             >
               <Plus className="h-3.5 w-3.5 text-brand-terracotta" />
-              <span>Add Table</span>
+              <span>{t('Add Table', 'إضافة طاولة')}</span>
             </button>
           </div>
 
@@ -252,20 +256,20 @@ export const AdminCapacitySettings: React.FC = () => {
               <thead className="bg-brand-cream/50 border-b border-brand-clay/60 text-[10px] uppercase font-bold text-brand-charcoal/70">
                 <tr>
                   <th className="p-3">#</th>
-                  <th className="p-3">Table Name</th>
-                  <th className="p-3">Seats</th>
-                  <th className="p-3">Status</th>
-                  <th className="p-3 text-right">Actions</th>
+                  <th className="p-3">{t('Table Name', 'اسم الطاولة')}</th>
+                  <th className="p-3">{t('Seats', 'المقاعد')}</th>
+                  <th className="p-3">{t('Status', 'الحالة')}</th>
+                  <th className="p-3 text-right">{t('Actions', 'الإجراءات')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-brand-clay/30">
-                {tablesList.map((t, idx) => (
-                  <tr key={t.id} className="hover:bg-brand-cream/20">
-                    <td className="p-3 font-mono font-bold text-brand-charcoal/60">{t.number}</td>
+                {tablesList.map((tbl, idx) => (
+                  <tr key={tbl.id} className="hover:bg-brand-cream/20">
+                    <td className="p-3 font-mono font-bold text-brand-charcoal/60">{tbl.number}</td>
                     <td className="p-3 font-bold text-brand-charcoal">
                       <input
                         type="text"
-                        value={t.name}
+                        value={tbl.name}
                         onChange={e => {
                           const updated = [...tablesList];
                           updated[idx].name = e.target.value;
@@ -278,7 +282,7 @@ export const AdminCapacitySettings: React.FC = () => {
                       <input
                         type="number"
                         min={1}
-                        value={t.seats}
+                        value={tbl.seats}
                         onChange={e => {
                           const val = parseInt(e.target.value) || 1;
                           const updated = [...tablesList];
@@ -292,7 +296,7 @@ export const AdminCapacitySettings: React.FC = () => {
                     </td>
                     <td className="p-3">
                       <select
-                        value={t.status}
+                        value={tbl.status}
                         onChange={e => {
                           const updated = [...tablesList];
                           updated[idx].status = e.target.value as any;
@@ -300,15 +304,15 @@ export const AdminCapacitySettings: React.FC = () => {
                         }}
                         className="bg-white border border-brand-clay/60 text-[11px] font-bold rounded-lg px-2 py-1"
                       >
-                        <option value="Active">Active</option>
-                        <option value="Inactive">Inactive</option>
-                        <option value="Maintenance">Maintenance</option>
+                        <option value="Active">{enumLabel('resourceStatus', 'Active', lang)}</option>
+                        <option value="Inactive">{enumLabel('resourceStatus', 'Inactive', lang)}</option>
+                        <option value="Maintenance">{enumLabel('resourceStatus', 'Maintenance', lang)}</option>
                       </select>
                     </td>
                     <td className="p-3 text-right">
                       <button
                         type="button"
-                        onClick={() => handleRemoveTable(t.id)}
+                        onClick={() => handleRemoveTable(tbl.id)}
                         className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg border border-brand-clay/30 cursor-pointer"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -328,7 +332,7 @@ export const AdminCapacitySettings: React.FC = () => {
             className="px-6 py-2.5 bg-brand-terracotta hover:bg-brand-terracotta/90 text-brand-cream rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-2 cursor-pointer"
           >
             <Save className="h-4 w-4" />
-            <span>Save Capacity Settings</span>
+            <span>{t('Save Capacity Settings', 'حفظ إعدادات السعة')}</span>
           </button>
         </div>
       </form>
@@ -342,11 +346,12 @@ export const AdminCapacitySettings: React.FC = () => {
           <div>
             <h3 className="font-display text-lg font-extrabold text-brand-charcoal flex items-center gap-2">
               <LayoutGrid className="h-5 w-5 text-brand-terracotta" />
-              <span>Studio Rooms &amp; Table Stations</span>
+              <span>{t('Studio Rooms & Table Stations', 'قاعات الاستوديو ومحطات الطاولات')}</span>
             </h3>
             <p className="text-xs text-brand-charcoal/70 mt-1">
-              These are the resources the Workshop pages assign sessions to. Only <strong>Active</strong> resources
-              can take a new assignment; Inactive and Maintenance resources stay visible for historical sessions.
+              {lang === 'ar'
+                ? <>هذه هي الموارد التي تُسند إليها صفحات الورش الجلسات. لا يمكن إسناد جلسة جديدة إلا إلى الموارد <strong>النشطة</strong>؛ وتبقى الموارد غير النشطة وقيد الصيانة ظاهرة للجلسات السابقة.</>
+                : <>These are the resources the Workshop pages assign sessions to. Only <strong>Active</strong> resources can take a new assignment; Inactive and Maintenance resources stay visible for historical sessions.</>}
             </p>
           </div>
 
@@ -356,7 +361,7 @@ export const AdminCapacitySettings: React.FC = () => {
             className="px-4 py-2.5 bg-brand-terracotta hover:bg-brand-terracotta/90 text-brand-cream rounded-xl text-xs font-bold shadow-sm flex items-center gap-2 cursor-pointer shrink-0"
           >
             <Plus className="h-4 w-4" />
-            <span>Add Resource</span>
+            <span>{t('Add Resource', 'إضافة مورد')}</span>
           </button>
         </div>
 
@@ -371,19 +376,19 @@ export const AdminCapacitySettings: React.FC = () => {
           <table className="w-full text-xs text-left">
             <thead className="bg-brand-sand/40 text-brand-charcoal/60 uppercase tracking-wider font-bold">
               <tr>
-                <th className="p-3">Display Name</th>
-                <th className="p-3">Type</th>
-                <th className="p-3 text-center">Seats</th>
-                <th className="p-3">Location / Notes</th>
-                <th className="p-3">Status</th>
-                <th className="p-3 text-right">Actions</th>
+                <th className="p-3">{t('Display Name', 'اسم العرض')}</th>
+                <th className="p-3">{t('Type', 'النوع')}</th>
+                <th className="p-3 text-center">{t('Seats', 'المقاعد')}</th>
+                <th className="p-3">{t('Location / Notes', 'الموقع / ملاحظات')}</th>
+                <th className="p-3">{t('Status', 'الحالة')}</th>
+                <th className="p-3 text-right">{t('Actions', 'الإجراءات')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-brand-clay/30">
               {studioResources.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="p-6 text-center text-brand-charcoal/50 italic">
-                    No rooms or table stations yet. Add one so it appears in the Workshop assignment dropdowns.
+                    {t('No rooms or table stations yet. Add one so it appears in the Workshop assignment dropdowns.', 'لا توجد قاعات أو محطات طاولات بعد. أضف واحدة لتظهر في قوائم إسناد الورش.')}
                   </td>
                 </tr>
               ) : (
@@ -410,8 +415,8 @@ export const AdminCapacitySettings: React.FC = () => {
                         onChange={e => updateStudioResource(resource.id, { type: e.target.value as any })}
                         className="w-full bg-brand-cream/40 border border-brand-clay rounded-lg p-2 font-semibold text-brand-charcoal cursor-pointer"
                       >
-                        <option value="Studio Room">Studio Room</option>
-                        <option value="Table Station">Table Station</option>
+                        <option value="Studio Room">{enumLabel('resourceType', 'Studio Room', lang)}</option>
+                        <option value="Table Station">{enumLabel('resourceType', 'Table Station', lang)}</option>
                       </select>
                     </td>
 
@@ -428,7 +433,7 @@ export const AdminCapacitySettings: React.FC = () => {
                     <td className="p-2.5">
                       <input
                         type="text"
-                        placeholder="Optional location or notes"
+                        placeholder={t('Optional location or notes', 'موقع أو ملاحظات اختيارية')}
                         value={resource.location || ''}
                         onChange={e => updateStudioResource(resource.id, { location: e.target.value })}
                         className="w-full bg-brand-cream/40 border border-brand-clay rounded-lg p-2 font-semibold text-brand-charcoal"
@@ -447,9 +452,9 @@ export const AdminCapacitySettings: React.FC = () => {
                               : 'bg-gray-100 border-gray-200 text-gray-600'
                         }`}
                       >
-                        <option value="Active">Active</option>
-                        <option value="Inactive">Inactive</option>
-                        <option value="Maintenance">Maintenance</option>
+                        <option value="Active">{enumLabel('resourceStatus', 'Active', lang)}</option>
+                        <option value="Inactive">{enumLabel('resourceStatus', 'Inactive', lang)}</option>
+                        <option value="Maintenance">{enumLabel('resourceStatus', 'Maintenance', lang)}</option>
                       </select>
                     </td>
 
@@ -461,7 +466,7 @@ export const AdminCapacitySettings: React.FC = () => {
                             onClick={() => handleSetResourceStatus(resource.id, 'Inactive', resource.name)}
                             className="px-2.5 py-1.5 rounded-lg border border-brand-clay/60 text-brand-charcoal/70 hover:bg-brand-sand text-[11px] font-bold cursor-pointer"
                           >
-                            Disable
+                            {t('Disable', 'تعطيل')}
                           </button>
                         ) : (
                           <button
@@ -469,14 +474,14 @@ export const AdminCapacitySettings: React.FC = () => {
                             onClick={() => handleSetResourceStatus(resource.id, 'Active', resource.name)}
                             className="px-2.5 py-1.5 rounded-lg border border-emerald-300 text-emerald-700 hover:bg-emerald-50 text-[11px] font-bold cursor-pointer"
                           >
-                            Reactivate
+                            {t('Reactivate', 'إعادة التفعيل')}
                           </button>
                         )}
 
                         <button
                           type="button"
                           onClick={() => handleRemoveResource(resource.id, resource.name)}
-                          title="Remove — resources used by existing sessions are set to Inactive instead"
+                          title={t('Remove — resources used by existing sessions are set to Inactive instead', 'إزالة — تُضبط الموارد المستخدمة في جلسات قائمة على «غير نشط» بدلًا من ذلك')}
                           className="p-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 cursor-pointer"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -491,8 +496,7 @@ export const AdminCapacitySettings: React.FC = () => {
         </div>
 
         <p className="text-[11px] text-brand-charcoal/55">
-          Changes save immediately to the shared resource record, so the Workshop Monthly Schedule and Session
-          Calendar pick them up without a refresh.
+          {t('Changes save immediately to the shared resource record, so the Workshop Monthly Schedule and Session Calendar pick them up without a refresh.', 'تُحفظ التغييرات فورًا في سجل الموارد المشترك، فتظهر في الجدول الشهري للورشة وتقويم الجلسات دون تحديث الصفحة.')}
         </p>
       </div>
 

@@ -14,6 +14,7 @@ import { formatTime, RIYADH_TIME_ZONE } from '../utils/calendarConfig';
 import { LanguageToggle } from './LanguageToggle';
 import { useLanguage } from '../context/LanguageContext';
 import { enumLabel } from '../utils/enumLabels';
+import { displayPosition } from '../utils/staffPosition';
 
 export const AdminSidebar: React.FC = () => {
   const {
@@ -324,7 +325,7 @@ export const AdminTopBar: React.FC = () => {
                   level, which is what `role` holds. */}
               {(currentStaff.position || currentStaff.role) && (
                 <p className="text-[9px] font-bold text-brand-sage uppercase tracking-wider">
-                  {currentStaff.position || enumLabel('staffRole', currentStaff.role, lang)}
+                  {currentStaff.position ? displayPosition(currentStaff.position, lang) : enumLabel('staffRole', currentStaff.role, lang)}
                 </p>
               )}
             </div>

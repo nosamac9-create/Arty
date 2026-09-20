@@ -44,7 +44,16 @@ const LABELS: Record<string, Record<string, string>> = {
   staffAvailability: { 'Available': 'متاح', 'Busy': 'مشغول', 'Outside working hours': 'خارج ساعات العمل',
                        'On Leave': 'في إجازة', 'No schedule set': 'لا يوجد جدول محدد' },
   // staff.role: the console permission level. Compared elsewhere (isSuperAdmin), so display-only here.
-  staffRole: { 'Super Admin': 'مدير عام', 'Admin': 'مسؤول', 'Staff': 'موظف' }
+  staffRole: { 'Super Admin': 'مدير عام', 'Admin': 'مسؤول', 'Staff': 'موظف' },
+  // staff.status. 'On Leave' is worded the same as staffAvailability's 'On Leave'.
+  staffStatus:    { 'Active': 'نشط', 'On Leave': 'في إجازة', 'Inactive': 'غير نشط', 'Former Staff': 'موظف سابق' },
+  // Full weekday names, as stored on staff schedules (WEEKDAYS).
+  weekday:        { 'Sunday': 'الأحد', 'Monday': 'الاثنين', 'Tuesday': 'الثلاثاء', 'Wednesday': 'الأربعاء',
+                    'Thursday': 'الخميس', 'Friday': 'الجمعة', 'Saturday': 'السبت' },
+  // StaffAssignment.type, shown as a badge on a staff member's profile.
+  assignmentType: { 'Workshop Session': 'جلسة ورشة', 'Event': 'فعالية', 'Birthday': 'عيد ميلاد', 'Queue Duty': 'مناوبة الطابور' },
+  // studio_resources.type (stored and compared)
+  resourceType:   { 'Studio Room': 'قاعة استوديو', 'Table Station': 'محطة طاولة' }
 };
 
 export function enumLabel(group: keyof typeof LABELS, value: string, lang: Lang): string {

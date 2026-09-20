@@ -6,6 +6,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Clock, X } from 'lucide-react';
 import { timeToMinutes } from '../../utils/timeUtils';
+import { useLanguage } from '../../context/LanguageContext';
 
 /** Quarter-hour steps only, so schedules stay on clean boundaries. */
 const MINUTES = ['00', '15', '30', '45'] as const;
@@ -64,6 +65,7 @@ interface Props {
 export const TimePicker: React.FC<Props> = ({
   value, onChange, ariaLabel, optional, disabled, invalid
 }) => {
+  const { t } = useLanguage();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -123,7 +125,7 @@ export const TimePicker: React.FC<Props> = ({
           invalid ? 'border-red-400' : 'border-brand-clay hover:border-brand-muted'
         } ${value ? 'text-brand-charcoal' : 'text-brand-charcoal/40'}`}
       >
-        <span className="truncate">{value || 'Set time'}</span>
+        <span className="truncate">{value || t('Set time', 'حدّد الوقت')}</span>
         <Clock className="h-3.5 w-3.5 shrink-0 text-brand-charcoal/40" />
       </button>
 
@@ -200,7 +202,7 @@ export const TimePicker: React.FC<Props> = ({
                 className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-bold text-red-600 hover:bg-red-50 cursor-pointer"
               >
                 <X className="h-3 w-3" />
-                <span>Clear</span>
+                <span>{t('Clear', 'مسح')}</span>
               </button>
             ) : <span />}
 

@@ -13,6 +13,7 @@ import {
   Save, Check, Calendar, Gift, Info, Plus, Trash2, ChevronUp, ChevronDown, ListChecks, ShieldAlert
 } from 'lucide-react';
 import { LineListTextarea } from './ui/LineListTextarea';
+import { useLanguage } from '../context/LanguageContext';
 
 export const AdminEventsSettings: React.FC = () => {
   const {
@@ -20,6 +21,7 @@ export const AdminEventsSettings: React.FC = () => {
     // Already provided by the shared data layer.
     appSettings: rawAppSettings
   } = useApp();
+  const { lang, t } = useLanguage();
   const rawConfig = rawAppSettings.find(s => s.id === 'eventsSettings')?.value as EventsSettingsConfig | undefined;
 
   const [minBirthdayNoticeDays, setMinBirthdayNoticeDays] = useState<number>(rawConfig?.minBirthdayNoticeDays ?? 4);
@@ -90,7 +92,7 @@ export const AdminEventsSettings: React.FC = () => {
   const handleRemoveField = (id: string) => {
     const field = birthdayFormFields.find(f => f.id === id);
     if (!field || field.system) return;
-    if (!window.confirm(`Remove the "${field.label}" field from the birthday booking form?`)) return;
+    if (!window.confirm(t(`Remove the "${field.label}" field from the birthday booking form?`, `إزالة الحقل "${field.label}" من نموذج حجز عيد الميلاد؟`))) return;
     commitFields(birthdayFormFields.filter(f => f.id !== id));
   };
 
@@ -123,7 +125,7 @@ export const AdminEventsSettings: React.FC = () => {
     e.preventDefault();
 
     if (minBirthdayNoticeDays < 0) {
-      alert("Notice days must be a non-negative integer.");
+      alert(t('Notice days must be a non-negative integer.', 'يجب أن تكون أيام الإشعار عددًا صحيحًا غير سالب.'));
       return;
     }
 
@@ -149,7 +151,7 @@ export const AdminEventsSettings: React.FC = () => {
       {savedSuccess && (
         <div className="p-3 bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs font-bold rounded-xl flex items-center gap-2">
           <Check className="h-4 w-4 text-emerald-600" />
-          <span>Events settings saved! Birthday booking form validation updated.</span>
+          <span>{t('Events settings saved! Birthday booking form validation updated.', 'تم حفظ إعدادات الفعاليات! تم تحديث التحقق في نموذج حجز عيد الميلاد.')}</span>
         </div>
       )}
 
@@ -157,10 +159,10 @@ export const AdminEventsSettings: React.FC = () => {
         <div className="border-b border-brand-clay/50 pb-3">
           <h3 className="font-display text-lg font-extrabold text-brand-charcoal flex items-center gap-2">
             <Gift className="h-5 w-5 text-brand-terracotta" />
-            <span>Events &amp; Birthday Settings</span>
+            <span>{t('Events & Birthday Settings', 'إعدادات الفعاليات وأعياد الميلاد')}</span>
           </h3>
           <p className="text-xs text-brand-charcoal/70 mt-1">
-            The booking rules the customer site enforces: notice periods, guest ceilings, deposit and cancellation window.
+            {t('The booking rules the customer site enforces: notice periods, guest ceilings, deposit and cancellation window.', 'قواعد الحجز التي يطبّقها موقع العملاء: فترات الإشعار وحدود الضيوف والعربون ونافذة الإلغاء.')}
           </p>
         </div>
 
@@ -170,13 +172,13 @@ export const AdminEventsSettings: React.FC = () => {
           <div className="p-5 bg-brand-cream/35 border border-brand-clay rounded-2xl space-y-3">
             <div className="flex items-center gap-2 text-brand-terracotta">
               <Gift className="h-5 w-5" />
-              <h3 className="font-display font-bold text-sm text-brand-charcoal">Minimum Birthday Booking Notice (Days)</h3>
+              <h3 className="font-display font-bold text-sm text-brand-charcoal">{t('Minimum Birthday Booking Notice (Days)', 'الحد الأدنى لإشعار حجز عيد الميلاد (بالأيام)')}</h3>
             </div>
             <p className="text-xs text-brand-charcoal/60 leading-relaxed">
-              Customers must pick a date at least this many days in advance when submitting a birthday package request.
+              {t('Customers must pick a date at least this many days in advance when submitting a birthday package request.', 'يجب على العملاء اختيار تاريخ قبل هذا العدد من الأيام على الأقل عند تقديم طلب باقة عيد ميلاد.')}
             </p>
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-brand-charcoal/70 uppercase block">Notice Days</label>
+              <label className="text-[10px] font-bold text-brand-charcoal/70 uppercase block">{t('Notice Days', 'أيام الإشعار')}</label>
               <input
                 type="number"
                 min={0}
@@ -192,13 +194,13 @@ export const AdminEventsSettings: React.FC = () => {
           <div className="p-5 bg-brand-cream/35 border border-brand-clay rounded-2xl space-y-3">
             <div className="flex items-center gap-2 text-brand-terracotta">
               <Calendar className="h-5 w-5" />
-              <h3 className="font-display font-bold text-sm text-brand-charcoal font-display">Maximum Guests Per Private Event</h3>
+              <h3 className="font-display font-bold text-sm text-brand-charcoal font-display">{t('Maximum Guests Per Private Event', 'الحد الأقصى للضيوف لكل فعالية خاصة')}</h3>
             </div>
             <p className="text-xs text-brand-charcoal/60 leading-relaxed">
-              Upper guest limit allowed per private event package reservation.
+              {t('Upper guest limit allowed per private event package reservation.', 'الحد الأعلى لعدد الضيوف المسموح به في كل حجز باقة فعالية خاصة.')}
             </p>
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-brand-charcoal/70 uppercase block">Max Guests</label>
+              <label className="text-[10px] font-bold text-brand-charcoal/70 uppercase block">{t('Max Guests', 'الحد الأقصى للضيوف')}</label>
               <input
                 type="number"
                 min={1}
@@ -214,13 +216,13 @@ export const AdminEventsSettings: React.FC = () => {
           <div className="p-5 bg-brand-cream/35 border border-brand-clay rounded-2xl space-y-3">
             <div className="flex items-center gap-2 text-brand-terracotta">
               <Info className="h-5 w-5" />
-              <h3 className="font-display font-bold text-sm text-brand-charcoal">Event Reservation Deposit (%)</h3>
+              <h3 className="font-display font-bold text-sm text-brand-charcoal">{t('Event Reservation Deposit (%)', 'عربون حجز الفعالية (%)')}</h3>
             </div>
             <p className="text-xs text-brand-charcoal/60 leading-relaxed">
-              Required deposit percentage for private event confirmations.
+              {t('Required deposit percentage for private event confirmations.', 'نسبة العربون المطلوبة لتأكيد الفعاليات الخاصة.')}
             </p>
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-brand-charcoal/70 uppercase block">Deposit (%)</label>
+              <label className="text-[10px] font-bold text-brand-charcoal/70 uppercase block">{t('Deposit (%)', 'العربون (%)')}</label>
               <input
                 type="number"
                 min={0}
@@ -237,13 +239,13 @@ export const AdminEventsSettings: React.FC = () => {
           <div className="p-5 bg-brand-cream/35 border border-brand-clay rounded-2xl space-y-3">
             <div className="flex items-center gap-2 text-brand-terracotta">
               <Calendar className="h-5 w-5" />
-              <h3 className="font-display font-bold text-sm text-brand-charcoal font-display">Cancellation Notice Window (Days)</h3>
+              <h3 className="font-display font-bold text-sm text-brand-charcoal font-display">{t('Cancellation Notice Window (Days)', 'نافذة إشعار الإلغاء (بالأيام)')}</h3>
             </div>
             <p className="text-xs text-brand-charcoal/60 leading-relaxed">
-              Minimum notice required for full deposit refund upon cancellation.
+              {t('Minimum notice required for full deposit refund upon cancellation.', 'الحد الأدنى للإشعار المطلوب لاسترداد العربون كاملًا عند الإلغاء.')}
             </p>
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-brand-charcoal/70 uppercase block">Cancellation Window (Days)</label>
+              <label className="text-[10px] font-bold text-brand-charcoal/70 uppercase block">{t('Cancellation Window (Days)', 'نافذة الإلغاء (بالأيام)')}</label>
               <input
                 type="number"
                 min={0}
@@ -264,7 +266,7 @@ export const AdminEventsSettings: React.FC = () => {
             className="px-6 py-2.5 bg-brand-terracotta hover:bg-brand-terracotta/90 text-brand-cream rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-2 cursor-pointer"
           >
             <Save className="h-4 w-4" />
-            <span>Save Events Settings</span>
+            <span>{t('Save Events Settings', 'حفظ إعدادات الفعاليات')}</span>
           </button>
         </div>
       </form>
@@ -279,17 +281,16 @@ export const AdminEventsSettings: React.FC = () => {
           <div>
             <h3 className="font-display text-lg font-extrabold text-brand-charcoal flex items-center gap-2">
               <ShieldAlert className="h-5 w-5 text-brand-terracotta" />
-              <span>Birthday Terms &amp; Guidelines</span>
+              <span>{t('Birthday Terms & Guidelines', 'شروط وإرشادات أعياد الميلاد')}</span>
             </h3>
             <p className="text-xs text-brand-charcoal/70 mt-1">
-              Shown to the customer before they submit a birthday reservation, and they must accept it.
-              Use <span className="font-mono font-bold">{'{deposit}'}</span> and{' '}
-              <span className="font-mono font-bold">{'{cancellationDays}'}</span> so the wording follows the
-              configured values instead of fixed numbers.
+              {lang === 'ar'
+                ? <>تُعرض للعميل قبل تقديم حجز عيد الميلاد، ويجب أن يوافق عليها. استخدم <span className="font-mono font-bold">{'{deposit}'}</span> و<span className="font-mono font-bold">{'{cancellationDays}'}</span> ليتبع النص القيم المضبوطة بدل الأرقام الثابتة.</>
+                : <>Shown to the customer before they submit a birthday reservation, and they must accept it. Use <span className="font-mono font-bold">{'{deposit}'}</span> and{' '}<span className="font-mono font-bold">{'{cancellationDays}'}</span> so the wording follows the configured values instead of fixed numbers.</>}
             </p>
             {terms.version && (
               <p className="text-[10px] font-mono font-bold text-brand-charcoal/45 mt-1">
-                Current version: {terms.version}
+                {t('Current version:', 'النسخة الحالية:')} {terms.version}
               </p>
             )}
           </div>
@@ -300,21 +301,21 @@ export const AdminEventsSettings: React.FC = () => {
             className="px-5 py-2.5 bg-brand-terracotta hover:bg-brand-terracotta/90 text-brand-cream rounded-xl text-xs font-bold shadow-sm flex items-center gap-2 cursor-pointer shrink-0"
           >
             <Save className="h-4 w-4" />
-            <span>Save Terms</span>
+            <span>{t('Save Terms', 'حفظ الشروط')}</span>
           </button>
         </div>
 
         {termsSaved && (
           <div className="p-3 bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs font-bold rounded-xl flex items-center gap-2">
             <Check className="h-4 w-4 text-emerald-600" />
-            <span>Terms saved. New reservations will record this version on acceptance.</span>
+            <span>{t('Terms saved. New reservations will record this version on acceptance.', 'تم حفظ الشروط. ستسجّل الحجوزات الجديدة هذه النسخة عند الموافقة.')}</span>
           </div>
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           <div className="space-y-4">
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-brand-charcoal/70 uppercase block">Section Title</label>
+              <label className="text-[10px] font-bold text-brand-charcoal/70 uppercase block">{t('Section Title', 'عنوان القسم')}</label>
               <input
                 type="text"
                 value={terms.title}
@@ -324,7 +325,7 @@ export const AdminEventsSettings: React.FC = () => {
             </div>
 
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-brand-charcoal/70 uppercase block">Opening Lines (one per line)</label>
+              <label className="text-[10px] font-bold text-brand-charcoal/70 uppercase block">{t('Opening Lines (one per line)', 'الأسطر الافتتاحية (واحد في كل سطر)')}</label>
               <LineListTextarea
                 rows={2}
                 value={terms.leadingItems}
@@ -334,7 +335,7 @@ export const AdminEventsSettings: React.FC = () => {
             </div>
 
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-brand-charcoal/70 uppercase block">Supplies Intro</label>
+              <label className="text-[10px] font-bold text-brand-charcoal/70 uppercase block">{t('Supplies Intro', 'مقدمة المستلزمات')}</label>
               <input
                 type="text"
                 value={terms.suppliesIntro}
@@ -344,7 +345,7 @@ export const AdminEventsSettings: React.FC = () => {
             </div>
 
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-brand-charcoal/70 uppercase block">Supplies List (one per line, shown numbered)</label>
+              <label className="text-[10px] font-bold text-brand-charcoal/70 uppercase block">{t('Supplies List (one per line, shown numbered)', 'قائمة المستلزمات (واحد في كل سطر، تُعرض مرقّمة)')}</label>
               <LineListTextarea
                 rows={4}
                 value={terms.supplies}
@@ -354,7 +355,7 @@ export const AdminEventsSettings: React.FC = () => {
             </div>
 
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-brand-charcoal/70 uppercase block">Closing Lines (one per line)</label>
+              <label className="text-[10px] font-bold text-brand-charcoal/70 uppercase block">{t('Closing Lines (one per line)', 'الأسطر الختامية (واحد في كل سطر)')}</label>
               <LineListTextarea
                 rows={4}
                 value={terms.trailingItems}
@@ -367,7 +368,7 @@ export const AdminEventsSettings: React.FC = () => {
           {/* Live preview with the placeholders resolved */}
           <div className="p-5 bg-brand-cream/50 border border-brand-clay rounded-2xl space-y-3">
             <p className="text-[10px] font-bold text-brand-charcoal/50 uppercase tracking-wider">
-              Customer Preview
+              {t('Customer Preview', 'معاينة العميل')}
             </p>
             <h4 className="font-display text-base font-bold text-brand-terracotta">{terms.title}</h4>
             <div className="text-xs space-y-2 text-brand-charcoal/85 leading-relaxed">
@@ -391,7 +392,7 @@ export const AdminEventsSettings: React.FC = () => {
               ))}
             </div>
             <p className="text-[10px] text-brand-charcoal/45 pt-2 border-t border-brand-clay/40">
-              Deposit shown here uses 500 SAR as an example; the reservation page uses the selected package's deposit.
+              {t("Deposit shown here uses 500 SAR as an example; the reservation page uses the selected package's deposit.", 'يستخدم العربون المعروض هنا مبلغ 500 ريال كمثال؛ تستخدم صفحة الحجز عربون الباقة المختارة.')}
             </p>
           </div>
         </div>
@@ -406,11 +407,10 @@ export const AdminEventsSettings: React.FC = () => {
           <div>
             <h3 className="font-display text-lg font-extrabold text-brand-charcoal flex items-center gap-2">
               <ListChecks className="h-5 w-5 text-brand-terracotta" />
-              <span>Birthday Booking Form Fields</span>
+              <span>{t('Birthday Booking Form Fields', 'حقول نموذج حجز عيد الميلاد')}</span>
             </h3>
             <p className="text-xs text-brand-charcoal/70 mt-1">
-              Add, edit, remove, enable, disable and reorder the fields customers fill in when booking a birthday package.
-              Package details themselves are edited in the Birthday Event page.
+              {t('Add, edit, remove, enable, disable and reorder the fields customers fill in when booking a birthday package. Package details themselves are edited in the Birthday Event page.', 'أضف الحقول التي يملؤها العملاء عند حجز باقة عيد ميلاد وعدّلها وأزلها وفعّلها وعطّلها ورتّبها. تُعدَّل تفاصيل الباقات نفسها في صفحة إدارة باقات أعياد الميلاد.')}
             </p>
           </div>
 
@@ -420,14 +420,14 @@ export const AdminEventsSettings: React.FC = () => {
             className="px-4 py-2.5 bg-brand-terracotta hover:bg-brand-terracotta/90 text-brand-cream rounded-xl text-xs font-bold shadow-sm flex items-center gap-2 cursor-pointer shrink-0"
           >
             <Plus className="h-4 w-4" />
-            <span>Add Field</span>
+            <span>{t('Add Field', 'إضافة حقل')}</span>
           </button>
         </div>
 
         {fieldsSaved && (
           <div className="p-3 bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs font-bold rounded-xl flex items-center gap-2">
             <Check className="h-4 w-4 text-emerald-600" />
-            <span>Booking form updated. The customer birthday form now uses these fields.</span>
+            <span>{t('Booking form updated. The customer birthday form now uses these fields.', 'تم تحديث نموذج الحجز. يستخدم نموذج عيد الميلاد للعملاء هذه الحقول الآن.')}</span>
           </div>
         )}
 
@@ -444,7 +444,7 @@ export const AdminEventsSettings: React.FC = () => {
                   <span className="text-[10px] font-mono font-bold text-brand-charcoal/40">#{index + 1}</span>
                   <span className="text-sm font-bold text-brand-charcoal truncate">{field.label}</span>
                   {field.system && (
-                    <span className="text-[9px] font-bold uppercase bg-brand-sand text-brand-charcoal/70 px-1.5 py-0.5 rounded">Core</span>
+                    <span className="text-[9px] font-bold uppercase bg-brand-sand text-brand-charcoal/70 px-1.5 py-0.5 rounded">{t('Core', 'أساسي')}</span>
                   )}
                 </div>
 
@@ -458,11 +458,11 @@ export const AdminEventsSettings: React.FC = () => {
                         : 'bg-gray-100 border-gray-200 text-gray-600'
                     }`}
                   >
-                    {field.enabled ? 'Enabled' : 'Disabled'}
+                    {field.enabled ? t('Enabled', 'مفعّل') : t('Disabled', 'معطّل')}
                   </button>
                   <button
                     type="button"
-                    title="Move up"
+                    title={t('Move up', 'نقل للأعلى')}
                     disabled={index === 0}
                     onClick={() => handleMoveField(index, -1)}
                     className="p-1.5 rounded-lg border border-brand-clay/60 text-brand-charcoal/60 hover:bg-brand-sand disabled:opacity-30 cursor-pointer"
@@ -471,7 +471,7 @@ export const AdminEventsSettings: React.FC = () => {
                   </button>
                   <button
                     type="button"
-                    title="Move down"
+                    title={t('Move down', 'نقل للأسفل')}
                     disabled={index === birthdayFormFields.length - 1}
                     onClick={() => handleMoveField(index, 1)}
                     className="p-1.5 rounded-lg border border-brand-clay/60 text-brand-charcoal/60 hover:bg-brand-sand disabled:opacity-30 cursor-pointer"
@@ -480,7 +480,7 @@ export const AdminEventsSettings: React.FC = () => {
                   </button>
                   <button
                     type="button"
-                    title={field.system ? 'Core fields cannot be removed — disable instead' : 'Remove field'}
+                    title={field.system ? t('Core fields cannot be removed — disable instead', 'لا يمكن إزالة الحقول الأساسية — عطّلها بدلًا من ذلك') : t('Remove field', 'إزالة الحقل')}
                     disabled={field.system}
                     onClick={() => handleRemoveField(field.id)}
                     className="p-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
@@ -492,7 +492,7 @@ export const AdminEventsSettings: React.FC = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                 <div className="space-y-1">
-                  <label className="font-bold text-brand-charcoal/70 block">Label</label>
+                  <label className="font-bold text-brand-charcoal/70 block">{t('Label', 'التسمية')}</label>
                   <input
                     type="text"
                     value={field.label}
@@ -502,27 +502,27 @@ export const AdminEventsSettings: React.FC = () => {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="font-bold text-brand-charcoal/70 block">Type</label>
+                  <label className="font-bold text-brand-charcoal/70 block">{t('Type', 'النوع')}</label>
                   <select
                     value={field.type}
                     disabled={field.system}
                     onChange={e => handleFieldChange(field.id, { type: e.target.value as BirthdayFormField['type'] })}
                     className="w-full bg-brand-cream/40 border border-brand-clay rounded-xl p-2 font-semibold disabled:opacity-60"
                   >
-                    <option value="short_text">Short text</option>
-                    <option value="long_text">Long text</option>
-                    <option value="number">Number</option>
-                    <option value="date">Date</option>
-                    <option value="time">Time</option>
-                    <option value="phone">Phone</option>
-                    <option value="dropdown">Dropdown</option>
-                    <option value="package">Package selector</option>
-                    <option value="image">Image upload</option>
+                    <option value="short_text">{t('Short text', 'نص قصير')}</option>
+                    <option value="long_text">{t('Long text', 'نص طويل')}</option>
+                    <option value="number">{t('Number', 'رقم')}</option>
+                    <option value="date">{t('Date', 'تاريخ')}</option>
+                    <option value="time">{t('Time', 'وقت')}</option>
+                    <option value="phone">{t('Phone', 'هاتف')}</option>
+                    <option value="dropdown">{t('Dropdown', 'قائمة منسدلة')}</option>
+                    <option value="package">{t('Package selector', 'محدد الباقة')}</option>
+                    <option value="image">{t('Image upload', 'رفع صورة')}</option>
                   </select>
                 </div>
 
                 <div className="space-y-1">
-                  <label className="font-bold text-brand-charcoal/70 block">Required</label>
+                  <label className="font-bold text-brand-charcoal/70 block">{t('Required', 'إلزامي')}</label>
                   <button
                     type="button"
                     onClick={() => handleFieldChange(field.id, { required: !field.required })}
@@ -532,12 +532,12 @@ export const AdminEventsSettings: React.FC = () => {
                         : 'bg-brand-cream/40 border-brand-clay text-brand-charcoal/60'
                     }`}
                   >
-                    {field.required ? 'Required' : 'Optional'}
+                    {field.required ? t('Required', 'إلزامي') : t('Optional', 'اختياري')}
                   </button>
                 </div>
 
                 <div className="sm:col-span-3 space-y-1">
-                  <label className="font-bold text-brand-charcoal/70 block">Placeholder / Help Text</label>
+                  <label className="font-bold text-brand-charcoal/70 block">{t('Placeholder / Help Text', 'النص التوضيحي / نص المساعدة')}</label>
                   <input
                     type="text"
                     value={field.placeholder || field.helpText || ''}
@@ -548,7 +548,7 @@ export const AdminEventsSettings: React.FC = () => {
 
                 {field.type === 'dropdown' && (
                   <div className="sm:col-span-3 space-y-1">
-                    <label className="font-bold text-brand-charcoal/70 block">Options (one per line)</label>
+                    <label className="font-bold text-brand-charcoal/70 block">{t('Options (one per line)', 'الخيارات (واحد في كل سطر)')}</label>
                     <LineListTextarea
                       rows={4}
                       value={field.options || []}
