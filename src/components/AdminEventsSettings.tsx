@@ -13,6 +13,7 @@ import {
   Save, Check, Calendar, Gift, Info, Plus, Trash2, ChevronUp, ChevronDown, ListChecks, ShieldAlert
 } from 'lucide-react';
 import { LineListTextarea } from './ui/LineListTextarea';
+import { ContentLanguageTabs, ContentLang } from './ui/ContentLanguageTabs';
 import { useLanguage } from '../context/LanguageContext';
 
 export const AdminEventsSettings: React.FC = () => {
@@ -34,6 +35,7 @@ export const AdminEventsSettings: React.FC = () => {
   // ---- Editable birthday terms (customer-facing) ----
   const [terms, setTerms] = useState<BirthdayTermsConfig>(rawConfig?.birthdayTerms || DEFAULT_BIRTHDAY_TERMS);
   const [termsSaved, setTermsSaved] = useState(false);
+  const [termsLang, setTermsLang] = useState<ContentLang>('en');
 
   useEffect(() => {
     if (rawConfig?.birthdayTerms) setTerms(rawConfig.birthdayTerms);
@@ -60,6 +62,24 @@ export const AdminEventsSettings: React.FC = () => {
     setTermsSaved(true);
     setTimeout(() => setTermsSaved(false), 2500);
   };
+
+  // Preview follows the active tab. Mirrors the customer page: the Arabic set is
+  // "present" only when its body (opening lines or supplies) has content.
+  const termsArabicFilled = !!(
+    terms.titleAr?.trim() || terms.suppliesIntroAr?.trim() ||
+    terms.leadingItemsAr?.length || terms.suppliesAr?.length || terms.trailingItemsAr?.length
+  );
+  const previewIsAr = termsLang === 'ar';
+  const previewArEmpty = previewIsAr && !(terms.leadingItemsAr?.length || terms.suppliesAr?.length);
+  const pv = previewIsAr
+    ? {
+        title: terms.titleAr ?? '',
+        leadingItems: terms.leadingItemsAr ?? [],
+        suppliesIntro: terms.suppliesIntroAr ?? '',
+        supplies: terms.suppliesAr ?? [],
+        trailingItems: terms.trailingItemsAr ?? []
+      }
+    : terms;
 
   // ---- Birthday booking-form field editor (managed here only) ----
   const [fieldsSaved, setFieldsSaved] = useState(false);
@@ -314,8 +334,12 @@ export const AdminEventsSettings: React.FC = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           <div className="space-y-4">
+            <ContentLanguageTabs value={termsLang} onChange={setTermsLang} arabicFilled={termsArabicFilled} />
+
+            {termsLang === 'en' ? (
+              <>
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-brand-charcoal/70 uppercase block">{t('Section Title', 'عنوان القسم')}</label>
+              <label className="text-[10px] font-bold text-brand-charcoal/70 uppercase block">{t('Section Title', 'عنوان القسم')} {t('(English)', '(بالإنجليزية)')}</label>
               <input
                 type="text"
                 value={terms.title}
@@ -325,7 +349,7 @@ export const AdminEventsSettings: React.FC = () => {
             </div>
 
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-brand-charcoal/70 uppercase block">{t('Opening Lines (one per line)', 'الأسطر الافتتاحية (واحد في كل سطر)')}</label>
+              <label className="text-[10px] font-bold text-brand-charcoal/70 uppercase block">{t('Opening Lines (one per line)', 'الأسطر الافتتاحية (واحد في كل سطر)')} {t('(English)', '(بالإنجليزية)')}</label>
               <LineListTextarea
                 rows={2}
                 value={terms.leadingItems}
@@ -335,7 +359,7 @@ export const AdminEventsSettings: React.FC = () => {
             </div>
 
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-brand-charcoal/70 uppercase block">{t('Supplies Intro', 'مقدمة المستلزمات')}</label>
+              <label className="text-[10px] font-bold text-brand-charcoal/70 uppercase block">{t('Supplies Intro', 'مقدمة المستلزمات')} {t('(English)', '(بالإنجليزية)')}</label>
               <input
                 type="text"
                 value={terms.suppliesIntro}
@@ -345,7 +369,7 @@ export const AdminEventsSettings: React.FC = () => {
             </div>
 
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-brand-charcoal/70 uppercase block">{t('Supplies List (one per line, shown numbered)', 'قائمة المستلزمات (واحد في كل سطر، تُعرض مرقّمة)')}</label>
+              <label className="text-[10px] font-bold text-brand-charcoal/70 uppercase block">{t('Supplies List (one per line, shown numbered)', 'قائمة المستلزمات (واحد في كل سطر، تُعرض مرقّمة)')} {t('(English)', '(بالإنجليزية)')}</label>
               <LineListTextarea
                 rows={4}
                 value={terms.supplies}
@@ -355,7 +379,7 @@ export const AdminEventsSettings: React.FC = () => {
             </div>
 
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-brand-charcoal/70 uppercase block">{t('Closing Lines (one per line)', 'الأسطر الختامية (واحد في كل سطر)')}</label>
+              <label className="text-[10px] font-bold text-brand-charcoal/70 uppercase block">{t('Closing Lines (one per line)', 'الأسطر الختامية (واحد في كل سطر)')} {t('(English)', '(بالإنجليزية)')}</label>
               <LineListTextarea
                 rows={4}
                 value={terms.trailingItems}
@@ -363,29 +387,107 @@ export const AdminEventsSettings: React.FC = () => {
                 className="w-full bg-white border border-brand-clay rounded-xl py-2 px-3 text-xs font-semibold text-brand-charcoal"
               />
             </div>
+              </>
+            ) : (
+              <>
+                <p className="text-[11px] text-brand-charcoal/60 leading-relaxed">
+                  {t(
+                    'Shown to customers browsing in Arabic only once the Arabic opening lines or supplies list has content; otherwise they see the English terms. The whole set switches together — languages are never mixed. Include {deposit} and {cancellationDays} in the Arabic text too.',
+                    'تظهر الشروط العربية للعملاء الذين يتصفحون بالعربية فقط عند تعبئة الأسطر الافتتاحية أو قائمة المستلزمات بالعربية؛ وإلا تظهر لهم الشروط الإنجليزية. وتتبدّل المجموعة كاملةً معًا ولا تُخلط اللغتان. أدرج {deposit} و{cancellationDays} في النص العربي أيضًا.'
+                  )}
+                </p>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-brand-charcoal/70 uppercase block">{t('Section Title', 'عنوان القسم')} {t('(Arabic)', '(بالعربية)')}</label>
+                  <input
+                    type="text" dir="rtl" lang="ar"
+                    value={terms.titleAr ?? ''}
+                    onChange={e => setTerms({ ...terms, titleAr: e.target.value })}
+                    className="w-full bg-white border border-brand-clay rounded-xl py-2 px-3 text-xs font-bold text-brand-charcoal text-start"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-brand-charcoal/70 uppercase block">{t('Opening Lines (one per line)', 'الأسطر الافتتاحية (واحد في كل سطر)')} {t('(Arabic)', '(بالعربية)')}</label>
+                  <div dir="rtl" lang="ar">
+                    <LineListTextarea
+                      rows={2}
+                      value={terms.leadingItemsAr ?? []}
+                      onChange={lines => setTerms({ ...terms, leadingItemsAr: lines })}
+                      className="w-full bg-white border border-brand-clay rounded-xl py-2 px-3 text-xs font-semibold text-brand-charcoal text-start"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-brand-charcoal/70 uppercase block">{t('Supplies Intro', 'مقدمة المستلزمات')} {t('(Arabic)', '(بالعربية)')}</label>
+                  <input
+                    type="text" dir="rtl" lang="ar"
+                    value={terms.suppliesIntroAr ?? ''}
+                    onChange={e => setTerms({ ...terms, suppliesIntroAr: e.target.value })}
+                    className="w-full bg-white border border-brand-clay rounded-xl py-2 px-3 text-xs font-semibold text-brand-charcoal text-start"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-brand-charcoal/70 uppercase block">{t('Supplies List (one per line, shown numbered)', 'قائمة المستلزمات (واحد في كل سطر، تُعرض مرقّمة)')} {t('(Arabic)', '(بالعربية)')}</label>
+                  <div dir="rtl" lang="ar">
+                    <LineListTextarea
+                      rows={4}
+                      value={terms.suppliesAr ?? []}
+                      onChange={lines => setTerms({ ...terms, suppliesAr: lines })}
+                      className="w-full bg-white border border-brand-clay rounded-xl py-2 px-3 text-xs font-semibold text-brand-charcoal text-start"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-brand-charcoal/70 uppercase block">{t('Closing Lines (one per line)', 'الأسطر الختامية (واحد في كل سطر)')} {t('(Arabic)', '(بالعربية)')}</label>
+                  <div dir="rtl" lang="ar">
+                    <LineListTextarea
+                      rows={4}
+                      value={terms.trailingItemsAr ?? []}
+                      onChange={lines => setTerms({ ...terms, trailingItemsAr: lines })}
+                      className="w-full bg-white border border-brand-clay rounded-xl py-2 px-3 text-xs font-semibold text-brand-charcoal text-start"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Live preview with the placeholders resolved */}
-          <div className="p-5 bg-brand-cream/50 border border-brand-clay rounded-2xl space-y-3">
+          <div dir={previewIsAr ? 'rtl' : undefined} lang={previewIsAr ? 'ar' : undefined}
+               className="p-5 bg-brand-cream/50 border border-brand-clay rounded-2xl space-y-3">
             <p className="text-[10px] font-bold text-brand-charcoal/50 uppercase tracking-wider">
               {t('Customer Preview', 'معاينة العميل')}
             </p>
-            <h4 className="font-display text-base font-bold text-brand-terracotta">{terms.title}</h4>
+            {previewArEmpty && (
+              <p className="text-xs italic text-brand-charcoal/55" dir="ltr">
+                {t(
+                  'No Arabic terms yet — customers browsing in Arabic currently see the English terms.',
+                  'لا توجد شروط عربية بعد — يرى العملاء الذين يتصفحون بالعربية الشروط الإنجليزية حاليًا.'
+                )}
+              </p>
+            )}
+            {(!previewIsAr || pv.title) && (
+              <h4 className="font-display text-base font-bold text-brand-terracotta">{pv.title}</h4>
+            )}
             <div className="text-xs space-y-2 text-brand-charcoal/85 leading-relaxed">
-              {terms.leadingItems.map(line => (
+              {pv.leadingItems.map(line => (
                 <p key={line} className="font-semibold">
                   {renderTermsLine(line, { deposit: 500, cancellationDays: Number(cancellationNoticeDays) || 4 })}
                 </p>
               ))}
-              {terms.supplies.length > 0 && (
+              {pv.supplies.length > 0 && (
                 <div>
-                  <p className="font-semibold">{terms.suppliesIntro}</p>
-                  <ol className="list-decimal pl-5 space-y-0.5 font-medium text-brand-charcoal/75">
-                    {terms.supplies.map(item => <li key={item}>{item}</li>)}
+                  {(!previewIsAr || pv.suppliesIntro) && <p className="font-semibold">{pv.suppliesIntro}</p>}
+                  <ol className="list-decimal ps-5 space-y-0.5 font-medium text-brand-charcoal/75">
+                    {pv.supplies.map(item => <li key={item}>{item}</li>)}
                   </ol>
                 </div>
               )}
-              {terms.trailingItems.map(line => (
+              {pv.trailingItems.map(line => (
                 <p key={line} className="font-medium">
                   {renderTermsLine(line, { deposit: 500, cancellationDays: Number(cancellationNoticeDays) || 4 })}
                 </p>

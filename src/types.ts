@@ -153,6 +153,10 @@ export interface BirthdayBookingDetails {
   termsVersion?: string;
   /** The exact wording shown at acceptance time. */
   termsSnapshot?: string[];
+  /** Arabic wording, present only when Arabic terms existed at submit time. */
+  termsSnapshotAr?: string[];
+  /** Which set the customer was actually shown when they submitted. */
+  termsShownLang?: 'en' | 'ar';
   totalAmount?: number;
   depositAmount?: number;
   submittedAt?: string;
@@ -1387,6 +1391,18 @@ export interface BirthdayTermsConfig {
   supplies: string[];
   /** Lines shown after the supplies list. */
   trailingItems: string[];
+  /**
+   * Optional Arabic twins of the five fields above. Together they are ONE standalone
+   * Arabic document, not line-by-line translations, so the lists need not match the
+   * English ones in length or order. Shown only when the Arabic body (leadingItemsAr or
+   * suppliesAr) is non-empty and the visitor reads Arabic; the whole set switches
+   * together, never mixed with English. Covered by the same `version` stamp.
+   */
+  titleAr?: string;
+  leadingItemsAr?: string[];
+  suppliesIntroAr?: string;
+  suppliesAr?: string[];
+  trailingItemsAr?: string[];
   updatedAt?: string;
 }
 

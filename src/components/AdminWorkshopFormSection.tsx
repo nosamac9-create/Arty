@@ -83,16 +83,6 @@ const DEFAULT_FIELD_TEXT_AR: Record<string, {
   materials:   { label: { en: 'Materials Included (Press Enter key)', ar: 'المواد المشمولة (اضغط Enter)' },
                  placeholder: { en: 'Add a material and press Enter...', ar: 'أضف مادة واضغط Enter...' } }
 };
-/**
- * The four fields that hold the workshop's bilingual content. On the English tab they are where staff
- * type the English copy, so their label, placeholder and toolbar stay English whatever language the
- * console is in (their Arabic counterparts are rendered separately). Matched by boundTo, not by card,
- * because which card a field sits on is configurable.
- */
-const ENGLISH_TAB_BINDINGS: ReadonlyArray<string> = ['title', 'hook', 'description', 'fullDetails'];
-const isEnglishTabField = (field: WorkshopFieldConfig): boolean =>
-  !!field.boundTo && ENGLISH_TAB_BINDINGS.includes(field.boundTo);
-
 const normalizeFieldText = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase();
 
 export const AdminWorkshopFormSection: React.FC = () => {
@@ -133,7 +123,6 @@ export const AdminWorkshopFormSection: React.FC = () => {
 
   /** Display text for a configured field's label / placeholder. See DEFAULT_FIELD_TEXT_AR. */
   const fieldLabel = (field: WorkshopFieldConfig): string => {
-    if (isEnglishTabField(field)) return field.label;
     const known = DEFAULT_FIELD_TEXT_AR[field.fieldKey];
     if (lang === 'ar' && known && normalizeFieldText(known.label.en) === normalizeFieldText(field.label)) {
       return known.label.ar;
@@ -141,7 +130,6 @@ export const AdminWorkshopFormSection: React.FC = () => {
     return field.label;
   };
   const fieldPlaceholder = (field: WorkshopFieldConfig): string | undefined => {
-    if (isEnglishTabField(field)) return field.placeholder;
     const known = DEFAULT_FIELD_TEXT_AR[field.fieldKey]?.placeholder;
     if (lang === 'ar' && known && field.placeholder && normalizeFieldText(known.en) === normalizeFieldText(field.placeholder)) {
       return known.ar;
@@ -898,6 +886,9 @@ export const AdminWorkshopFormSection: React.FC = () => {
       <label className="text-xs font-bold text-brand-charcoal/80">
         {fieldLabel(field)}
         {field.required && <span className="text-red-500 font-extrabold"> *</span>}
+        {!!field.boundTo && field.boundTo in arabicSlots && (
+          <span className="font-semibold text-brand-charcoal/45"> {t('(English)', '(بالإنجليزية)')}</span>
+        )}
       </label>
     );
 
@@ -928,7 +919,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
               <Italic className="h-3.5 w-3.5 text-brand-charcoal/50" />
               <Link className="h-3.5 w-3.5 text-brand-charcoal/50" />
               <AlignLeft className="h-3.5 w-3.5 text-brand-charcoal/50" />
-              <span className="ml-2 text-[10px] font-mono text-brand-charcoal/40">Pristine HTML Mode</span>
+              <span className="ml-2 text-[10px] font-mono text-brand-charcoal/40">{t('Pristine HTML Mode', 'وضع HTML الخام')}</span>
             </div>
             <textarea
               rows={4}
@@ -1120,7 +1111,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
     return (
       <div key={field.fieldId} className={`space-y-1 ${slot.multiline ? 'sm:col-span-2' : ''}`}>
         <label className="text-xs font-bold text-brand-charcoal/80">
-          {field.label} <span className="font-semibold text-brand-charcoal/45">(Arabic)</span>
+          {fieldLabel(field)} <span className="font-semibold text-brand-charcoal/45">{t('(Arabic)', '(بالعربية)')}</span>
         </label>
         {slot.multiline ? (
           <textarea dir="rtl" lang="ar" rows={slot.rows} value={slot.value}

@@ -126,6 +126,24 @@ export const BirthdayBookingSection: React.FC = () => {
   const terms: BirthdayTermsConfig = eventsSettings?.birthdayTerms || DEFAULT_BIRTHDAY_TERMS;
   const cancellationDays = Number(eventsSettings?.cancellationNoticeDays) || 4;
 
+  // Arabic terms exist only when their body is non-empty. When they do AND the visitor
+  // reads Arabic, the WHOLE Arabic set replaces the English one; languages never mix.
+  const arLeading = terms.leadingItemsAr ?? [];
+  const arSupplies = terms.suppliesAr ?? [];
+  const arTrailing = terms.trailingItemsAr ?? [];
+  const hasArabicTerms = arLeading.length > 0 || arSupplies.length > 0;
+  const showArabicTerms = hasArabicTerms && lang === 'ar';
+  const shownTerms: Pick<BirthdayTermsConfig, 'title' | 'leadingItems' | 'suppliesIntro' | 'supplies' | 'trailingItems'> =
+    showArabicTerms
+      ? {
+          title: terms.titleAr?.trim() ?? '',
+          leadingItems: arLeading,
+          suppliesIntro: terms.suppliesIntroAr?.trim() ?? '',
+          supplies: arSupplies,
+          trailingItems: arTrailing
+        }
+      : terms;
+
   const [termsAccepted, setTermsAccepted] = useState(false);
 
   // Only fields enabled in Settings → Events & Birthday are shown.
@@ -541,6 +559,24 @@ export const BirthdayBookingSection: React.FC = () => {
       ...terms.trailingItems
     ].map(line => renderTermsLine(line, { deposit: depositAmount, cancellationDays }));
 
+    // Arabic twin of the snapshot, only when Arabic terms exist. Built like the English
+    // one (same substitutions, numbering baked in) and mirrors what step 4 displays:
+    // the intro is omitted when blank, and intro + list only appear when there are supplies.
+    const termsLinesAr: string[] | undefined = hasArabicTerms
+      ? [
+          ...arLeading,
+          ...(arSupplies.length > 0
+            ? [
+                ...(terms.suppliesIntroAr?.trim() ? [terms.suppliesIntroAr.trim()] : []),
+                ...arSupplies.map((item, i) => `${i + 1}. ${item}`)
+              ]
+            : []),
+          ...arTrailing
+        ].map(line => renderTermsLine(line, { deposit: depositAmount, cancellationDays }))
+      : undefined;
+    // Which set the customer was actually looking at right now.
+    const termsShownLang: 'en' | 'ar' = showArabicTerms ? 'ar' : 'en';
+
     const birthdayDetails = {
       packageId: selectedPackage?.id,
       packageName: selectedPackage?.name,
@@ -561,6 +597,8 @@ export const BirthdayBookingSection: React.FC = () => {
       termsAcceptedAt: new Date().toISOString(),
       termsVersion: terms.version,
       termsSnapshot: termsLines,
+      termsSnapshotAr: termsLinesAr,
+      termsShownLang,
       totalAmount: (selectedPackage?.price || 0) * Number(numberOfPeople),
       depositAmount,
       submittedAt: new Date().toISOString(),
@@ -1297,30 +1335,34 @@ export const BirthdayBookingSection: React.FC = () => {
                     {/* TERMS — shown in full. Nothing here is behind a click:
                         it is the wording the acceptance below is bound to. */}
                     <div className="mx-auto w-full max-w-xl rounded-[28px] bg-white p-6 ring-1 ring-brand-clay">
-                      <h3 className="flex items-center gap-2 font-display text-base font-semibold text-brand-charcoal">
-                        <ShieldAlert className="h-5 w-5 text-brand-terracotta" />
-                        {terms.title}
-                      </h3>
+                      {(!showArabicTerms || shownTerms.title) && (
+                        <h3 className="flex items-center gap-2 font-display text-base font-semibold text-brand-charcoal">
+                          <ShieldAlert className="h-5 w-5 text-brand-terracotta" />
+                          {shownTerms.title}
+                        </h3>
+                      )}
 
                       <div className="mt-4 space-y-3 text-xs leading-relaxed text-brand-ink">
-                              {terms.leadingItems.map(line => (
+                              {shownTerms.leadingItems.map(line => (
                                 <p key={line} className="font-semibold text-brand-charcoal">
                                   {renderTermsLine(line, { deposit: depositAmount, cancellationDays })}
                                 </p>
                               ))}
 
-                              {terms.supplies.length > 0 && (
+                              {shownTerms.supplies.length > 0 && (
                                 <div>
-                                  <p className="mb-1 font-semibold text-brand-charcoal">
-                                    {renderTermsLine(terms.suppliesIntro, { deposit: depositAmount, cancellationDays })}
-                                  </p>
+                                  {(!showArabicTerms || shownTerms.suppliesIntro) && (
+                                    <p className="mb-1 font-semibold text-brand-charcoal">
+                                      {renderTermsLine(shownTerms.suppliesIntro, { deposit: depositAmount, cancellationDays })}
+                                    </p>
+                                  )}
                                   <ol className="list-decimal space-y-0.5 ps-5 font-medium">
-                                    {terms.supplies.map(item => <li key={item}>{item}</li>)}
+                                    {shownTerms.supplies.map(item => <li key={item}>{item}</li>)}
                                   </ol>
                                 </div>
                               )}
 
-                              {terms.trailingItems.map(line => (
+                              {shownTerms.trailingItems.map(line => (
                                 <p key={line} className="font-medium">
                                   {renderTermsLine(line, { deposit: depositAmount, cancellationDays })}
                                 </p>

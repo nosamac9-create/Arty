@@ -199,7 +199,7 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
         {contentLang === 'en' ? (
           <>
         <div className="space-y-1">
-          <label className={labelClass}>Package Name *</label>
+          <label className={labelClass}>{t('Package Name *', 'اسم الباقة *')} {t('(English)', '(بالإنجليزية)')}</label>
           <input
             type="text"
             required
@@ -210,7 +210,7 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
         </div>
 
         <div className="space-y-1">
-          <label className={labelClass}>Short Description</label>
+          <label className={labelClass}>{t('Short Description', 'وصف مختصر')} {t('(English)', '(بالإنجليزية)')}</label>
           <input
             type="text"
             value={draft.shortDescription}
@@ -220,7 +220,7 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
         </div>
 
         <div className="space-y-1">
-          <label className={labelClass}>Full Description</label>
+          <label className={labelClass}>{t('Full Description', 'الوصف الكامل')} {t('(English)', '(بالإنجليزية)')}</label>
           <textarea
             rows={3}
             value={draft.fullDescription}
@@ -232,7 +232,7 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
         ) : (
           <>
             <div className="space-y-1">
-              <label className={labelClass}>Package Name (Arabic)</label>
+              <label className={labelClass}>{t('Package Name', 'اسم الباقة')} {t('(Arabic)', '(بالعربية)')}</label>
               <input
                 type="text"
                 dir="rtl"
@@ -244,7 +244,7 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
             </div>
 
             <div className="space-y-1">
-              <label className={labelClass}>Short Description (Arabic)</label>
+              <label className={labelClass}>{t('Short Description', 'وصف مختصر')} {t('(Arabic)', '(بالعربية)')}</label>
               <input
                 type="text"
                 dir="rtl"
@@ -256,7 +256,7 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
             </div>
 
             <div className="space-y-1">
-              <label className={labelClass}>Full Description (Arabic)</label>
+              <label className={labelClass}>{t('Full Description', 'الوصف الكامل')} {t('(Arabic)', '(بالعربية)')}</label>
               <textarea
                 rows={3}
                 dir="rtl"
@@ -368,7 +368,7 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
               </div>
 
               <div className="space-y-1">
-                <label className={labelClass}>{t('Pricing Label (shown to customers)', 'تسمية التسعير (تظهر للعملاء)')}</label>
+                <label className={labelClass}>{t('Pricing Label (shown to customers)', 'تسمية التسعير (تظهر للعملاء)')} {t('(English)', '(بالإنجليزية)')}</label>
                 <input
                   type="text"
                   value={draft.pricingLabel || ''}
@@ -378,7 +378,7 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
               </div>
 
               <div className="space-y-1">
-                <label className={labelClass}>{t('Duration', 'المدة')}</label>
+                <label className={labelClass}>{t('Duration', 'المدة')} {t('(English)', '(بالإنجليزية)')}</label>
                 <input
                   type="text"
                   value={draft.duration}
@@ -399,7 +399,7 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
               </div>
 
               <div className="space-y-1">
-                <label className={labelClass}>{t('Age Information', 'معلومات العمر')}</label>
+                <label className={labelClass}>{t('Age Information', 'معلومات العمر')} {t('(English)', '(بالإنجليزية)')}</label>
                 <input
                   type="text"
                   value={draft.ageInformation}
@@ -435,17 +435,17 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
           <>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <div className="space-y-1">
-                <label className={labelClass}>Pricing Label (Arabic)</label>
+                <label className={labelClass}>{t('Pricing Label (shown to customers)', 'تسمية التسعير (تظهر للعملاء)')} {t('(Arabic)', '(بالعربية)')}</label>
                 <input type="text" dir="rtl" lang="ar" value={draft.pricingLabelAr ?? ''}
                   onChange={e => setField('pricingLabelAr', e.target.value)} className={`${inputClass} text-start`} />
               </div>
               <div className="space-y-1">
-                <label className={labelClass}>Duration (Arabic)</label>
+                <label className={labelClass}>{t('Duration', 'المدة')} {t('(Arabic)', '(بالعربية)')}</label>
                 <input type="text" dir="rtl" lang="ar" value={draft.durationAr ?? ''}
                   onChange={e => setField('durationAr', e.target.value)} className={`${inputClass} text-start`} />
               </div>
               <div className="space-y-1">
-                <label className={labelClass}>Age Information (Arabic)</label>
+                <label className={labelClass}>{t('Age Information', 'معلومات العمر')} {t('(Arabic)', '(بالعربية)')}</label>
                 <input type="text" dir="rtl" lang="ar" value={draft.ageInformationAr ?? ''}
                   onChange={e => setField('ageInformationAr', e.target.value)} className={`${inputClass} text-start`} />
               </div>
@@ -517,7 +517,7 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
         {contentLang === 'en' ? (
           <>
             <div className="space-y-1">
-              <label className={labelClass}>{t('Cake Description', 'وصف الكعكة')}</label>
+              <label className={labelClass}>{t('Cake Description', 'وصف الكعكة')} {t('(English)', '(بالإنجليزية)')}</label>
               <input
                 type="text"
                 placeholder={t('Send us your cake design and we will do it.', 'أرسل لنا تصميم الكعكة وسنقوم بتنفيذه.')}
@@ -529,7 +529,7 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <label className={labelClass}>{t('Cake Sizes & Prices', 'مقاسات الكعكة وأسعارها')}</label>
+                <label className={labelClass}>{t('Cake Sizes & Prices', 'مقاسات الكعكة وأسعارها')} {t('(English)', '(بالإنجليزية)')}</label>
                 <button
                   type="button"
                   onClick={() => setField('cakeSizes', [
@@ -583,14 +583,14 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
         ) : (
           <>
             <div className="space-y-1">
-              <label className={labelClass}>Cake Description (Arabic)</label>
+              <label className={labelClass}>{t('Cake Description', 'وصف الكعكة')} {t('(Arabic)', '(بالعربية)')}</label>
               <input type="text" dir="rtl" lang="ar" value={draft.cakeDescriptionAr ?? ''}
                 onChange={e => setField('cakeDescriptionAr', e.target.value)} className={`${inputClass} text-start`} />
             </div>
 
             {(draft.cakeSizes || []).length > 0 && (
               <div className="space-y-2">
-                <label className={labelClass}>Cake Size Names (Arabic)</label>
+                <label className={labelClass}>{t('Cake Size Names', 'أسماء مقاسات الكعكة')} {t('(Arabic)', '(بالعربية)')}</label>
                 <div className="space-y-1.5">
                   {(draft.cakeSizes || []).map((size, sizeIdx) => (
                     <div key={size.id} className="flex items-center gap-2">
@@ -628,7 +628,7 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
           <>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-1">
-                <label className={labelClass}>{t('Trainer Information', 'معلومات المدرب')}</label>
+                <label className={labelClass}>{t('Trainer Information', 'معلومات المدرب')} {t('(English)', '(بالإنجليزية)')}</label>
                 <input
                   type="text"
                   value={draft.trainerInfo}
@@ -638,7 +638,7 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
               </div>
 
               <div className="space-y-1">
-                <label className={labelClass}>{t('Delivery / Pickup Information', 'معلومات التسليم / الاستلام')}</label>
+                <label className={labelClass}>{t('Delivery / Pickup Information', 'معلومات التسليم / الاستلام')} {t('(English)', '(بالإنجليزية)')}</label>
                 <input
                   type="text"
                   value={draft.deliveryInfo}
@@ -652,12 +652,12 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
           <>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-1">
-                <label className={labelClass}>Trainer Information (Arabic)</label>
+                <label className={labelClass}>{t('Trainer Information', 'معلومات المدرب')} {t('(Arabic)', '(بالعربية)')}</label>
                 <input type="text" dir="rtl" lang="ar" value={draft.trainerInfoAr ?? ''}
                   onChange={e => setField('trainerInfoAr', e.target.value)} className={`${inputClass} text-start`} />
               </div>
               <div className="space-y-1">
-                <label className={labelClass}>Delivery / Pickup Information (Arabic)</label>
+                <label className={labelClass}>{t('Delivery / Pickup Information', 'معلومات التسليم / الاستلام')} {t('(Arabic)', '(بالعربية)')}</label>
                 <input type="text" dir="rtl" lang="ar" value={draft.deliveryInfoAr ?? ''}
                   onChange={e => setField('deliveryInfoAr', e.target.value)} className={`${inputClass} text-start`} />
               </div>
@@ -680,7 +680,7 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
         {contentLang === 'en' ? (
           <>
             <div className="space-y-1">
-              <label className={labelClass}>{t('Customer-Visible Notes', 'ملاحظات ظاهرة للعميل')}</label>
+              <label className={labelClass}>{t('Customer-Visible Notes', 'ملاحظات ظاهرة للعميل')} {t('(English)', '(بالإنجليزية)')}</label>
               <textarea
                 rows={2}
                 value={draft.customerNotes}
@@ -690,7 +690,7 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
             </div>
 
             <div className="space-y-1">
-              <label className={labelClass}>{t('Terms', 'الشروط')}</label>
+              <label className={labelClass}>{t('Terms', 'الشروط')} {t('(English)', '(بالإنجليزية)')}</label>
               <textarea
                 rows={2}
                 value={draft.terms}
@@ -702,12 +702,12 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
         ) : (
           <>
             <div className="space-y-1">
-              <label className={labelClass}>Customer-Visible Notes (Arabic)</label>
+              <label className={labelClass}>{t('Customer-Visible Notes', 'ملاحظات ظاهرة للعميل')} {t('(Arabic)', '(بالعربية)')}</label>
               <textarea rows={2} dir="rtl" lang="ar" value={draft.customerNotesAr ?? ''}
                 onChange={e => setField('customerNotesAr', e.target.value)} className={`${inputClass} text-start`} />
             </div>
             <div className="space-y-1">
-              <label className={labelClass}>Terms (Arabic)</label>
+              <label className={labelClass}>{t('Terms', 'الشروط')} {t('(Arabic)', '(بالعربية)')}</label>
               <textarea rows={2} dir="rtl" lang="ar" value={draft.termsAr ?? ''}
                 onChange={e => setField('termsAr', e.target.value)} className={`${inputClass} text-start`} />
             </div>
