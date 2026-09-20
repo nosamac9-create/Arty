@@ -187,7 +187,7 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
         {contentLang === 'en' ? (
           <>
         <div className="space-y-1">
-          <label className={labelClass}>{t('Package Name *', 'اسم الباقة *')}</label>
+          <label className={labelClass}>Package Name *</label>
           <input
             type="text"
             required
@@ -198,7 +198,7 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
         </div>
 
         <div className="space-y-1">
-          <label className={labelClass}>{t('Short Description', 'وصف مختصر')}</label>
+          <label className={labelClass}>Short Description</label>
           <input
             type="text"
             value={draft.shortDescription}
@@ -208,7 +208,7 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
         </div>
 
         <div className="space-y-1">
-          <label className={labelClass}>{t('Full Description', 'الوصف الكامل')}</label>
+          <label className={labelClass}>Full Description</label>
           <textarea
             rows={3}
             value={draft.fullDescription}

@@ -10,6 +10,7 @@
  */
 
 import { StaffMember, StaffRole } from '../types';
+import type { Lang } from '../context/LanguageContext';
 
 export type AdminPageId =
   | 'dashboard'
@@ -26,26 +27,30 @@ export type AdminPageId =
 export interface AdminPage {
   id: AdminPageId;
   label: string;
+  /** Arabic wording. These labels are fixed in code, not staff-editable. */
+  labelAr: string;
 }
 
 /** The real Admin Console pages, in sidebar order. */
 export const ADMIN_PAGES: AdminPage[] = [
-  { id: 'dashboard', label: 'Dashboard' },
-  { id: 'queue', label: 'Live Queue' },
-  { id: 'customers', label: 'Customers' },
-  { id: 'staff', label: 'Staff Management' },
-  { id: 'bookings', label: 'Bookings' },
-  { id: 'workshops-admin', label: 'Workshops' },
-  { id: 'events-admin', label: 'Events & Socials' },
-  { id: 'pieces-admin', label: 'Pottery Pieces' },
-  { id: 'system-health', label: 'System Health' },
-  { id: 'settings', label: 'Settings' }
+  { id: 'dashboard', label: 'Dashboard', labelAr: 'لوحة المعلومات' },
+  { id: 'queue', label: 'Live Queue', labelAr: 'الطابور المباشر' },
+  { id: 'customers', label: 'Customers', labelAr: 'العملاء' },
+  { id: 'staff', label: 'Staff Management', labelAr: 'إدارة الموظفين' },
+  { id: 'bookings', label: 'Bookings', labelAr: 'الحجوزات' },
+  { id: 'workshops-admin', label: 'Workshops', labelAr: 'الورش' },
+  { id: 'events-admin', label: 'Events & Socials', labelAr: 'الفعاليات والمناسبات' },
+  { id: 'pieces-admin', label: 'Pottery Pieces', labelAr: 'قطع الفخار' },
+  { id: 'system-health', label: 'System Health', labelAr: 'حالة النظام' },
+  { id: 'settings', label: 'Settings', labelAr: 'الإعدادات' }
 ];
 
 export const ADMIN_PAGE_IDS: AdminPageId[] = ADMIN_PAGES.map(p => p.id);
 
-export function getPageLabel(id: string): string {
-  return ADMIN_PAGES.find(p => p.id === id)?.label || id;
+export function getPageLabel(id: string, lang: Lang = 'en'): string {
+  const page = ADMIN_PAGES.find(p => p.id === id);
+  if (!page) return id;
+  return lang === 'ar' ? page.labelAr : page.label;
 }
 
 /**
@@ -132,6 +137,8 @@ export type SettingsSectionId =
 export interface SettingsSection {
   id: SettingsSectionId;
   label: string;
+  /** Arabic wording. These labels are fixed in code, not staff-editable. */
+  labelAr: string;
 }
 
 /**
@@ -139,14 +146,14 @@ export interface SettingsSection {
  * "staff" is the Staff Management page, "settings-staff-registry" is a section.
  */
 export const SETTINGS_SECTIONS: SettingsSection[] = [
-  { id: 'settings-stages', label: 'Piece Pipeline Stages' },
-  { id: 'settings-workshop-lists', label: 'Workshop Detail Lists' },
-  { id: 'settings-popup', label: 'Booking Pop-up' },
-  { id: 'settings-staff-registry', label: 'Staff Registry' },
-  { id: 'settings-pottery-logging', label: 'Pottery Logging Console' },
-  { id: 'settings-capacity', label: 'Capacity' },
-  { id: 'settings-events', label: 'Events / Birthday' },
-  { id: 'settings-data-reset', label: 'Data Reset' }
+  { id: 'settings-stages', label: 'Piece Pipeline Stages', labelAr: 'مراحل مسار القطعة' },
+  { id: 'settings-workshop-lists', label: 'Workshop Detail Lists', labelAr: 'قوائم تفاصيل الورشة' },
+  { id: 'settings-popup', label: 'Booking Pop-up', labelAr: 'نافذة الحجز المنبثقة' },
+  { id: 'settings-staff-registry', label: 'Staff Registry', labelAr: 'سجل الموظفين' },
+  { id: 'settings-pottery-logging', label: 'Pottery Logging Console', labelAr: 'لوحة تسجيل الفخار' },
+  { id: 'settings-capacity', label: 'Capacity', labelAr: 'السعة' },
+  { id: 'settings-events', label: 'Events / Birthday', labelAr: 'الفعاليات / أعياد الميلاد' },
+  { id: 'settings-data-reset', label: 'Data Reset', labelAr: 'إعادة ضبط البيانات' }
 ];
 
 /** Maps a legacy stored section id onto its namespaced replacement. */
@@ -174,6 +181,8 @@ export function isSettingsSection(value: string): value is SettingsSectionId {
   return SETTINGS_SECTION_IDS.includes(value as SettingsSectionId);
 }
 
-export function getSettingsSectionLabel(id: string): string {
-  return SETTINGS_SECTIONS.find(s => s.id === id)?.label || id;
+export function getSettingsSectionLabel(id: string, lang: Lang = 'en'): string {
+  const section = SETTINGS_SECTIONS.find(s => s.id === id);
+  if (!section) return id;
+  return lang === 'ar' ? section.labelAr : section.label;
 }

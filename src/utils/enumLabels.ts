@@ -42,7 +42,9 @@ const LABELS: Record<string, Record<string, string>> = {
   // checkStaffMemberAvailability().status, shown next to a staff name in dropdowns.
   // 'Available' is also reused for space options.
   staffAvailability: { 'Available': 'متاح', 'Busy': 'مشغول', 'Outside working hours': 'خارج ساعات العمل',
-                       'On Leave': 'في إجازة', 'No schedule set': 'لا يوجد جدول محدد' }
+                       'On Leave': 'في إجازة', 'No schedule set': 'لا يوجد جدول محدد' },
+  // staff.role: the console permission level. Compared elsewhere (isSuperAdmin), so display-only here.
+  staffRole: { 'Super Admin': 'مدير عام', 'Admin': 'مسؤول', 'Staff': 'موظف' }
 };
 
 export function enumLabel(group: keyof typeof LABELS, value: string, lang: Lang): string {

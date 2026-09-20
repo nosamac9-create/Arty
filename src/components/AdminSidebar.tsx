@@ -9,30 +9,34 @@ import {
   LayoutDashboard, Users, CalendarDays, Palette, ListOrdered, 
   Flame, HelpCircle, ChevronLeft, ChevronRight, ChevronDown, Menu, LogOut, ShieldAlert, Settings, Sparkles, UserCheck
 , Megaphone } from 'lucide-react';
-import { SETTINGS_SECTIONS } from '../utils/adminAccess';
-import { formatTime } from '../utils/calendarConfig';
+import { SETTINGS_SECTIONS, getPageLabel, getSettingsSectionLabel } from '../utils/adminAccess';
+import { formatTime, RIYADH_TIME_ZONE } from '../utils/calendarConfig';
 import { LanguageToggle } from './LanguageToggle';
+import { useLanguage } from '../context/LanguageContext';
+import { enumLabel } from '../utils/enumLabels';
 
 export const AdminSidebar: React.FC = () => {
   const {
     adminTab, setAdminTab, viewCustomerSite, currentStaff, canAccessAdminPage, logoutStaff,
     settingsSection, setSettingsSection
   } = useApp();
+  const { lang, t } = useLanguage();
   const [collapsed, setCollapsed] = useState(false);
   // Settings is a parent item; its subsections live in this submenu.
   const [settingsOpen, setSettingsOpen] = useState(adminTab === 'settings');
+  const collapseLabel = collapsed ? t('Expand sidebar', 'توسيع الشريط الجانبي') : t('Collapse sidebar', 'طيّ الشريط الجانبي');
 
   const allSidebarItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'queue', label: 'Live Queue', icon: ListOrdered },
-    { id: 'customers', label: 'Customers', icon: Users },
-    { id: 'staff', label: 'Staff Management', icon: UserCheck },
-    { id: 'bookings', label: 'Bookings', icon: CalendarDays },
-    { id: 'workshops-admin', label: 'Workshops', icon: Palette },
-    { id: 'events-admin', label: 'Events & Socials', icon: Sparkles },
-    { id: 'pieces-admin', label: 'Pottery Pieces', icon: Flame },
-    { id: 'system-health', label: 'System Health', icon: ShieldAlert },
-    { id: 'settings', label: 'Settings', icon: Settings },
+    { id: 'dashboard', icon: LayoutDashboard },
+    { id: 'queue', icon: ListOrdered },
+    { id: 'customers', icon: Users },
+    { id: 'staff', icon: UserCheck },
+    { id: 'bookings', icon: CalendarDays },
+    { id: 'workshops-admin', icon: Palette },
+    { id: 'events-admin', icon: Sparkles },
+    { id: 'pieces-admin', icon: Flame },
+    { id: 'system-health', icon: ShieldAlert },
+    { id: 'settings', icon: Settings },
   ] as const;
 
   // Only pages this account is authorized for are listed. The router enforces
@@ -58,13 +62,15 @@ export const AdminSidebar: React.FC = () => {
             {!collapsed && (
               <div className="hidden lg:block text-left animate-in fade-in duration-200">
                 <span className="font-display text-sm font-bold block">Arty Portal</span>
-                <span className="text-[9px] text-brand-sage uppercase font-bold tracking-wider block">Staff Console</span>
+                <span className="text-[9px] text-brand-sage uppercase font-bold tracking-wider block">{t('Staff Console', 'لوحة تحكم الموظفين')}</span>
               </div>
             )}
           </div>
 
           <button 
             onClick={() => setCollapsed(!collapsed)}
+            aria-label={collapseLabel}
+            title={collapseLabel}
             className="p-1.5 hover:bg-brand-sand/15 rounded-lg text-brand-cream/60 hover:text-brand-cream focus:outline-none"
           >
             {collapsed ? <ChevronRight className="h-4.5 w-4.5" /> : <ChevronLeft className="h-4.5 w-4.5" />}
@@ -98,7 +104,7 @@ export const AdminSidebar: React.FC = () => {
                     <Icon className={`h-5 w-5 shrink-0 ${isActive ? 'text-brand-cream' : 'text-brand-sage'}`} />
                     {!collapsed && (
                       <span className="hidden lg:flex items-center flex-1">
-                        <span className="ml-3 text-left leading-none flex-1">{item.label}</span>
+                        <span className="ml-3 text-left leading-none flex-1">{getPageLabel(item.id, lang)}</span>
                         <ChevronDown
                           className={`h-4 w-4 shrink-0 transition-transform ${settingsOpen ? 'rotate-180' : ''}`}
                         />
@@ -128,7 +134,7 @@ export const AdminSidebar: React.FC = () => {
                                 isSectionActive ? 'bg-brand-terracotta' : 'bg-brand-cream/25'
                               }`}
                             />
-                            <span className="leading-tight">{section.label}</span>
+                            <span className="leading-tight">{getSettingsSectionLabel(section.id, lang)}</span>
                           </button>
                         );
                       })}
@@ -149,7 +155,7 @@ export const AdminSidebar: React.FC = () => {
                 }`}
               >
                 <Icon className={`h-5 w-5 shrink-0 ${isActive ? 'text-brand-cream' : 'text-brand-sage'}`} />
-                {!collapsed && <span className="hidden lg:inline ml-3 text-left leading-none">{item.label}</span>}
+                {!collapsed && <span className="hidden lg:inline ml-3 text-left leading-none">{getPageLabel(item.id, lang)}</span>}
               </button>
             );
           })}
@@ -161,7 +167,7 @@ export const AdminSidebar: React.FC = () => {
         {currentStaff && !collapsed && (
           <div className="hidden lg:block px-3 py-2 mb-1">
             <p className="text-xs font-bold text-brand-cream truncate">{currentStaff.name}</p>
-            <p className="text-[10px] font-semibold text-brand-sage">{currentStaff.role || 'Staff'}</p>
+            <p className="text-[10px] font-semibold text-brand-sage">{enumLabel('staffRole', currentStaff.role || 'Staff', lang)}</p>
           </div>
         )}
 
@@ -170,7 +176,7 @@ export const AdminSidebar: React.FC = () => {
           className="flex items-center w-full rounded-xl p-3 text-xs font-bold text-brand-cream/70 hover:text-brand-cream hover:bg-brand-terracotta/20 transition-all cursor-pointer"
         >
           <LogOut className="h-4 w-4 shrink-0 text-brand-terracotta" />
-          {!collapsed && <span className="hidden lg:inline ml-3 text-left">Customer Site</span>}
+          {!collapsed && <span className="hidden lg:inline ml-3 text-left">{t('Customer Site', 'موقع العملاء')}</span>}
         </button>
 
         <button
@@ -178,7 +184,7 @@ export const AdminSidebar: React.FC = () => {
           className="flex items-center w-full rounded-xl p-3 text-xs font-bold text-brand-cream/70 hover:text-brand-cream hover:bg-red-500/20 transition-all cursor-pointer"
         >
           <LogOut className="h-4 w-4 shrink-0 text-red-400" />
-          {!collapsed && <span className="hidden lg:inline ml-3 text-left">Sign Out</span>}
+          {!collapsed && <span className="hidden lg:inline ml-3 text-left">{t('Sign Out', 'تسجيل الخروج')}</span>}
         </button>
       </div>
     </aside>
@@ -187,7 +193,17 @@ export const AdminSidebar: React.FC = () => {
 
 export const AdminTopBar: React.FC = () => {
   const { currentStaff, notifications, clearAllNotifications, formattedTodayDate } = useApp();
+  const { lang, t } = useLanguage();
   const [showNotifDropdown, setShowNotifDropdown] = useState(false);
+
+  // The date line. English is AppContext's string, untouched. Arabic is formatted here: Riyadh
+  // time, Gregorian calendar, Latin digits like the rest of the console. Recomputed when the
+  // language changes and when AppContext rolls formattedTodayDate over at midnight.
+  const dateText = useMemo(() => lang === 'ar'
+    ? new Intl.DateTimeFormat('ar-SA-u-ca-gregory-nu-latn', {
+        timeZone: RIYADH_TIME_ZONE, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+      }).format(new Date())
+    : formattedTodayDate, [lang, formattedTodayDate]);
 
   const staffNotifs = useMemo(() => {
     return notifications
@@ -202,15 +218,15 @@ export const AdminTopBar: React.FC = () => {
       {/* Current date and quick search */}
       <div className="flex items-center gap-6">
         <div className="hidden sm:block">
-          <p className="text-xs font-bold text-brand-sage uppercase tracking-wider">Today's Timeline</p>
-          <p className="text-sm font-bold text-brand-charcoal">{formattedTodayDate}</p>
+          <p className="text-xs font-bold text-brand-sage uppercase tracking-wider">{t("Today's Timeline", 'جدول اليوم')}</p>
+          <p className="text-sm font-bold text-brand-charcoal">{dateText}</p>
         </div>
         
         {/* Quick Admin Search Bar */}
         <div className="relative max-w-xs">
           <input
             type="search"
-            placeholder="Search bookings, pieces, phone..."
+            placeholder={t('Search bookings, pieces, phone...', 'ابحث في الحجوزات والقطع والهاتف...')}
             className="w-48 sm:w-64 bg-brand-sand/50 border border-brand-clay rounded-xl py-1.5 pl-3 pr-8 text-xs font-semibold text-brand-charcoal placeholder-brand-charcoal/40"
           />
         </div>
@@ -226,6 +242,7 @@ export const AdminTopBar: React.FC = () => {
         <div className="relative">
           <button 
             onClick={() => setShowNotifDropdown(!showNotifDropdown)}
+            aria-label={t('Notifications', 'الإشعارات')}
             className="p-1.5 text-brand-charcoal/70 hover:text-brand-terracotta hover:bg-brand-sand rounded-xl relative focus:outline-none cursor-pointer"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="h-5 w-5">
@@ -242,7 +259,7 @@ export const AdminTopBar: React.FC = () => {
           {showNotifDropdown && (
             <div className="absolute right-0 mt-2 w-80 bg-white border border-brand-clay rounded-2xl shadow-xl z-50 p-4 space-y-3 animate-in fade-in slide-in-from-top-2 duration-150">
               <div className="flex items-center justify-between border-b border-brand-clay/60 pb-2">
-                <span className="text-xs font-bold text-brand-charcoal uppercase tracking-wider">Staff Activity Log ({unreadCount})</span>
+                <span className="text-xs font-bold text-brand-charcoal uppercase tracking-wider">{t('Staff Activity Log', 'سجل نشاط الموظفين')} ({unreadCount})</span>
                 {unreadCount > 0 && (
                   <button 
                     onClick={async () => {
@@ -250,14 +267,14 @@ export const AdminTopBar: React.FC = () => {
                     }}
                     className="text-[10px] font-bold text-brand-terracotta hover:underline cursor-pointer"
                   >
-                    Clear All
+                    {t('Clear All', 'مسح الكل')}
                   </button>
                 )}
               </div>
 
               <div className="max-h-64 overflow-y-auto space-y-2.5 no-scrollbar">
                 {staffNotifs.length === 0 ? (
-                  <p className="text-[11px] text-brand-charcoal/40 text-center py-6 italic font-medium">No recent piece status updates.</p>
+                  <p className="text-[11px] text-brand-charcoal/40 text-center py-6 italic font-medium">{t('No recent piece status updates.', 'لا توجد تحديثات حديثة لحالة القطع.')}</p>
                 ) : (
                   staffNotifs.map(n => (
                     <div 
@@ -278,7 +295,7 @@ export const AdminTopBar: React.FC = () => {
                       {n.highlighted && (
                         <span className="inline-block mt-1 text-[9px] uppercase font-bold text-brand-terracotta bg-brand-terracotta/10 px-1.5 py-0.5 rounded">
                           <Megaphone className="inline h-3 w-3 me-1 align-[-2px]" />
-                          Pickup Alert Dispatched
+                          {t('Pickup Alert Dispatched', 'تم إرسال تنبيه الاستلام')}
                         </span>
                       )}
                     </div>
@@ -307,7 +324,7 @@ export const AdminTopBar: React.FC = () => {
                   level, which is what `role` holds. */}
               {(currentStaff.position || currentStaff.role) && (
                 <p className="text-[9px] font-bold text-brand-sage uppercase tracking-wider">
-                  {currentStaff.position || currentStaff.role}
+                  {currentStaff.position || enumLabel('staffRole', currentStaff.role, lang)}
                 </p>
               )}
             </div>
