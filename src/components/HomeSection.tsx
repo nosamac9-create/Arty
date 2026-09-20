@@ -6,6 +6,8 @@
 import React, { useMemo, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useLanguage } from '../context/LanguageContext';
+import { categoryLabel } from '../utils/categoryLabel';
+import { enumLabel } from '../utils/enumLabels';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { PhotoGallery } from './ui/PhotoGallery';
 import { VerticalCutReveal } from './ui/VerticalCutReveal';
@@ -64,7 +66,7 @@ export const HomeSection: React.FC = () => {
   const {
     workshops, setCustomerTab, setSelectedWorkshopId, events,
     setSelectedBirthdayPackage, publishedBirthdayPackages, setWorkshopsInitialCategory,
-    workshopSessions, bookings, queue, todayDateStr, rawWorkshops
+    workshopSessions, bookings, queue, todayDateStr, rawWorkshops, categories
   } = useApp();
   const { lang, t } = useLanguage();
 
@@ -411,8 +413,8 @@ export const HomeSection: React.FC = () => {
             {activeFeatured && (
               <div key={activeFeatured.id} className="mt-6 text-center animate-in fade-in duration-500">
                 <span className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-sage">
-                  {activeFeatured.category}
-                  {activeFeatured.skillLevel ? ` · ${activeFeatured.skillLevel}` : ''}
+                  {categoryLabel(activeFeatured.category, categories, lang)}
+                  {activeFeatured.skillLevel ? ` · ${enumLabel('skillLevel', activeFeatured.skillLevel, lang)}` : ''}
                 </span>
 
                 <button

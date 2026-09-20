@@ -17,11 +17,12 @@ import { CheckoutStepper } from './ui/CheckoutStepper';
 import { AppImage } from './ui/AppImage';
 import { BackButton } from './ui/BackButton';
 import { localizedText } from '../utils/localizedText';
+import { categoryLabel } from '../utils/categoryLabel';
 
 export const CheckoutInfoSection: React.FC = () => {
   const {
     pendingBooking, setPendingBooking, setCustomerTab, currentUser, setCurrentUser,
-    workshops, loginCustomer, registerCustomer, requestPasswordReset, publishedBirthdayPackages
+    workshops, loginCustomer, registerCustomer, requestPasswordReset, publishedBirthdayPackages, categories
   } = useApp();
   const { lang, t } = useLanguage();
 
@@ -195,7 +196,7 @@ export const CheckoutInfoSection: React.FC = () => {
               />
               <div>
                 <span className="text-[10px] font-semibold text-brand-sage uppercase tracking-wider block">
-                  {birthday ? t('Birthday Package', 'باقة عيد ميلاد') : workshop.category}
+                  {birthday ? t('Birthday Package', 'باقة عيد ميلاد') : categoryLabel(workshop.category, categories, lang)}
                 </span>
                 <h4 className="font-semibold text-brand-charcoal text-sm leading-tight">{pendingBooking.workshopTitle}</h4>
                 <p className="text-xs text-brand-ink mt-1">

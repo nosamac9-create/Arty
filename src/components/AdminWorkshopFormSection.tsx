@@ -33,6 +33,7 @@ import { matchesQuery } from '../utils/search';
 import { getRiyadhNow } from '../utils/dateUtils';
 import { useLanguage } from '../context/LanguageContext';
 import { enumLabel } from '../utils/enumLabels';
+import { categoryLabel } from '../utils/categoryLabel';
 
 /** Arabic Gregorian month names, in getMonth() order. Local on purpose: MONTH_NAMES stays English. */
 const MONTH_NAMES_AR = [
@@ -876,12 +877,14 @@ export const AdminWorkshopFormSection: React.FC = () => {
     // The Category field falls back to the shared categories list when it has
     // no options of its own.
     if (field.fieldKey === 'category' && (!field.options || field.options.length === 0)) {
-      return dbCategories.map(c => ({ value: c.name, label: c.name }));
+      return dbCategories.map(c => ({ value: c.name, label: categoryLabel(c.name, dbCategories, lang) }));
     }
 
     const values = [...(field.options || [])];
     if (current && !values.includes(current)) values.push(current);
-    return values.map(v => ({ value: v, label: field.boundTo === 'skillLevel' ? enumLabel('skillLevel', v, lang) : v }));
+    return values.map(v => ({ value: v, label: field.boundTo === 'skillLevel'
+      ? enumLabel('skillLevel', v, lang)
+      : field.boundTo === 'category' ? categoryLabel(v, dbCategories, lang) : v }));
   };
 
   /** Renders one configured field. */
@@ -2502,7 +2505,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
 
                       {/* Category */}
                       <td className="py-3.5 px-4 font-semibold text-brand-charcoal">
-                        {ws.category}
+                        {categoryLabel(ws.category, dbCategories, lang)}
                       </td>
 
                       {/* Skill Level */}

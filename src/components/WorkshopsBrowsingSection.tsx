@@ -16,6 +16,8 @@ import { isWorkshopFullyBooked } from '../utils/queueUtils';
 import { useSessionSeats, useRecentBookings } from '../lib/sessionSeats';
 import { recentBookingsWindow } from '../utils/featuredWorkshops';
 import { localizedText } from '../utils/localizedText';
+import { categoryLabel, categoryChipLabel } from '../utils/categoryLabel';
+import { enumLabel } from '../utils/enumLabels';
 
 /** Pseudo-category: not a real DB category, it swaps the whole grid to birthday packages. */
 const BIRTHDAY_CATEGORY = 'Birthday Packages';
@@ -298,7 +300,7 @@ export const WorkshopsBrowsingSection: React.FC = () => {
                     : 'bg-white border-brand-clay text-brand-ink hover:text-brand-charcoal hover:border-brand-muted'
                 }`}
               >
-                {cat}
+                {categoryChipLabel(cat, dbCategories, lang)}
               </button>
             );
           })}
@@ -456,7 +458,7 @@ export const WorkshopsBrowsingSection: React.FC = () => {
                       <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-cream/70">
                         {/* Same wording as the filter's "All Levels" option — the tag
                             and the filter describe the same thing and should read alike. */}
-                        {ws.category}{ws.skillLevel ? ` · ${ws.skillLevel === 'All Levels' ? t('Suitable for all levels', 'مناسب لجميع المستويات') : ws.skillLevel}` : ''}
+                        {categoryLabel(ws.category, dbCategories, lang)}{ws.skillLevel ? ` · ${ws.skillLevel === 'All Levels' ? t('Suitable for all levels', 'مناسب لجميع المستويات') : enumLabel('skillLevel', ws.skillLevel, lang)}` : ''}
                       </span>
                       <h3 className="mt-1.5 font-display text-[17px] font-semibold leading-tight text-brand-cream sm:text-[26px] line-clamp-2">
                         {title}

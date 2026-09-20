@@ -6,6 +6,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { useLanguage } from '../context/LanguageContext';
+import { categoryLabel } from '../utils/categoryLabel';
 import { ImageSlider } from './ui/ImageSlider';
 import Reveal from './ui/Reveal';
 import { ScrollReveal } from './ui/ScrollReveal';
@@ -23,7 +24,7 @@ import { localizedText } from '../utils/localizedText';
 export const WorkshopDetailSection: React.FC = () => {
   const { 
     workshops, selectedWorkshopId, setCustomerTab, setPendingBooking, currentUser, todayDateStr, staff, queue,
-    workshopFields,
+    workshopFields, categories,
     // Shared records, narrowed to this workshop below.
     workshopSessions
   } = useApp();
@@ -340,7 +341,7 @@ export const WorkshopDetailSection: React.FC = () => {
             <Reveal index={0}>
               <div className="flex flex-wrap gap-2">
                 <span className="inline-flex items-center rounded-lg bg-brand-terracotta/10 px-2.5 py-1 text-xs font-semibold text-brand-terracotta">
-                  {workshop.category}
+                  {categoryLabel(workshop.category, categories, lang)}
                 </span>
               </div>
             </Reveal>
