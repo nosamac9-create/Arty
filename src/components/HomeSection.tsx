@@ -237,14 +237,17 @@ export const HomeSection: React.FC = () => {
             </p>
           </Reveal>
 
-          <h1 className="mx-auto mt-4 max-w-3xl text-center font-display text-[34px] sm:text-5xl lg:text-[62px] font-semibold text-brand-charcoal">
+          <h1 dir={lang === 'ar' ? 'rtl' : 'ltr'} className="mx-auto mt-4 max-w-3xl text-center font-display text-[34px] sm:text-5xl lg:text-[62px] font-semibold text-brand-charcoal">
             <VerticalCutReveal
-              splitBy="characters"
+              key={lang}
+              splitBy={lang === 'ar' ? 'words' : 'characters'}
               staggerDuration={0.04}
               staggerFrom="center"
               transition={{ damping: 20, stiffness: 300, type: 'spring' }}
             >
-              Melt into the art of <span className="text-brand-sage">clay &amp; canvas</span>.
+              {t('Melt into the art of ', 'انغمس في فن ')}
+              <span className="text-brand-sage">{t('clay & canvas', 'الطين واللوحة')}</span>
+              .
             </VerticalCutReveal>
           </h1>
 
