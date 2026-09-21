@@ -16,6 +16,7 @@ import { PackageBalloonBackdrop } from './ui/PackageBalloonBackdrop';
 import { DEFAULT_DEPOSIT_AMOUNT } from '../utils/queueUtils';
 import { localizedText, localizedList } from '../utils/localizedText';
 import { enumLabel } from '../utils/enumLabels';
+import { dayLabel, timeLabel } from '../utils/availabilityLabel';
 
 interface Props {
   packages: BirthdayPackage[];
@@ -523,7 +524,7 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                   {focused.availableDays?.length > 0 && (
                     <div>
                       <dt className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-muted">{t('Days', 'الأيام')}</dt>
-                      <dd className="mt-1 font-medium text-brand-charcoal">{focused.availableDays.join(', ')}</dd>
+                      <dd className="mt-1 font-medium text-brand-charcoal">{focused.availableDays.map(d => dayLabel(d, lang)).join(', ')}</dd>
                     </div>
                   )}
                 </dl>
@@ -630,7 +631,7 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                   {focused.availableTimes?.length > 0 && (
                     <p className="flex items-start gap-2.5 text-sm text-brand-ink">
                       <CalendarRange className="mt-0.5 h-4 w-4 shrink-0 text-brand-sage" />
-                      <span>{focused.availableTimes.join(' · ')}</span>
+                      <span>{focused.availableTimes.map(tm => timeLabel(tm, lang)).join(' · ')}</span>
                     </p>
                   )}
                 </motion.section>

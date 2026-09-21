@@ -16,6 +16,7 @@ import { ScrollReveal } from './ui/ScrollReveal';
 import { AppImage } from './ui/AppImage';
 import { durationLabel } from '../utils/workshopMetaLabel';
 import { bookingTitleLabel } from '../utils/bookingTitleLabel';
+import { timeLabel } from '../utils/availabilityLabel';
 
 /**
  * Hours of notice that make a cancellation refundable.
@@ -377,7 +378,7 @@ export const MyBookingsSection: React.FC = () => {
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-brand-muted font-medium">
                       <span className="flex items-center gap-1">
                         <Calendar className="h-3.5 w-3.5 text-brand-sage" />
-                        <span>{b.date} {t('at', 'في')} {b.time}</span>
+                        <span>{b.date} {t('at', 'في')} {timeLabel(b.time, lang)}</span>
                       </span>
                       <span className="flex items-center gap-1">
                         <Users className="h-3.5 w-3.5 text-brand-sage" />

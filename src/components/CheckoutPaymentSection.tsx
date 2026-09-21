@@ -13,6 +13,7 @@ import { migratePrePaymentPopup } from '../types';
 import { validateBookingForm, validateBirthdayBookingForm } from '../utils/validation';
 import { generateBookingRefCode } from '../utils/idGeneration';
 import { bookingTitleLabel } from '../utils/bookingTitleLabel';
+import { timeLabel } from '../utils/availabilityLabel';
 import { CheckoutStepper } from './ui/CheckoutStepper';
 import { BackButton } from './ui/BackButton';
 
@@ -236,7 +237,7 @@ export const CheckoutPaymentSection: React.FC = () => {
               </div>
               <div className="flex justify-between">
                 <span>{t('Time Slot', 'الوقت')}:</span>
-                <span className="font-semibold text-brand-charcoal">{pendingBooking.time}</span>
+                <span className="font-semibold text-brand-charcoal">{timeLabel(pendingBooking.time, lang)}</span>
               </div>
               <div className="flex justify-between">
                 <span>{t('Participants', 'المشاركون')}:</span>

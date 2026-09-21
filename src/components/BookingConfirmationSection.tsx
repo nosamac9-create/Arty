@@ -10,6 +10,7 @@ import { Sparkles, Calendar, Receipt, ChevronRight, MapPin, Gift } from 'lucide-
 import confetti from 'canvas-confetti';
 import { STUDIO_PHONE } from '../utils/studioConfig';
 import { bookingTitleLabel } from '../utils/bookingTitleLabel';
+import { timeLabel } from '../utils/availabilityLabel';
 
 /**
  * Riyadh is UTC+3 all year — Saudi Arabia has observed no daylight saving since
@@ -282,7 +283,7 @@ export const BookingConfirmationSection: React.FC = () => {
 
           <div className="flex justify-between">
             <span className="font-semibold text-brand-muted">{t('Date & Session', 'التاريخ والجلسة')}</span>
-            <span className="font-semibold text-brand-charcoal">{booking.date} {t('at', 'الساعة')} {booking.time}</span>
+            <span className="font-semibold text-brand-charcoal">{booking.date} {t('at', 'الساعة')} {timeLabel(booking.time, lang)}</span>
           </div>
 
           <div className="flex justify-between">

@@ -23,6 +23,7 @@ import { useBirthdayCounts } from '../lib/sessionSeats';
 import { BackButton } from './ui/BackButton';
 import { localizedText } from '../utils/localizedText';
 import { enumLabel } from '../utils/enumLabels';
+import { dayLabel, timeLabel } from '../utils/availabilityLabel';
 
 const FALLBACK_TIMES = ['10:00 AM', '01:00 PM', '04:00 PM', '07:00 PM'];
 
@@ -644,7 +645,8 @@ export const BirthdayBookingSection: React.FC = () => {
     withSwatches?: boolean;
     priceFor?: (option: string) => number | undefined;
     disabledOptions?: string[];
-  }> = ({ options, value, onSelect, withSwatches, priceFor, disabledOptions }) => (
+    formatOption?: (option: string) => string;
+  }> = ({ options, value, onSelect, withSwatches, priceFor, disabledOptions, formatOption }) => (
     <div className="flex flex-wrap gap-2.5">
       {options.map(option => {
         const isOn = value === option;
@@ -675,7 +677,7 @@ export const BirthdayBookingSection: React.FC = () => {
               />
             )}
             <span className="text-start">
-              {optionText(option)}
+              {(formatOption ?? optionText)(option)}
               {isDisabled ? (
                 <span className="block text-[11px] font-medium text-brand-muted">{t('Full', 'ممتلئ')}</span>
               ) : price !== undefined && (
@@ -812,7 +814,7 @@ export const BirthdayBookingSection: React.FC = () => {
             </p>
             {selectedPackage?.availableDays?.length ? (
               <p className="mt-0.5 text-[11px] font-semibold text-brand-muted">
-                {t('Available days', 'الأيام المتاحة')}: {selectedPackage.availableDays.join(', ')}
+                {t('Available days', 'الأيام المتاحة')}: {selectedPackage.availableDays.map(d => dayLabel(d, lang)).join(', ')}
               </p>
             ) : null}
             {fieldError('bookingDate')}
@@ -833,6 +835,7 @@ export const BirthdayBookingSection: React.FC = () => {
               value={bookingTime}
               onSelect={setBookingTime}
               disabledOptions={dateFull ? timeOptions : fullTimes}
+              formatOption={time => timeLabel(time, lang)}
             />
             {dateFull && (
               <p className="mt-1.5 text-[11px] font-semibold text-red-500">
@@ -1014,7 +1017,7 @@ export const BirthdayBookingSection: React.FC = () => {
     { label: t('Birthday person', 'صاحب عيد الميلاد'), value: birthdayPersonName.trim() },
     { label: t('Guests', 'الضيوف'), value: numberOfPeople === '' ? '' : String(numberOfPeople) },
     { label: t('Date', 'التاريخ'), value: prettyDate },
-    { label: t('Time', 'الوقت'), value: bookingTime },
+    { label: t('Time', 'الوقت'), value: timeLabel(bookingTime, lang) },
     ...chosenExtras
   ];
 
@@ -1483,7 +1486,7 @@ export const BirthdayBookingSection: React.FC = () => {
             </span>
             <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-brand-muted">
               <Clock className="h-3 w-3" />
-              <span className="truncate">{prettyDate || '—'} · {bookingTime || '—'}</span>
+              <span className="truncate">{prettyDate || '—'} · {bookingTime ? timeLabel(bookingTime, lang) : '—'}</span>
             </span>
           </span>
           <span className="flex shrink-0 items-center gap-2">
