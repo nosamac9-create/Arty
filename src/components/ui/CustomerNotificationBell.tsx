@@ -6,6 +6,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Bell } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { formatDateTime } from '../../utils/calendarConfig';
 
 /**
@@ -25,6 +26,7 @@ import { formatDateTime } from '../../utils/calendarConfig';
  */
 export const CustomerNotificationBell: React.FC = () => {
   const { currentUser, notifications, markNotificationAsRead } = useApp();
+  const { lang, t } = useLanguage();
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
@@ -89,14 +91,14 @@ export const CustomerNotificationBell: React.FC = () => {
         aria-expanded={open}
         aria-label={
           unreadCount > 0
-            ? `Notifications, ${unreadCount} unread`
-            : 'Notifications'
+            ? t(`Notifications, ${unreadCount} unread`, `الإشعارات، ${unreadCount} غير مقروء`)
+            : t('Notifications', 'الإشعارات')
         }
         className="relative cursor-pointer rounded-xl p-2 text-brand-charcoal transition-colors hover:bg-brand-sand focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-sage"
       >
         <Bell className="h-5 w-5" />
         {unreadCount > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-brand-terracotta text-[9px] font-bold text-brand-cream ring-2 ring-brand-cream ltr-numerals">
+          <span className="absolute -end-0.5 -top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-brand-terracotta text-[9px] font-bold text-brand-cream ring-2 ring-brand-cream ltr-numerals">
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
@@ -114,18 +116,18 @@ export const CustomerNotificationBell: React.FC = () => {
            only ever mattered on screens narrower than the panel. */
         <div
           role="dialog"
-          aria-label="Notifications"
+          aria-label={t('Notifications', 'الإشعارات')}
           className="fixed inset-x-4 top-[86px] z-50 max-h-[70vh] overflow-y-auto rounded-2xl border border-brand-clay bg-white p-4 shadow-xl animate-in fade-in slide-in-from-top-2 duration-150 sm:absolute sm:inset-x-auto sm:end-0 sm:top-auto sm:mt-2 sm:w-80"
         >
           <div className="flex items-center justify-between border-b border-brand-clay/60 pb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-brand-charcoal">
-              Notifications{unreadCount > 0 ? ` (${unreadCount})` : ''}
+            <span className={`text-xs font-bold uppercase ${lang === 'ar' ? '' : 'tracking-wider '}text-brand-charcoal`}>
+              {t('Notifications', 'الإشعارات')}{unreadCount > 0 ? ` (${unreadCount})` : ''}
             </span>
           </div>
 
           {unreadCount === 0 ? (
             <p className="pt-3 text-xs text-brand-muted">
-              No new updates. We will let you know when a piece moves along.
+              {t('No new updates. We will let you know when a piece moves along.', 'لا توجد تحديثات جديدة. سنُعلمك عند تقدّم حالة قطعتك.')}
             </p>
           ) : (
             <ul className="list-none space-y-2 pt-3">
@@ -158,7 +160,7 @@ export const CustomerNotificationBell: React.FC = () => {
                       onClick={() => markNotificationAsRead(n.id)}
                       className="shrink-0 cursor-pointer rounded-lg border border-brand-clay bg-brand-sand/50 px-2.5 py-1 text-[10px] font-semibold text-brand-sage transition-colors hover:bg-brand-sand hover:text-brand-terracotta"
                     >
-                      Dismiss
+                      {t('Dismiss', 'تجاهل')}
                     </button>
                   </div>
                 </li>
