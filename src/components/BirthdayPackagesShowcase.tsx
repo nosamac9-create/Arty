@@ -14,7 +14,7 @@ import { BirthdayPackage } from '../types';
 import { AppImage } from './ui/AppImage';
 import { PackageBalloonBackdrop } from './ui/PackageBalloonBackdrop';
 import { DEFAULT_DEPOSIT_AMOUNT } from '../utils/queueUtils';
-import { localizedText } from '../utils/localizedText';
+import { localizedText, localizedList } from '../utils/localizedText';
 import { enumLabel } from '../utils/enumLabels';
 
 interface Props {
@@ -102,6 +102,9 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
   const focusedDuration = focused ? localizedText(focused.duration, focused.durationAr, lang) : '';
   const focusedAgeInfo = focused ? localizedText(focused.ageInformation, focused.ageInformationAr, lang) : '';
   const focusedCakeDescription = focused ? localizedText(focused.cakeDescription, focused.cakeDescriptionAr, lang) : '';
+  const focusedIncluded = focused ? localizedList(focused.includedItems, focused.includedItemsAr, lang) : [];
+  const focusedActivities = focused ? localizedList(focused.activityChoices, focused.activityChoicesAr, lang) : [];
+  const focusedAdditional = focused ? localizedList(focused.additionalInfo, focused.additionalInfoAr, lang) : [];
   const focusedTrainerInfo = focused ? localizedText(focused.trainerInfo, focused.trainerInfoAr, lang) : '';
   const focusedDeliveryInfo = focused ? localizedText(focused.deliveryInfo, focused.deliveryInfoAr, lang) : '';
   const focusedCustomerNotes = focused ? localizedText(focused.customerNotes, focused.customerNotesAr, lang) : '';
@@ -254,7 +257,7 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
 
               // Straight from the field that feeds the detail page's "What's
               // included" list — nothing invented, nothing hardcoded.
-              const tags = (pkg.includedItems || [])
+              const tags = localizedList(pkg.includedItems, pkg.includedItemsAr, lang)
                 .map(item => String(item || '').trim())
                 .filter(Boolean)
                 .slice(0, 4);
@@ -538,14 +541,14 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                 </motion.p>
               )}
 
-              {focused.includedItems.length > 0 && (
+              {focusedIncluded.length > 0 && (
                 <motion.section variants={revealItem}>
                   <h3 className="flex items-center gap-2 font-display text-lg font-semibold text-brand-charcoal">
                     <CheckCircle2 className="h-5 w-5 text-brand-sage" />
                     {t("What's included", 'ما تتضمنه')}
                   </h3>
                   <ul className="mt-4 grid grid-cols-1 gap-x-6 gap-y-2.5 sm:grid-cols-2">
-                    {focused.includedItems.map(entry => (
+                    {focusedIncluded.map(entry => (
                       <li key={entry} className="flex gap-2.5 text-sm text-brand-ink">
                         <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-terracotta" />
                         <span>{entry}</span>
@@ -555,14 +558,14 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                 </motion.section>
               )}
 
-              {focused.activityChoices.length > 0 && (
+              {focusedActivities.length > 0 && (
                 <motion.section variants={revealItem} className="rounded-[28px] bg-brand-sand/50 p-6">
                   <h3 className="flex items-center gap-2 font-display text-lg font-semibold text-brand-charcoal">
                     <Paintbrush className="h-5 w-5 text-brand-terracotta" />
                     {t('Choose one activity', 'اختر نشاطًا واحدًا')}
                   </h3>
                   <ul className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                    {focused.activityChoices.map(activity => (
+                    {focusedActivities.map(activity => (
                       <li
                         key={activity}
                         className="rounded-2xl bg-white px-4 py-3 text-sm font-medium text-brand-charcoal ring-1 ring-brand-clay/70"
@@ -571,9 +574,9 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                       </li>
                     ))}
                   </ul>
-                  {focused.additionalInfo.length > 0 && (
+                  {focusedAdditional.length > 0 && (
                     <div className="mt-4 space-y-1.5 border-t border-brand-clay pt-4">
-                      {focused.additionalInfo.map(note => (
+                      {focusedAdditional.map(note => (
                         <p key={note} className="text-xs font-medium text-brand-ink">{note}</p>
                       ))}
                     </div>

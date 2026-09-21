@@ -100,6 +100,9 @@ export interface Workshop {
   roomId?: string;
   tableId?: string;
   materials: string[];
+  /** Optional standalone Arabic list (workshops.materials_ar, migration 0038). NOT index-aligned with
+   *  materials; shown as a whole in place of it when non-empty and the visitor reads Arabic. */
+  materialsAr?: string[];
   whatWeProvide?: string[];
   instructions?: string;
   cancellationPolicy?: string;
@@ -939,6 +942,11 @@ export interface BirthdayPackage {
   deliveryInfoAr?: string | null;
   customerNotesAr?: string | null;
   termsAr?: string | null;
+  /** Optional standalone Arabic lists (migration 0039). NOT index-aligned with the English lists;
+   *  each is shown as a whole in place of its English twin when non-empty and the visitor reads Arabic. */
+  includedItemsAr?: string[];
+  activityChoicesAr?: string[];
+  additionalInfoAr?: string[];
 
   price: number;
   pricingType: 'Per child' | 'Per person' | 'Fixed price';

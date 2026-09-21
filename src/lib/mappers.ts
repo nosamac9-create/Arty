@@ -74,7 +74,7 @@ export const TABLE_COLUMNS: Record<string, string[]> = {
   workshops: [
     'id', 'title', 'slug', 'category', 'hook', 'description', 'full_details', 'duration',
     'age_range', 'price', 'pricing_type', 'capacity', 'image',
-    'additional_images', 'instructor', 'staff_id', 'room', 'room_id', 'table_id', 'materials',
+    'additional_images', 'instructor', 'staff_id', 'room', 'room_id', 'table_id', 'materials', 'materials_ar',
     'what_we_provide', 'instructions', 'cancellation_policy', 'skill_level', 'status',
     'featured', 'recurring_schedules', 'session_exceptions', 'custom_fields',
     'title_ar', 'hook_ar', 'description_ar', 'full_details_ar',
@@ -133,6 +133,7 @@ export const TABLE_COLUMNS: Record<string, string[]> = {
     'name_ar', 'short_description_ar', 'full_description_ar',
     'pricing_label_ar', 'duration_ar', 'age_information_ar', 'cake_description_ar',
     'trainer_info_ar', 'delivery_info_ar', 'customer_notes_ar', 'terms_ar',
+    'included_items_ar', 'activity_choices_ar', 'additional_info_ar',
     'created_at', 'updated_at'
   ],
   studio_resources: [

@@ -483,23 +483,38 @@ export const AdminBirthdayPackageEditor: React.FC<Props> = ({ pkg, onBack, onSav
         icon={<Sparkles className="h-4 w-4 text-brand-terracotta" />}
         description={t('Listed on the package page as what the celebration covers.', 'تظهر في صفحة الباقة كما تشمله الاحتفالية.')}
       >
+        <ContentLanguageTabs
+          value={contentLang}
+          onChange={setContentLang}
+          arabicFilled={!!(draft.includedItemsAr?.length || draft.activityChoicesAr?.length || draft.additionalInfoAr?.length)}
+        />
+
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {([
-            ['includedItems', t('Includes (one per line)', 'تشمل (واحد في كل سطر)')],
-            ['activityChoices', t('Activity Choices (one per line)', 'خيارات الأنشطة (واحد في كل سطر)')],
-            ['additionalInfo', t('Additional Information (one per line)', 'معلومات إضافية (واحد في كل سطر)')]
-          ] as const).map(([key, label]) => (
-            <div key={key} className="space-y-1">
-              <label className={labelClass}>{label}</label>
-              <LineListTextarea
-                rows={3}
-                placeholder={t('One entry per line', 'إدخال واحد في كل سطر')}
-                value={draft[key] || []}
-                onChange={lines => setField(key, lines)}
-                className={inputClass}
-              />
-            </div>
-          ))}
+            ['includedItems', 'includedItemsAr', 'Includes (one per line)', 'تشمل (واحد في كل سطر)'],
+            ['activityChoices', 'activityChoicesAr', 'Activity Choices (one per line)', 'خيارات الأنشطة (واحد في كل سطر)'],
+            ['additionalInfo', 'additionalInfoAr', 'Additional Information (one per line)', 'معلومات إضافية (واحد في كل سطر)']
+          ] as const).map(([enKey, arKey, labelEn, labelAr]) => {
+            const isAr = contentLang === 'ar';
+            const key = isAr ? arKey : enKey;
+            return (
+              <div key={enKey} className="space-y-1">
+                <label className={labelClass}>
+                  {t(labelEn, labelAr)} {isAr ? t('(Arabic)', '(بالعربية)') : t('(English)', '(بالإنجليزية)')}
+                </label>
+                <div dir={isAr ? 'rtl' : undefined} lang={isAr ? 'ar' : undefined}>
+                  <LineListTextarea
+                    key={isAr ? 'ar' : 'en'}
+                    rows={3}
+                    placeholder={t('One entry per line', 'إدخال واحد في كل سطر')}
+                    value={draft[key] || []}
+                    onChange={lines => setField(key, lines)}
+                    className={isAr ? `${inputClass} text-start` : inputClass}
+                  />
+                </div>
+              </div>
+            );
+          })}
         </div>
       </Section>
 
