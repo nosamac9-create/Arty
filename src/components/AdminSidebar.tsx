@@ -15,6 +15,7 @@ import { LanguageToggle } from './LanguageToggle';
 import { useLanguage } from '../context/LanguageContext';
 import { enumLabel } from '../utils/enumLabels';
 import { displayPosition } from '../utils/staffPosition';
+import { localizeStaffNotification } from '../utils/staffNotificationText';
 
 export const AdminSidebar: React.FC = () => {
   const {
@@ -260,7 +261,7 @@ export const AdminTopBar: React.FC = () => {
           {showNotifDropdown && (
             <div className="absolute right-0 mt-2 w-80 bg-white border border-brand-clay rounded-2xl shadow-xl z-50 p-4 space-y-3 animate-in fade-in slide-in-from-top-2 duration-150">
               <div className="flex items-center justify-between border-b border-brand-clay/60 pb-2">
-                <span className="text-xs font-bold text-brand-charcoal uppercase tracking-wider">{t('Staff Activity Log', 'سجل نشاط الموظفين')} ({unreadCount})</span>
+                <span className={`text-xs font-bold text-brand-charcoal uppercase${lang === 'ar' ? '' : ' tracking-wider'}`}>{t('Staff Activity Log', 'سجل نشاط الموظفين')} ({unreadCount})</span>
                 {unreadCount > 0 && (
                   <button 
                     onClick={async () => {
@@ -292,7 +293,7 @@ export const AdminTopBar: React.FC = () => {
                           {formatTime(n.timestamp)}
                         </span>
                       </div>
-                      <p className="font-semibold text-brand-charcoal/90">{n.message}</p>
+                      <p dir="auto" className="font-semibold text-brand-charcoal/90">{localizeStaffNotification(n, lang).message}</p>
                       {n.highlighted && (
                         <span className="inline-block mt-1 text-[9px] uppercase font-bold text-brand-terracotta bg-brand-terracotta/10 px-1.5 py-0.5 rounded">
                           <Megaphone className="inline h-3 w-3 me-1 align-[-2px]" />

@@ -432,7 +432,7 @@ export const WorkshopDetailSection: React.FC = () => {
               transition={{ delay: 0.12, duration: 0.5, ease: 'easeOut' }}
             >
             <div className="flex flex-wrap gap-2.5">
-              {workshop.materials.map((mat, idx) => (
+              {(lang === 'ar' && workshop.materialsAr && workshop.materialsAr.length > 0 ? workshop.materialsAr : workshop.materials).map((mat, idx) => (
                 <span
                   key={idx}
                   className="inline-flex items-center rounded-full border border-brand-clay bg-brand-cream px-4 py-2 text-[13px] text-brand-charcoal"

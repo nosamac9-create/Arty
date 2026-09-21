@@ -8,6 +8,7 @@ import { Bell } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { formatDateTime } from '../../utils/calendarConfig';
+import { localizeNotification } from '../../utils/notificationText';
 
 /**
  * The customer's piece-status notifications, behind a bell in the header.
@@ -145,9 +146,9 @@ export const CustomerNotificationBell: React.FC = () => {
                       n.highlighted ? 'text-brand-terracotta' : 'text-brand-charcoal'
                     }`}
                   >
-                    {n.title}
+                    {localizeNotification(n, lang).title}
                   </h4>
-                  <p className="mt-1 text-[11px] leading-relaxed text-brand-ink">{n.message}</p>
+                  <p className="mt-1 text-[11px] leading-relaxed text-brand-ink">{localizeNotification(n, lang).message}</p>
                   <div className="mt-2 flex items-center justify-between gap-3">
                     <span className="text-[9px] font-semibold text-brand-charcoal/45">
                       {formatDateTime(n.timestamp)}

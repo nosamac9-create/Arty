@@ -202,6 +202,9 @@ export const AdminWorkshopFormSection: React.FC = () => {
   // Tag input list
   const [materialInput, setMaterialInput] = useState('');
   const [materials, setMaterials] = useState<string[]>(['Terracotta Clay', 'Trimming tools', 'Kiln firing']);
+  // Standalone Arabic list (workshops.materials_ar). Never compared with, or aligned to, materials.
+  const [materialInputAr, setMaterialInputAr] = useState('');
+  const [materialsAr, setMaterialsAr] = useState<string[]>([]);
 
   // Required Field in Error State
   const [ageRange, setAgeRange] = useState(''); // empty by default to trigger the error state
@@ -320,6 +323,8 @@ export const AdminWorkshopFormSection: React.FC = () => {
     setSkillLevel('Beginner');
     setImages([]);
     setMaterials(['Terracotta Clay', 'Trimming tools', 'Kiln firing']);
+    setMaterialsAr([]);
+    setMaterialInputAr('');
     setAgeRange('');
     setSessions([]);
     setRecurringSchedules([]);
@@ -342,12 +347,12 @@ export const AdminWorkshopFormSection: React.FC = () => {
   const formSnapshot = useMemo(() => JSON.stringify({
     title, category, categoryInput, hook, description, fullDetails,
     titleAr, hookAr, descriptionAr, fullDetailsAr, price, duration,
-    capacity, tutorStaffId, room, roomId, status, skillLevel, images, materials,
+    capacity, tutorStaffId, room, roomId, status, skillLevel, images, materials, materialsAr,
     ageRange, sessions, recurringSchedules, customFieldValues, customTagInputs
   }), [
     title, category, categoryInput, hook, description, fullDetails,
     titleAr, hookAr, descriptionAr, fullDetailsAr, price, duration,
-    capacity, tutorStaffId, room, roomId, status, skillLevel, images, materials,
+    capacity, tutorStaffId, room, roomId, status, skillLevel, images, materials, materialsAr,
     ageRange, sessions, recurringSchedules, customFieldValues, customTagInputs
   ]);
 
@@ -497,6 +502,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
           Array.from(new Set([ws.image, ...(ws.additionalImages || [])].filter(Boolean))) as string[]
         );
         setMaterials(ws.materials || []);
+        setMaterialsAr(ws.materialsAr || []);
         setAgeRange(ws.ageRange || '');
         // Sessions store no seat counter: what is left is derived from the
         // live bookings and walk-ins. Compute it as they load so the calendar
@@ -887,7 +893,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
       <label className="text-xs font-bold text-brand-charcoal/80">
         {fieldLabel(field)}
         {field.required && <span className="text-red-500 font-extrabold"> *</span>}
-        {!!field.boundTo && field.boundTo in arabicSlots && (
+        {!!field.boundTo && (field.boundTo in arabicSlots || field.boundTo === 'materials') && (
           <span className="font-semibold text-brand-charcoal/45"> {t('(English)', '(بالإنجليزية)')}</span>
         )}
       </label>
@@ -1028,6 +1034,41 @@ export const AdminWorkshopFormSection: React.FC = () => {
                 </span>
               ))}
             </div>
+            {isMaterials && (
+              <div className="space-y-2 pt-2">
+                <label className="text-xs font-bold text-brand-charcoal/80">
+                  {fieldLabel(field)} <span className="font-semibold text-brand-charcoal/45">{t('(Arabic)', '(بالعربية)')}</span>
+                </label>
+                <input
+                  type="text"
+                  dir="rtl"
+                  lang="ar"
+                  placeholder={fieldPlaceholder(field) || t('Add a value and press Enter...', 'أضف قيمة واضغط Enter...')}
+                  value={materialInputAr}
+                  onChange={e => setMaterialInputAr(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key !== 'Enter') return;
+                    e.preventDefault();
+                    const next = materialInputAr.trim();
+                    if (!next || materialsAr.includes(next)) return;
+                    setMaterialsAr([...materialsAr, next]);
+                    setMaterialInputAr('');
+                  }}
+                  className={`${inputClass} text-start`}
+                />
+                <div className="flex flex-wrap gap-1.5 pt-1" dir="rtl" lang="ar">
+                  {materialsAr.map(tag => (
+                    <span key={tag} className="inline-flex items-center gap-1 bg-brand-sand px-2.5 py-1 rounded-lg border border-brand-clay text-[11px] font-bold text-brand-charcoal">
+                      <span>{tag}</span>
+                      <X
+                        className="h-3 w-3 hover:text-brand-terracotta cursor-pointer shrink-0"
+                        onClick={() => setMaterialsAr(materialsAr.filter(tg => tg !== tag))}
+                      />
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         );
       }
@@ -1230,6 +1271,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
         room: selectedSpaceLabel || room || 'The Clay Station (Studio A)',
         roomId: roomId || undefined,
         materials,
+        materialsAr,
         skillLevel: skillLevel || 'Beginner',
         status: status || 'Published',
         // Every session carries the workshop's tutor ID, so changing the tutor
@@ -1332,6 +1374,7 @@ export const AdminWorkshopFormSection: React.FC = () => {
         room: selectedSpaceLabel || room || 'The Clay Station (Studio A)',
         roomId: roomId || undefined,
         materials,
+        materialsAr,
         skillLevel: skillLevel || 'Beginner',
         status: 'Draft' as const,
         // Every session carries the workshop's tutor ID, so changing the tutor
