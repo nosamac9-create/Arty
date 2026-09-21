@@ -474,8 +474,8 @@ export const AdminEventsSettings: React.FC = () => {
               <h4 className="font-display text-base font-bold text-brand-terracotta">{pv.title}</h4>
             )}
             <div className="text-xs space-y-2 text-brand-charcoal/85 leading-relaxed">
-              {pv.leadingItems.map(line => (
-                <p key={line} className="font-semibold">
+              {pv.leadingItems.map((line, idx) => (
+                <p key={idx} className="font-semibold">
                   {renderTermsLine(line, { deposit: 500, cancellationDays: Number(cancellationNoticeDays) || 4 })}
                 </p>
               ))}
@@ -483,12 +483,12 @@ export const AdminEventsSettings: React.FC = () => {
                 <div>
                   {(!previewIsAr || pv.suppliesIntro) && <p className="font-semibold">{pv.suppliesIntro}</p>}
                   <ol className="list-decimal ps-5 space-y-0.5 font-medium text-brand-charcoal/75">
-                    {pv.supplies.map(item => <li key={item}>{item}</li>)}
+                    {pv.supplies.map((item, idx) => <li key={idx}>{item}</li>)}
                   </ol>
                 </div>
               )}
-              {pv.trailingItems.map(line => (
-                <p key={line} className="font-medium">
+              {pv.trailingItems.map((line, idx) => (
+                <p key={idx} className="font-medium">
                   {renderTermsLine(line, { deposit: 500, cancellationDays: Number(cancellationNoticeDays) || 4 })}
                 </p>
               ))}

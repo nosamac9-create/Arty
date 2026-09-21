@@ -1343,8 +1343,8 @@ export const BirthdayBookingSection: React.FC = () => {
                       )}
 
                       <div className="mt-4 space-y-3 text-xs leading-relaxed text-brand-ink">
-                              {shownTerms.leadingItems.map(line => (
-                                <p key={line} className="font-semibold text-brand-charcoal">
+                              {shownTerms.leadingItems.map((line, idx) => (
+                                <p key={idx} className="font-semibold text-brand-charcoal">
                                   {renderTermsLine(line, { deposit: depositAmount, cancellationDays })}
                                 </p>
                               ))}
@@ -1357,13 +1357,13 @@ export const BirthdayBookingSection: React.FC = () => {
                                     </p>
                                   )}
                                   <ol className="list-decimal space-y-0.5 ps-5 font-medium">
-                                    {shownTerms.supplies.map(item => <li key={item}>{item}</li>)}
+                                    {shownTerms.supplies.map((item, idx) => <li key={idx}>{item}</li>)}
                                   </ol>
                                 </div>
                               )}
 
-                              {shownTerms.trailingItems.map(line => (
-                                <p key={line} className="font-medium">
+                              {shownTerms.trailingItems.map((line, idx) => (
+                                <p key={idx} className="font-medium">
                                   {renderTermsLine(line, { deposit: depositAmount, cancellationDays })}
                                 </p>
                               ))}

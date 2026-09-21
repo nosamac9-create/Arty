@@ -368,9 +368,9 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
 
                       {tags.length > 0 && (
                         <ul className="mt-3 flex list-none flex-wrap gap-1.5">
-                          {tags.map(tag => (
+                          {tags.map((tag, idx) => (
                             <li
-                              key={tag}
+                              key={idx}
                               className="rounded-full px-2.5 py-1 text-[11px] font-medium"
                               style={{ backgroundColor: TICKET_WASH, color: TICKET_INK }}
                             >
@@ -548,8 +548,8 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                     {t("What's included", 'ما تتضمنه')}
                   </h3>
                   <ul className="mt-4 grid grid-cols-1 gap-x-6 gap-y-2.5 sm:grid-cols-2">
-                    {focusedIncluded.map(entry => (
-                      <li key={entry} className="flex gap-2.5 text-sm text-brand-ink">
+                    {focusedIncluded.map((entry, idx) => (
+                      <li key={idx} className="flex gap-2.5 text-sm text-brand-ink">
                         <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-terracotta" />
                         <span>{entry}</span>
                       </li>
@@ -565,9 +565,9 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                     {t('Choose one activity', 'اختر نشاطًا واحدًا')}
                   </h3>
                   <ul className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                    {focusedActivities.map(activity => (
+                    {focusedActivities.map((activity, idx) => (
                       <li
-                        key={activity}
+                        key={idx}
                         className="rounded-2xl bg-white px-4 py-3 text-sm font-medium text-brand-charcoal ring-1 ring-brand-clay/70"
                       >
                         {activity}
@@ -576,8 +576,8 @@ export const BirthdayPackagesShowcase: React.FC<Props> = ({
                   </ul>
                   {focusedAdditional.length > 0 && (
                     <div className="mt-4 space-y-1.5 border-t border-brand-clay pt-4">
-                      {focusedAdditional.map(note => (
-                        <p key={note} className="text-xs font-medium text-brand-ink">{note}</p>
+                      {focusedAdditional.map((note, idx) => (
+                        <p key={idx} className="text-xs font-medium text-brand-ink">{note}</p>
                       ))}
                     </div>
                   )}
