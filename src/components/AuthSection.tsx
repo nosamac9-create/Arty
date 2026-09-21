@@ -19,6 +19,7 @@ import {
   validatePasswordRule, validatePasswordConfirmation
 } from '../utils/validation';
 import { STUDIO_PHONE } from '../utils/studioConfig';
+import { bookingTitleLabel } from '../utils/bookingTitleLabel';
 
 /** Staggered fade-up for the title block over the photograph. */
 const textVariants = {
@@ -67,7 +68,8 @@ export const AuthSection: React.FC = () => {
   const { 
     authScreen, setAuthScreen, currentUser, setCurrentUser, setCustomerTab, sessionExpired, 
     loginCustomer, claimCustomerAccount, registerCustomer, requestPasswordReset,
-    logoutCustomer, pendingBooking, changeCustomerPassword
+    logoutCustomer, pendingBooking, changeCustomerPassword,
+    workshops, birthdayPackages
   } = useApp();
   const { lang, t } = useLanguage();
 
@@ -478,7 +480,7 @@ export const AuthSection: React.FC = () => {
                 <div className="rounded-[22px] border border-brand-clay bg-brand-sand/40 p-4 text-xs font-semibold text-brand-charcoal text-start">
                   <Pin className="inline h-3.5 w-3.5 me-1 align-[-2px]" />
                   {t('You have an active booking draft for:', 'لديك مسودة حجز نشطة لـ:')}{' '}
-                  <span className="text-brand-terracotta">{pendingBooking.workshopTitle}</span> ({pendingBooking.date})
+                  <span className="text-brand-terracotta">{bookingTitleLabel(pendingBooking, workshops, birthdayPackages, lang)}</span> ({pendingBooking.date})
                 </div>
               )}
 

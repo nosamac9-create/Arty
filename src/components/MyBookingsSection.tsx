@@ -15,6 +15,7 @@ import Reveal from './ui/Reveal';
 import { ScrollReveal } from './ui/ScrollReveal';
 import { AppImage } from './ui/AppImage';
 import { durationLabel } from '../utils/workshopMetaLabel';
+import { bookingTitleLabel } from '../utils/bookingTitleLabel';
 
 /**
  * Hours of notice that make a cancellation refundable.
@@ -57,7 +58,7 @@ const hoursUntilStart = (booking: Booking, now: Date): number =>
   (bookingStart(booking).getTime() - now.getTime()) / (1000 * 60 * 60);
 
 export const MyBookingsSection: React.FC = () => {
-  const { bookings, cancelOwnBooking, setCustomerTab, workshops, currentUser, setAuthScreen, staff, workshopSessions } = useApp();
+  const { bookings, cancelOwnBooking, setCustomerTab, workshops, birthdayPackages, currentUser, setAuthScreen, staff, workshopSessions } = useApp();
   const { lang, t } = useLanguage();
   /** The booking currently being cancelled, so its button can be disabled. */
   const [cancellingId, setCancellingId] = useState<string | null>(null);
@@ -336,6 +337,7 @@ export const MyBookingsSection: React.FC = () => {
             const isCancelled = b.status === 'Cancelled';
             const imageUrl = getWorkshopImage(b.workshopId);
             const duration = getWorkshopDuration(b.workshopId);
+            const titleLabel = bookingTitleLabel(b, workshops, birthdayPackages, lang);
 
             return (
               /* Capped stagger. 0.12s per row is fine for two bookings and turns
@@ -354,7 +356,7 @@ export const MyBookingsSection: React.FC = () => {
                 {/* Left block: thumbnail & title info */}
                 <div className="flex items-center gap-4">
                   <div className="h-16 w-16 shrink-0 rounded-xl overflow-hidden bg-brand-sand border border-brand-clay">
-                    <AppImage src={imageUrl} alt={b.workshopTitle} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                    <AppImage src={imageUrl} alt={titleLabel} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
                   </div>
                   <div className="space-y-1">
                     {/* Pending is not an alert — it is a state, so it is set
@@ -369,7 +371,7 @@ export const MyBookingsSection: React.FC = () => {
                       </span>
                     )}
                     <h3 className="font-display text-lg font-semibold text-brand-charcoal leading-tight line-clamp-1">
-                      {b.workshopTitle}
+                      {titleLabel}
                     </h3>
                     
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-brand-muted font-medium">
@@ -457,7 +459,7 @@ export const MyBookingsSection: React.FC = () => {
                             // window.confirm() renders as browser chrome and cannot be RTL-styled regardless of translation — translating the text anyway.
                             if (!window.confirm(t(
                               `Are you sure you want to cancel your booking for ${b.workshopTitle}? ${consequence}`,
-                              `هل أنت متأكد أنك تريد إلغاء حجزك في ${b.workshopTitle}؟ ${consequence}`
+                              `هل أنت متأكد أنك تريد إلغاء حجزك في ${titleLabel}؟ ${consequence}`
                             ))) return;
 
                             // The result is acted on rather than discarded: the

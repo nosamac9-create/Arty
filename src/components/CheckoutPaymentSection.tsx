@@ -12,12 +12,14 @@ import { PrePaymentPopup } from './PrePaymentPopup';
 import { migratePrePaymentPopup } from '../types';
 import { validateBookingForm, validateBirthdayBookingForm } from '../utils/validation';
 import { generateBookingRefCode } from '../utils/idGeneration';
+import { bookingTitleLabel } from '../utils/bookingTitleLabel';
 import { CheckoutStepper } from './ui/CheckoutStepper';
 import { BackButton } from './ui/BackButton';
 
 export const CheckoutPaymentSection: React.FC = () => {
   const { 
     pendingBooking, setPendingBooking, setCustomerTab, addBooking, setLastBookingCreated, workshops, currentUser,
+    birthdayPackages,
     sessionExpired,
     appSettings
   } = useApp();
@@ -74,6 +76,7 @@ export const CheckoutPaymentSection: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
 
   const workshop = workshops.find(w => w.id === pendingBooking?.workshopId) || workshops[0];
+  const titleLabel = pendingBooking ? bookingTitleLabel(pendingBooking, workshops, birthdayPackages, lang) : '';
 
   if (!pendingBooking) {
     return (
@@ -225,7 +228,7 @@ export const CheckoutPaymentSection: React.FC = () => {
             <div className="border-t border-brand-clay pt-3 space-y-2 text-xs text-brand-ink">
               <div className="flex justify-between">
                 <span>{t('Workshop', 'الورشة')}:</span>
-                <span className="font-semibold text-brand-charcoal">{pendingBooking.workshopTitle}</span>
+                <span className="font-semibold text-brand-charcoal">{titleLabel}</span>
               </div>
               <div className="flex justify-between">
                 <span>{t('Date', 'التاريخ')}:</span>
@@ -467,7 +470,7 @@ export const CheckoutPaymentSection: React.FC = () => {
                 be on screen rather than one tap away. */}
             <details open className="group lg:hidden rounded-2xl border border-brand-clay bg-brand-sand/30">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 [&::-webkit-details-marker]:hidden">
-                <span className="min-w-0 truncate text-sm font-semibold text-brand-charcoal">{pendingBooking.workshopTitle}</span>
+                <span className="min-w-0 truncate text-sm font-semibold text-brand-charcoal">{titleLabel}</span>
                 <span className="flex shrink-0 items-center gap-2">
                   <span className="font-serif text-lg font-semibold text-brand-terracotta">{pendingBooking.totalPrice} {t('SAR', 'ريال')}</span>
                   <ChevronDown className="h-4 w-4 text-brand-muted transition-transform group-[[open]]:rotate-180" />

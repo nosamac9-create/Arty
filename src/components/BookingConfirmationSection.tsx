@@ -9,6 +9,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { Sparkles, Calendar, Receipt, ChevronRight, MapPin, Gift } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { STUDIO_PHONE } from '../utils/studioConfig';
+import { bookingTitleLabel } from '../utils/bookingTitleLabel';
 
 /**
  * Riyadh is UTC+3 all year — Saudi Arabia has observed no daylight saving since
@@ -85,8 +86,8 @@ const toIcsUtc = (d: Date): string =>
   d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
 
 export const BookingConfirmationSection: React.FC = () => {
-  const { lastBookingCreated, setCustomerTab, workshops, bookingError } = useApp();
-  const { t } = useLanguage();
+  const { lastBookingCreated, setCustomerTab, workshops, birthdayPackages, bookingError } = useApp();
+  const { lang, t } = useLanguage();
 
   // Trigger celebration confetti on mount
   useEffect(() => {
@@ -133,6 +134,7 @@ export const BookingConfirmationSection: React.FC = () => {
   };
 
   const matchingWorkshop = workshops.find(w => w.id === booking.workshopId) || workshops[0];
+  const titleLabel = bookingTitleLabel(booking, workshops, birthdayPackages, lang);
 
   /**
    * The calendar file, or null when the booking cannot describe a real event.
@@ -275,7 +277,7 @@ export const BookingConfirmationSection: React.FC = () => {
           
           <div className="flex justify-between items-start">
             <span className="font-semibold text-brand-muted">{t('Workshop', 'الورشة')}</span>
-            <span className="font-semibold text-brand-charcoal text-end min-w-0 break-words">{booking.workshopTitle}</span>
+            <span className="font-semibold text-brand-charcoal text-end min-w-0 break-words">{titleLabel}</span>
           </div>
 
           <div className="flex justify-between">

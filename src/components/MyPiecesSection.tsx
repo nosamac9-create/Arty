@@ -6,6 +6,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useLanguage } from '../context/LanguageContext';
+import { pieceWorkshopLabel } from '../utils/bookingTitleLabel';
 import { Calendar, Box, Flame, Compass, Clock, LogIn, Hash , CheckCircle2, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { PotteryPiece, stageCustomerLabel, migrateLegacyPieceStatus } from '../types';
 import Reveal from './ui/Reveal';
@@ -16,7 +17,7 @@ export const MyPiecesSection: React.FC = () => {
     pieces, setCustomerTab, currentUser,
     pipelineStages, workshops
   } = useApp();
-  const { t } = useLanguage();
+  const { lang, t } = useLanguage();
 
   // Filter pieces strictly for the logged-in customer
   const userPieces = React.useMemo(() => {
@@ -363,7 +364,7 @@ export const MyPiecesSection: React.FC = () => {
                     </div>
 
                     <h3 className="font-display text-xl font-semibold text-brand-charcoal line-clamp-1">{p.name}</h3>
-                    <p className="text-xs font-semibold text-brand-terracotta line-clamp-1">{p.workshopName}</p>
+                    <p className="text-xs font-semibold text-brand-terracotta line-clamp-1">{pieceWorkshopLabel(p, workshops, lang)}</p>
 
                     {/* Expected Ready Date */}
                     {p.expectedReadyDate && (
