@@ -1,4 +1,3 @@
--- STATUS: NOT YET APPLIED — awaiting manual review and apply
 -- Purpose: add preferred_lang column to customers for SMS/UI language
 --
 -- =============================================================================
