@@ -74,6 +74,8 @@ import {
 } from '../utils/dateUtils';
 import { validateSaudiPhone, normaliseSaudiPhone, normalisePhone } from '../utils/phoneUtils';
 import { formatDate, RIYADH_TIME_ZONE } from '../utils/calendarConfig';
+import { pieceSmsText } from '../utils/pieceSmsText';
+import { cancellationMessage } from '../../supabase/functions/notify-own-booking/logic';
 import { getConfiguredTables, computeTableStates, validateTableSelection } from '../utils/tableSeatingUtils';
 
 export {
@@ -2123,6 +2125,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   /**
+   * Whether the customer with this phone chose Arabic (customers.preferred_lang). Used only to pick the
+   * language of an outgoing SMS. No match, no phone, or any failure means English: the existing behavior.
+   */
+  const customerPrefersArabic = async (phone?: string): Promise<boolean> => {
+    if (!phone) return false;
+    try {
+      const { customer } = findCustomerMatch(await db.customers.toArray(), { phone });
+      return customer?.preferredLang === 'ar';
+    } catch {
+      return false;
+    }
+  };
+
+  /**
    * Computes the refunded/not-refunded message, writes a customer
    * notification row, and fires SMS — for cancelBooking() only (booking
    * cancellation notifications). Not shared with updateQueueStatus()'s
@@ -2189,8 +2205,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     (async () => {
       try {
+        const smsText = (await customerPrefersArabic(booking.customerPhone))
+          ? cancellationMessage({
+              id: booking.id,
+              customer_id: booking.customerId ?? null,
+              customer_phone: booking.customerPhone,
+              workshop_title: booking.workshopTitle,
+              date: booking.date,
+              total_price: booking.totalPrice,
+              payment_status: refunded ? 'Refunded' : booking.paymentStatus,
+              status: 'Cancelled'
+            }, refunded, 'ar')
+          : friendlyMsg;
         const { data: smsData, error: smsError } = await smsClient.functions.invoke('send-sms', {
-          body: { phone: booking.customerPhone, message: friendlyMsg }
+          body: { phone: booking.customerPhone, message: smsText }
         });
         if (smsError) {
           let reason = smsError.message || 'unknown error';
@@ -2939,8 +2967,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         } else {
           (async () => {
             try {
+              // Arabic only for a customer who chose it; the English text and the in-app message are unchanged.
+              const smsText = (await customerPrefersArabic(piece.customerPhone))
+                ? pieceSmsText(piece, status, 'ar') ?? friendlyMsg
+                : friendlyMsg;
               const { data: smsData, error: smsError } = await smsClient.functions.invoke('send-sms', {
-                body: { phone: piece.customerPhone, message: friendlyMsg }
+                body: { phone: piece.customerPhone, message: smsText }
               });
               if (smsError) {
                 let reason = smsError.message || 'unknown error';

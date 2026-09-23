@@ -24,7 +24,7 @@ const MONTH_NAMES_AR = [
 ];
 
 /** "September 16, 2026" or "31 August 2026" becomes "16 سبتمبر 2026"; null for any other shape. */
-function dateAr(text: string): string | null {
+export function dateAr(text: string): string | null {
   let m = /^([A-Za-z]+) (\d{1,2}), (\d{4})$/.exec(text);
   let month: string, day: string, year: string;
   if (m) { [, month, day, year] = m; }
@@ -57,7 +57,7 @@ const arPieceTitle = (s: string, code?: string) =>
   s === 'Ready for Pickup' ? 'قطعتك جاهزة للاستلام!'
   : s === 'Broken' ? `تم تسجيل القطعة ${code} كمكسورة`
   : `تحديث حالة القطعة: ${enumLabel('pieceStatus', s, 'ar')}`;
-const arPieceMsg = (s: string, n: string, code?: string, date?: string) =>
+export const arPieceMsg = (s: string, n: string, code?: string, date?: string) =>
   s === 'Ready for Pickup' ? `قطعتك الخزفية الجميلة "${n}" جاهزة للاستلام! تفضّل باستلامها من رف المقهى.`
   : s === 'Collected' ? `شكرًا لاستلامك قطعتك "${n}"! نتمنى أن تكون قد استمتعت بصناعتها في Arty Café.`
   : s === 'First Burn and Colored' ? `اجتازت قطعتك "${n}" الحرق الأول وهي الآن قيد التلوين.`

@@ -51,6 +51,7 @@ import { AdminCustomersSection } from './components/AdminCustomersSection';
 import { AdminStaffSection } from './components/AdminStaffSection';
 import { SystemHealthSection } from './components/SystemHealthSection';
 import { AdminSettingsSection } from './components/AdminSettingsSection';
+import { PreferredLangSync } from './components/PreferredLangSync';
 
 
 export default function App() {
@@ -82,6 +83,7 @@ export default function App() {
         
         /* 1. CUSTOMER SITE */
         <LanguageProvider key="customer" scope="customer">
+        <PreferredLangSync />
         <div className="flex flex-col flex-1 justify-between min-h-screen bg-brand-sand">
           <CustomerHeader />
           

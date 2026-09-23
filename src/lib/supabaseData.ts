@@ -16,6 +16,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { getDataClient, onDataClientChange } from './supabase';
 import { rowToModel, rowsToModels } from './mappers';
+import { fetchAllRows } from './paginatedFetch';
 
 /**
  * Whether a realtime message actually carried the row.
@@ -118,10 +119,7 @@ export function useLiveTable<T = any>(
     };
 
     const load = async () => {
-      let query = supabase!.from(table).select('*');
-      if (orderBy) query = query.order(orderBy, { ascending });
-
-      const { data, error } = await query;
+      const { data, error } = await fetchAllRows(supabase!, table, { orderBy, ascending });
       if (cancelled) return;
 
       if (error) {
@@ -234,7 +232,7 @@ export function useLiveTable<T = any>(
 export async function fetchTable<T = any>(table: string): Promise<T[]> {
   const supabase = getDataClient();
   if (!supabase) return [];
-  const { data, error } = await supabase.from(table).select('*');
+  const { data, error } = await fetchAllRows(supabase, table);
   if (error) {
     console.error(`Failed to read ${table}:`, error.message);
     return [];

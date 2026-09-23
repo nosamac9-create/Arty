@@ -211,6 +211,8 @@ export interface CustomerAccount {
   createdAt: string;
   updatedAt?: string;
   totalSpent?: number;
+  /** The site language this customer last used (customers.preferred_lang, migration 0034). Picks the language of outgoing SMS only. */
+  preferredLang?: 'en' | 'ar';
 }
 
 export interface Booking {

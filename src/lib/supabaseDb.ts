@@ -24,6 +24,7 @@
 
 import { getDataClient } from './supabase';
 import { rowToModel, rowsToModels, toRow } from './mappers';
+import { fetchAllRows } from './paginatedFetch';
 
 /** Dexie store name -> Postgres table. */
 const TABLE_FOR: Record<string, string> = {
@@ -49,7 +50,7 @@ const TABLE_FOR: Record<string, string> = {
 const rowsOf = async (table: string): Promise<any[]> => {
   const supabase = getDataClient();
   if (!supabase) return [];
-  const { data, error } = await supabase.from(table).select('*');
+  const { data, error } = await fetchAllRows(supabase, table);
   if (error) {
     console.error(`Read failed on ${table}:`, error.message);
     return [];
