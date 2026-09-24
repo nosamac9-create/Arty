@@ -638,14 +638,25 @@ export const AdminEventsSettings: React.FC = () => {
                   </button>
                 </div>
 
-                <div className="sm:col-span-3 space-y-1">
-                  <label className="font-bold text-brand-charcoal/70 block">{t('Placeholder / Help Text', 'النص التوضيحي / نص المساعدة')}</label>
-                  <input
-                    type="text"
-                    value={field.placeholder || field.helpText || ''}
-                    onChange={e => handleFieldChange(field.id, { placeholder: e.target.value })}
-                    className="w-full bg-brand-cream/40 border border-brand-clay rounded-xl p-2 font-semibold"
-                  />
+                <div className="sm:col-span-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="font-bold text-brand-charcoal/70 block">{t('Placeholder', 'النص التوضيحي')}</label>
+                    <input
+                      type="text"
+                      value={field.placeholder || ''}
+                      onChange={e => handleFieldChange(field.id, { placeholder: e.target.value })}
+                      className="w-full bg-brand-cream/40 border border-brand-clay rounded-xl p-2 font-semibold"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="font-bold text-brand-charcoal/70 block">{t('Help Text', 'نص المساعدة')}</label>
+                    <input
+                      type="text"
+                      value={field.helpText || ''}
+                      onChange={e => handleFieldChange(field.id, { helpText: e.target.value })}
+                      className="w-full bg-brand-cream/40 border border-brand-clay rounded-xl p-2 font-semibold"
+                    />
+                  </div>
                 </div>
 
                 {field.type === 'dropdown' && (
